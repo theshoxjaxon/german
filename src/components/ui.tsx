@@ -1,0 +1,135 @@
+'use client';
+
+import { useEffect, useState, type ReactNode } from 'react';
+import { speak, useSpeechSupported } from '@/lib/client/speech';
+import { store, useStore } from '@/lib/client/store';
+import type { WordInfo } from '@/lib/queue';
+import { splitTerm } from '@/lib/text';
+import { useUI } from './ui-context';
+
+/* ---------- icons (stroke icons on a 24px grid) ---------- */
+const ICONS = {
+  x: '<path d="M6 6l12 12M18 6 6 18"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  minus: '<path d="M5 12h14"/>',
+  sliders: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
+  volume: '<path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>',
+  undo: '<path d="M9 15 4 10l5-5"/><path d="M4 10h10.5a5.5 5.5 0 0 1 0 11H12"/>',
+  filter: '<path d="M4 5h16l-6 7.5V19l-4 1.5v-8z"/>',
+  sort: '<path d="M7 4v16M3.5 16.5 7 20l3.5-3.5M17 20V4M13.5 7.5 17 4l3.5 3.5"/>',
+  table: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9.5h18M3 14.5h18M9 4v16"/>',
+  grid: '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
+  eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/>',
+  paste: '<rect x="5" y="4.5" width="14" height="16.5" rx="2"/><path d="M9 4.5V3h6v1.5M8.5 11h7M8.5 15h4.5"/>',
+  check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  copy: '<rect x="8.5" y="8.5" width="11.5" height="11.5" rx="2"/><path d="M15.5 8.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5"/>',
+  alert: '<path d="M12 4 2.8 19.5h18.4z"/><path d="M12 10v4.5M12 17.2v.3"/>',
+  search: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>',
+  more: '<circle cx="5.5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18.5" cy="12" r="1.4"/>',
+  cards: '<rect x="3" y="8" width="13" height="12" rx="2"/><path d="M7 8V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-3"/>',
+  chart: '<path d="M4 20h16"/><path d="M7 16v-4M12 16V7M17 16v-7"/>',
+} as const;
+export type IconName = keyof typeof ICONS;
+
+export function Icon({ name }: { name: IconName }) {
+  // The markup comes from the constant table above, never from user data.
+  return <svg className="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false" dangerouslySetInnerHTML={{ __html: ICONS[name] }} />;
+}
+
+/** "die Familie" with the article in its gender colour (der blue, die red, das green). */
+export function Term({ term }: { term: string }) {
+  const { art, rest } = splitTerm(term);
+  if (!art) return <>{rest}</>;
+  return (
+    <>
+      <span className={`art art-${art}`}>{art}</span> {rest}
+    </>
+  );
+}
+
+const STATUS_LABEL = { new: 'New', learning: 'Learning', review: 'Review', suspended: 'Paused' } as const;
+
+export function StatusPill({ info }: { info: Pick<WordInfo, 'status' | 'relearning' | 'leech'> }) {
+  const label = info.status === 'learning' && info.relearning ? 'Relearning' : STATUS_LABEL[info.status];
+  return (
+    <>
+      <span className={`pill st-${info.status}`}>
+        <i />
+        {label}
+      </span>
+      {info.leech && <span className="leech">Leech</span>}
+    </>
+  );
+}
+
+export function SpeakButton({ text, small = false }: { text: string | undefined; small?: boolean }) {
+  const supported = useSpeechSupported();
+  const { prefs } = useStore();
+  if (!supported || !text) return null;
+  return (
+    <button type="button" className={`speak ${small ? 'sm' : ''}`} aria-label="Play pronunciation" onClick={() => speak(text, prefs.ttsLang)}>
+      <Icon name="volume" />
+    </button>
+  );
+}
+
+/** A button that needs a second tap within 3.5 s, instead of a confirm() dialog. */
+export function ConfirmButton({ className = 'btn', confirmLabel, onConfirm, children }: {
+  className?: string;
+  confirmLabel: string;
+  onConfirm: () => void;
+  children: ReactNode;
+}) {
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    const t = setTimeout(() => setArmed(false), 3500);
+    return () => clearTimeout(t);
+  }, [armed]);
+  return (
+    <button
+      type="button"
+      className={className}
+      data-armed={armed ? '1' : undefined}
+      onClick={() => {
+        if (!armed) return setArmed(true);
+        setArmed(false);
+        onConfirm();
+      }}
+    >
+      {armed ? confirmLabel : children}
+    </button>
+  );
+}
+
+export function LoadError() {
+  return (
+    <div className="panel error-panel" role="alert">
+      <p>Could not load your words. Check that the app is still running in your terminal.</p>
+      <button className="btn" onClick={() => store.load()}>Try again</button>
+    </div>
+  );
+}
+
+export function EmptyBox() {
+  const ui = useUI();
+  return (
+    <section className="panel empty">
+      <h2>Your card box is empty</h2>
+      <p>Add words one at a time, or paste a whole list from your lesson. Every word becomes a flashcard.</p>
+      <div className="btn-row">
+        <button className="btn btn-primary" onClick={() => ui.openSheet({ kind: 'word', id: null })}>Add a word</button>
+        <button className="btn" onClick={() => ui.openSheet({ kind: 'import' })}>Paste a list</button>
+      </div>
+    </section>
+  );
+}
+
+export function SyncNote() {
+  return (
+    <p className="sync">
+      <span className="dot" />
+      Saved in data/store.json on the computer running the app
+    </p>
+  );
+}
