@@ -125,3 +125,4 @@ The JSON file needs a persistent disk, so this works on a VPS, Render or Railway
 
 - `npm run build` prints "Failed to find font override values for Atkinson Hyperlegible …". That is harmless: Next.js has no fallback metrics for these newer fonts yet.
 - Pronunciation uses the voices installed on your device. On iPhone, German voices are under Settings → Accessibility → Spoken Content → Voices.
+- `npm audit` reports advisories in **dev tools only** (`npm audit --omit=dev` finds 0 in what the app runs). They come from the Vitest 3 test runner and from the ESLint config that ships with Next.js 16.4. Vitest 4+ fixes its part, but npm 10's installer crashes on it ("Cannot read properties of null (reading 'edgesOut')"). If `npm -v` shows 11 or newer, upgrade with `npm i -D vitest@latest`.
