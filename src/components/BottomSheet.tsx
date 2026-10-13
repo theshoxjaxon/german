@@ -1,15 +1,24 @@
 'use client';
 
-import { useEffect, useRef, type PointerEvent, type ReactNode } from 'react';
+import { useContext, useEffect, useRef, type PointerEvent, type ReactNode } from 'react';
 import { Icon } from './ui';
-import { useUI } from './ui-context';
+import { UIContext } from './ui-context';
 
 /**
  * A sheet that slides up from the bottom of the screen.
  * Close it with the ×, a tap on the backdrop, Escape, or by dragging the handle down.
  */
-export function BottomSheet({ title, children, footer }: { title: ReactNode; children: ReactNode; footer?: ReactNode }) {
-  const { closeSheet, sheetClosing } = useUI();
+export function BottomSheet({ title, children, footer, onClose, closing }: {
+  title: ReactNode;
+  children: ReactNode;
+  footer?: ReactNode;
+  /** Outside the main app (the admin page), the parent controls closing. */
+  onClose?: () => void;
+  closing?: boolean;
+}) {
+  const ui = useContext(UIContext);
+  const closeSheet = onClose ?? ui?.closeSheet ?? (() => {});
+  const sheetClosing = closing ?? ui?.sheetClosing ?? false;
   const sheetRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ y: number; id: number; dy: number } | null>(null);
 

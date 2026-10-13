@@ -5,6 +5,7 @@ import { store, useStore } from '@/lib/client/store';
 import { buildQueue, currentDeck, deckCounts, dueForecast, LEECH_AT, lapsesOf, nextDueSummary, sortedWords } from '@/lib/queue';
 import { dayIndex, dayLong, fmtSpan, plural, studyDayTitle, weekday } from '@/lib/time';
 import { EMPTY_FILTERS } from '@/lib/words-view';
+import { CheersBanner } from './ClassView';
 import { EmptyBox, Icon, LoadError, SyncNote } from './ui';
 import { useUI } from './ui-context';
 
@@ -18,7 +19,7 @@ export function StudyView() {
     <header className="vhead">
       <div>
         <p className="eyebrow" lang="de">{ready ? studyDayTitle(now) : ' '}</p>
-        <h1>Karteikasten</h1>
+        <h1 lang="de">{data.me ? `Hallo, ${data.me.displayName.split(' ')[0]}!` : 'Hallo!'}</h1>
       </div>
       <div className="vhead-actions">
         <button className="icon-btn" onClick={() => ui.openSheet({ kind: 'settings' })} aria-label="Study settings">
@@ -76,6 +77,7 @@ export function StudyView() {
   return (
     <div className="page">
       {head}
+      <CheersBanner />
       {decks.some(([d]) => d) && (
         <div className="decks" role="radiogroup" aria-label="Deck">
           <button className="chip" role="radio" aria-checked={deck === 'all'} onClick={() => store.setPrefs({ studyDeck: 'all' })}>

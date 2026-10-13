@@ -1,10 +1,10 @@
-import { mutate } from '@/lib/server/db';
 import { ok, readJson } from '@/lib/server/http';
-import { sanitizePrefs } from '@/lib/server/validate';
+import * as repo from '@/lib/server/repo';
+import { requireUser } from '@/lib/server/session';
 
-/** PUT /api/prefs saves study settings. Unknown or invalid fields keep their current value. */
+/** PUT /api/prefs saves your study settings. Unknown or invalid fields keep their current value. */
 export async function PUT(req: Request) {
-  const body = await readJson(req);
-  const prefs = await mutate((data) => (data.prefs = sanitizePrefs(body, data.prefs)));
-  return ok(prefs);
+  const auth = await requireUser(req);
+  if (auth.response) return auth.response;
+  return ok(await repo.putPrefs(auth.user.id, await readJson(req)));
 }

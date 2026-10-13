@@ -21,6 +21,7 @@ export function WordSheet({ id }: { id: string | null }) {
   // Fill the form once from the word as it was when the sheet opened, so live updates never overwrite typing.
   const [initial] = useState<Word | null>(() => (id ? data.words.get(id) ?? null : null));
   const [errors, setErrors] = useState<{ term?: string; meaning?: string }>({});
+  const canEdit = data.me?.role === 'admin'; // the server enforces this too
 
   if (id && !initial) {
     return (
@@ -29,6 +30,8 @@ export function WordSheet({ id }: { id: string | null }) {
       </BottomSheet>
     );
   }
+
+  if (!initial && !canEdit) return null;
 
   const lapses = initial ? lapsesOf(data.cards.get(initial.id)) : 0;
   const deckDefault = initial
@@ -90,18 +93,23 @@ export function WordSheet({ id }: { id: string | null }) {
     <BottomSheet
       title={initial ? <span lang="de"><Term term={initial.term} /></span> : 'New word'}
       footer={
-        <>
-          <button className="btn" onClick={ui.closeSheet}>Cancel</button>
-          <button className="btn btn-primary" type="submit" form="word-form">{initial ? 'Save' : 'Add word'}</button>
-        </>
+        canEdit ? (
+          <>
+            <button className="btn" onClick={ui.closeSheet}>Cancel</button>
+            <button className="btn btn-primary" type="submit" form="word-form">{initial ? 'Save' : 'Add word'}</button>
+          </>
+        ) : (
+          <button className="btn btn-primary" onClick={ui.closeSheet}>Close</button>
+        )
       }
     >
-      <form id="word-form" className="form" noValidate onSubmit={onSubmit}>
+      <form id="word-form" noValidate onSubmit={onSubmit}>
+        <fieldset className="form" disabled={!canEdit}>
         <div className="field">
           <label htmlFor="f-term">German word or phrase</label>
           <input id="f-term" name="term" defaultValue={initial?.term} required autoComplete="off" autoCapitalize="off" spellCheck={false} lang="de"
             aria-describedby="f-term-hint f-term-err" aria-invalid={!!errors.term} data-autofocus={initial ? undefined : true} />
-          <p className="hint" id="f-term-hint">Start nouns with der, die or das to get the gender colour.</p>
+          {canEdit && <p className="hint" id="f-term-hint">Start nouns with der, die or das to get the gender colour.</p>}
           {errors.term && <p className="err" id="f-term-err">{errors.term}</p>}
         </div>
         <div className="field">
@@ -174,6 +182,7 @@ export function WordSheet({ id }: { id: string | null }) {
             Delete word
           </ConfirmButton>
         )}
+        </fieldset>
       </form>
       {initial && <ProgressPanel wordId={initial.id} />}
     </BottomSheet>

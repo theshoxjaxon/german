@@ -90,11 +90,60 @@ export const DEFAULT_PREFS: Prefs = {
   bonusNew: null,
 };
 
-/** What the server stores and GET /api/state returns. */
+/* ---------- accounts and the class (social) ---------- */
+
+export type Role = 'student' | 'admin';
+
+/** The signed-in person, as the client sees them. */
+export interface Me {
+  id: string;
+  username: string;
+  displayName: string;
+  role: Role;
+}
+
+export type CheerKind = 'keep-going' | 'great-streak' | 'study-together';
+export const CHEERS: Record<CheerKind, string> = {
+  'keep-going': 'Keep going!',
+  'great-streak': 'Great streak!',
+  'study-together': 'Let’s study together',
+};
+
+export interface Cheer {
+  id: string;
+  kind: CheerKind;
+  createdAt: number;
+  from: { id: string; displayName: string; username: string };
+}
+
+/** One row on the Class tab. */
+export interface ClassMember {
+  id: string;
+  username: string;
+  displayName: string;
+  role: Role;
+  activeWords: number; // words started (learning or reviewing), not paused
+  matureWords: number; // interval 21+ days
+  streak: number; // days in a row with at least one answer
+  studiedToday: boolean;
+  answersToday: number;
+  answersWeek: number; // last 7 days
+  cheeredToday: boolean; // you already cheered them today
+  isMe: boolean;
+}
+
+export interface ClassData {
+  today: string; // 'YYYY-MM-DD' in the center's time zone
+  members: ClassMember[];
+}
+
+/** What GET /api/state returns for the signed-in person. */
 export interface AppData {
+  me: Me;
   words: Record<string, Word>;
   cards: Record<string, CardDoc>;
   prefs: Prefs;
+  cheers: Cheer[]; // cheers received and not yet seen
 }
 
 /** What the UI works with: Maps for fast lookup. */

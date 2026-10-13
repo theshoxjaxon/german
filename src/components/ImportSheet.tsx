@@ -33,6 +33,7 @@ export function ImportSheet() {
     });
   }, [parsed, deck, data.words]);
   const dupes = parsed.pairs.length - todo.length;
+  if (data.me?.role !== 'admin') return null; // only teachers change the shared word list
 
   const run = async () => {
     if (!todo.length || busy) return;

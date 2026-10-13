@@ -3,7 +3,7 @@
 import { createContext, useContext } from 'react';
 import type { Filters, Sort } from '@/lib/words-view';
 
-export type Tab = 'study' | 'words' | 'stats';
+export type Tab = 'study' | 'words' | 'class' | 'stats';
 export type Layout = 'table' | 'gallery';
 
 /** Which bottom sheet is open. Only one at a time. */
@@ -15,7 +15,10 @@ export type SheetSpec =
   | { kind: 'fields' }
   | { kind: 'more' }
   | { kind: 'settings' }
-  | { kind: 'csv'; text: string };
+  | { kind: 'csv'; text: string }
+  | { kind: 'account' }
+  | { kind: 'password' }
+  | { kind: 'cheer'; to: string };
 
 export interface WordsQuery {
   q: string;

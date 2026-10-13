@@ -9,24 +9,54 @@
  * chained, so two quick answers on one card can never reach the server out of order.
  */
 import { useSyncExternalStore } from 'react';
-import { DEFAULT_PREFS, type AppData, type CardDoc, type Prefs, type Word } from '../types';
+import { DEFAULT_PREFS, type AppData, type CardDoc, type Cheer, type CheerKind, type ClassData, type Me, type Prefs, type Word } from '../types';
 
 export interface Snapshot {
   status: 'loading' | 'ready' | 'error';
+  me: Me | null;
   words: Map<string, Word>;
   cards: Map<string, CardDoc>;
   prefs: Prefs;
+  cheers: Cheer[]; // received, not yet seen
+  classData: ClassData | null;
+  classStatus: 'idle' | 'loading' | 'ready' | 'error';
 }
 type Kind = 'words' | 'cards';
 type Doc<K extends Kind> = K extends 'words' ? Word : CardDoc;
 
-const INITIAL: Snapshot = { status: 'loading', words: new Map(), cards: new Map(), prefs: DEFAULT_PREFS };
+const INITIAL: Snapshot = {
+  status: 'loading', me: null, words: new Map(), cards: new Map(), prefs: DEFAULT_PREFS, cheers: [], classData: null, classStatus: 'idle',
+};
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
-async function send(url: string, init: RequestInit): Promise<void> {
-  const res = await fetch(url, init);
-  if (!res.ok) throw new Error(`${init.method} ${url} failed with ${res.status}`);
+class HttpError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+  }
 }
+
+/** The session ended (expired, or signed out on another device): go to the login page. */
+function toLogin() {
+  // A full page load on purpose: it drops every bit of the old user's data held in memory.
+  // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+  window.location.assign('/login');
+}
+
+async function send(url: string, init: RequestInit): Promise<Response> {
+  const res = await fetch(url, init);
+  if (res.status === 401) {
+    toLogin();
+    throw new HttpError(401, 'Signed out');
+  }
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new HttpError(res.status, body?.error || `Request failed (${res.status})`);
+  }
+  return res;
+}
+
+const saveError = (e: unknown, fallback: string) =>
+  e instanceof HttpError && e.status === 403 ? 'Only your teacher can change the word list.' : e instanceof HttpError && e.status === 401 ? '' : fallback;
 
 class Store {
   private snap: Snapshot = INITIAL;
@@ -43,6 +73,9 @@ class Store {
   setErrorHandler(fn: (message: string) => void) {
     this.onError = fn;
   }
+  private report(message: string) {
+    if (message) this.onError(message);
+  }
 
   subscribe = (fn: () => void) => {
     this.listeners.add(fn);
@@ -58,22 +91,28 @@ class Store {
     this.listeners.forEach((fn) => fn());
   }
 
-  /** Fetch everything from the server. Also used to pick up changes made on another device. */
+  /** Fetch your data from the server. Also used to pick up changes made on another device. */
   load(): Promise<void> {
     if (this.loading) return this.loading;
     this.loading = (async () => {
       try {
-        const res = await fetch('/api/state', { cache: 'no-store' });
-        if (!res.ok) throw new Error(`GET /api/state failed with ${res.status}`);
+        const res = await send('/api/state', { cache: 'no-store' });
         const data = (await res.json()) as AppData;
         const words = new Map(Object.entries(data.words));
         const cards = new Map(Object.entries(data.cards));
         // Keep local changes that the server has not confirmed yet.
         for (const id of this.pending.words.keys()) this.keepLocal(words, this.snap.words, id);
         for (const id of this.pending.cards.keys()) this.keepLocal(cards, this.snap.cards, id);
-        this.emit({ status: 'ready', words, cards, prefs: this.prefsDirty ? this.snap.prefs : { ...DEFAULT_PREFS, ...data.prefs } });
-      } catch {
-        if (this.snap.status === 'loading') this.emit({ status: 'error' });
+        this.emit({
+          status: 'ready',
+          me: data.me,
+          words,
+          cards,
+          cheers: data.cheers,
+          prefs: this.prefsDirty ? this.snap.prefs : { ...DEFAULT_PREFS, ...data.prefs },
+        });
+      } catch (e) {
+        if (this.snap.status === 'loading' && !(e instanceof HttpError && e.status === 401)) this.emit({ status: 'error' });
       } finally {
         this.loading = null;
       }
@@ -87,7 +126,7 @@ class Store {
     else fresh.set(id, local);
   }
 
-  private chain(key: string, op: () => Promise<void>): Promise<void> {
+  private chain(key: string, op: () => Promise<unknown>): Promise<unknown> {
     const run = (this.chains.get(key) || Promise.resolve()).then(op);
     this.chains.set(key, run.catch(() => {}));
     return run;
@@ -108,14 +147,14 @@ class Store {
         send(url, doc ? { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(doc) } : { method: 'DELETE' }),
       );
       return true;
-    } catch {
+    } catch (e) {
       if (this.pending[kind].get(id) === seq) {
         const rolled = new Map(this.snap[kind] as Map<string, Doc<K>>);
         if (prev === undefined) rolled.delete(id);
         else rolled.set(id, prev);
         this.emit({ [kind]: rolled } as Partial<Snapshot>);
       }
-      this.onError('Could not save. Check that the app is still running, then try again.');
+      this.report(saveError(e, 'Could not save. Check your internet connection, then try again.'));
       return false;
     } finally {
       if (this.pending[kind].get(id) === seq) this.pending[kind].delete(id);
@@ -152,11 +191,11 @@ class Store {
     try {
       await send('/api/words', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ words: list }) });
       return true;
-    } catch {
+    } catch (e) {
       const rolled = new Map(this.snap.words);
       for (const w of list) if (!before.has(w.id)) rolled.delete(w.id);
       this.emit({ words: rolled });
-      this.onError('Could not import the list. Check that the app is still running, then try again.');
+      this.report(saveError(e, 'Could not import the list. Check your internet connection, then try again.'));
       return false;
     }
   }
@@ -167,9 +206,9 @@ class Store {
     try {
       await send('/api/cards', { method: 'DELETE' });
       return true;
-    } catch {
+    } catch (e) {
       this.emit({ cards: before });
-      this.onError('Could not reset progress. Try again.');
+      this.report(saveError(e, 'Could not reset progress. Try again.'));
       return false;
     }
   }
@@ -182,12 +221,48 @@ class Store {
     this.prefsTimer = setTimeout(async () => {
       try {
         await send('/api/prefs', { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(this.snap.prefs) });
-      } catch {
-        this.onError('Could not save your settings.');
+      } catch (e) {
+        this.report(saveError(e, 'Could not save your settings.'));
       } finally {
         this.prefsDirty = false;
       }
     }, immediate ? 0 : 450);
+  }
+
+  /* ---------- class (social) ---------- */
+
+  async loadClass(): Promise<void> {
+    if (this.snap.classStatus === 'loading') return;
+    this.emit({ classStatus: this.snap.classData ? 'ready' : 'loading' });
+    try {
+      const res = await send('/api/class', { cache: 'no-store' });
+      this.emit({ classData: (await res.json()) as ClassData, classStatus: 'ready' });
+    } catch {
+      this.emit({ classStatus: this.snap.classData ? 'ready' : 'error' });
+    }
+  }
+
+  /** Send a classmate a cheer. Shows as sent right away. */
+  async sendCheer(to: string, kind: CheerKind): Promise<boolean> {
+    const before = this.snap.classData;
+    const mark = (cheered: boolean) =>
+      before && { ...before, members: before.members.map((m) => (m.id === to ? { ...m, cheeredToday: cheered } : m)) };
+    this.emit({ classData: mark(true) });
+    try {
+      await send('/api/cheers', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ to, kind }) });
+      return true;
+    } catch (e) {
+      this.emit({ classData: mark(false) });
+      this.report(saveError(e, 'Could not send your cheer. Try again.'));
+      return false;
+    }
+  }
+
+  /** Clear the cheers you received (after you have seen them). */
+  async dismissCheers(): Promise<void> {
+    if (!this.snap.cheers.length) return;
+    this.emit({ cheers: [] });
+    await send('/api/cheers/seen', { method: 'POST' }).catch(() => {});
   }
 }
 

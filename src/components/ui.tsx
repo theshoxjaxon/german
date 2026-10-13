@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { speak, useSpeechSupported } from '@/lib/client/speech';
 import { store, useStore } from '@/lib/client/store';
 import type { WordInfo } from '@/lib/queue';
+import { initials } from '@/lib/account-rules';
 import { splitTerm } from '@/lib/text';
 import { useUI } from './ui-context';
 
@@ -28,6 +29,13 @@ const ICONS = {
   more: '<circle cx="5.5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18.5" cy="12" r="1.4"/>',
   cards: '<rect x="3" y="8" width="13" height="12" rx="2"/><path d="M7 8V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-3"/>',
   chart: '<path d="M4 20h16"/><path d="M7 16v-4M12 16V7M17 16v-7"/>',
+  people: '<circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19.5c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="16.8" cy="9.5" r="2.6"/><path d="M15.6 14.6c2.4-.2 4.3 1.3 4.9 4.4"/>',
+  flame: '<path d="M12 21c-3.6 0-6-2.4-6-5.6 0-2.9 1.9-4.7 3.4-6.3.3 1.6 1 2.6 2 3.1-.3-3.4 1.2-6.2 3.6-8.2.2 2.7 1.4 4.3 2.4 5.8.8 1.2 1.6 2.4 1.6 4.3C19 18.6 16 21 12 21z"/>',
+  logout: '<path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M10 16.5 5.5 12 10 7.5M5.5 12H16"/>',
+  shield: '<path d="M12 3.5 19 6v5.5c0 4.4-3 7.7-7 9-4-1.3-7-4.6-7-9V6z"/><path d="m9 12 2.2 2.2L15.5 10"/>',
+  key: '<circle cx="8" cy="15" r="3.8"/><path d="m10.8 12.3 8-8M16.5 6.5l2.3 2.3M14 9l2 2"/>',
+  star: '<path d="m12 3.8 2.5 5.1 5.6.8-4 3.9 1 5.6-5.1-2.7-5 2.7 1-5.6-4.1-3.9 5.6-.8z"/>',
+  book: '<path d="M4 5.5c2.7-1 5.3-1 8 .8 2.7-1.8 5.3-1.8 8-.8v13c-2.7-1-5.3-1-8 .8-2.7-1.8-5.3-1.8-8-.8z"/><path d="M12 6.3v13"/>',
 } as const;
 export type IconName = keyof typeof ICONS;
 
@@ -102,10 +110,21 @@ export function ConfirmButton({ className = 'btn', confirmLabel, onConfirm, chil
   );
 }
 
+/** A round avatar with initials; the colour comes from the user id, so it never changes. */
+export function Avatar({ id, name, size = 'md' }: { id: string; name: string; size?: 'sm' | 'md' | 'lg' }) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return (
+    <span className={`avatar av-${h % 8} avatar-${size}`} aria-hidden="true">
+      {initials(name)}
+    </span>
+  );
+}
+
 export function LoadError() {
   return (
     <div className="panel error-panel" role="alert">
-      <p>Could not load your words. Check that the app is still running in your terminal.</p>
+      <p>Could not load your words. Check your internet connection, then try again.</p>
       <button className="btn" onClick={() => store.load()}>Try again</button>
     </div>
   );
@@ -113,6 +132,15 @@ export function LoadError() {
 
 export function EmptyBox() {
   const ui = useUI();
+  const { me } = useStore();
+  if (me?.role !== 'admin') {
+    return (
+      <section className="panel empty">
+        <h2>No words yet</h2>
+        <p>Your teacher hasn’t added any words. Check back soon.</p>
+      </section>
+    );
+  }
   return (
     <section className="panel empty">
       <h2>Your card box is empty</h2>
@@ -129,7 +157,7 @@ export function SyncNote() {
   return (
     <p className="sync">
       <span className="dot" />
-      Saved in data/store.json on the computer running the app
+      Progress saved to your profile
     </p>
   );
 }

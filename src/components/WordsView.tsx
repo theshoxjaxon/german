@@ -68,6 +68,7 @@ export function WordsView() {
   const rows = useMemo(() => (ready ? visibleRows(data, now, q, filters, ui.sort) : []), [ready, data, now, q, filters, ui.sort]);
   const nf = activeFilterCount(filters);
   const total = data.words.size;
+  const canEdit = data.me?.role === 'admin';
 
   const setQ = (value: string) => ui.setQuery((s) => ({ ...s, q: value }));
   const removeFilter = (group: FilterGroup, value: string) =>
@@ -97,14 +98,16 @@ export function WordsView() {
     <>
       <header className="vhead">
         <div>
-          <p className="eyebrow">Word database</p>
+          <p className="eyebrow">{canEdit ? 'Word database' : 'Your class’s words'}</p>
           <h1 id="h-words">
             Words
             {ready && <span className="count">{rows.length === total ? total : `${rows.length}/${total}`}</span>}
           </h1>
         </div>
         <div className="vhead-actions">
-          <button className="icon-btn" onClick={() => ui.openSheet({ kind: 'import' })} aria-label="Import a word list"><Icon name="paste" /></button>
+          {canEdit && (
+            <button className="icon-btn" onClick={() => ui.openSheet({ kind: 'import' })} aria-label="Import a word list"><Icon name="paste" /></button>
+          )}
           <button className="icon-btn" onClick={() => ui.openSheet({ kind: 'more' })} aria-label="More actions"><Icon name="more" /></button>
         </div>
       </header>
@@ -159,7 +162,7 @@ export function WordsView() {
       )}
 
       <div className="scroller" tabIndex={-1}>{body}</div>
-      {ready && (
+      {ready && canEdit && (
         <button className="fab" onClick={() => ui.openSheet({ kind: 'word', id: null })} aria-label="Add a word">
           <Icon name="plus" />
         </button>

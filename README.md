@@ -1,13 +1,16 @@
 # Karteikasten (germanApp)
 
-A mobile-first app for learning hard vocabulary. It combines two ideas:
+A mobile-first vocabulary app for a learning center. Students study German words with spaced-repetition flashcards, each with their own private progress, and see how their classmates are doing. The teacher manages the words and sees who is active on an admin dashboard.
 
-- **Anki-style flashcards** with spaced repetition (SM-2): tap to flip, swipe or tap Again / Hard / Good / Easy.
-- **An Airtable-style word database**: a table and a card gallery you can search, filter, sort and edit.
+- **Accounts**: sign up with the center's join code, log in, log out, change password.
+- **Study**: Anki-style flashcards (SM-2): tap to flip, swipe or tap Again / Hard / Good / Easy. Every student's progress is private.
+- **Class**: Snapchat-style daily streaks, each classmate's active-word count, a leaderboard, and cheers you can send each other.
+- **Words**: an Airtable-style table and card gallery: search, filter, sort. Teachers edit and import; students read.
+- **Admin dashboard** at `/admin`: profiles created, new sign-ups, daily / weekly / monthly active students, 30-day charts, a student table, password resets and the join code.
 
 It starts with the 34 words of **Lektion 3** (German → Uzbek), with IPA, example sentences, plural/verb forms and memory hooks.
 
-Built with Next.js 16 (App Router), React 19 and TypeScript. No database server needed: your words and progress are saved in `data/store.json`.
+Built with Next.js 16 (App Router), React 19, TypeScript and SQLite (libSQL). No database server needed to start.
 
 ## Run it
 
@@ -18,19 +21,66 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000.
+The terminal prints a line like:
 
-### Use it on your phone
+```
+Karteikasten: no profiles yet. Sign up with join code K7M2QX — the first profile becomes the admin.
+```
 
-Run the app on your computer and open it from your phone on the same Wi-Fi:
+1. Open http://localhost:3000/signup and create your profile with that code. **The first profile is the admin (teacher).**
+2. Open http://localhost:3000/admin to see the dashboard and the join code.
+3. Give the join code to your students. They sign up at `/signup` on their phones.
+
+### Use it on phones in the classroom
+
+Run it on your computer and open it from phones on the same Wi-Fi:
 
 ```bash
 npm run dev -- -H 0.0.0.0
 ```
 
-Find your computer's local IP (macOS: `ipconfig getifaddr en0`, Windows: `ipconfig`) and open `http://<that-ip>:3000` on the phone. Use **Share → Add to Home Screen** to get a full-screen app icon. Phone and computer share the same `data/store.json`, so progress follows you between them.
+Find your computer's local IP (macOS: `ipconfig getifaddr en0`, Windows: `ipconfig`) and open `http://<that-ip>:3000`. **Share → Add to Home Screen** gives a full-screen app icon. To let students use it from home, deploy it (see below).
 
-For a faster production server: `npm run build` then `npm start`.
+## Settings (environment variables)
+
+Copy `.env.example` to `.env.local` and change what you need. All are optional.
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `DATABASE_URL` | `file:data/karteikasten.db` | Where the data lives. Use a `libsql://…turso.io` URL in production. |
+| `DATABASE_AUTH_TOKEN` | – | Token for a Turso database. |
+| `DATA_DIR` | `./data` | Folder for the local database file (when `DATABASE_URL` is not set). |
+| `JOIN_CODE` | random | The first join code. You can change it later in `/admin`. |
+| `APP_TIMEZONE` | `Asia/Tashkent` | When a "day" starts for streaks and daily active users. |
+| `COOKIE_SECURE` | auto | Force `true`/`false`. By default the session cookie is Secure whenever the site is on HTTPS. |
+
+## Roles and privacy
+
+| | Student | Admin (teacher) |
+| --- | --- | --- |
+| Study, own progress, settings | ✓ | ✓ |
+| See classmates' streaks, active words, answers | ✓ | ✓ |
+| See anyone else's cards | – | – |
+| Add, edit, import, delete words | – | ✓ |
+| `/admin`: stats, reset passwords, make admins, delete profiles, change join code | – | ✓ |
+
+Only counts are shared on the Class tab. Nobody, the admin included, sees another person's individual cards or answers.
+
+**Forgotten password?** In `/admin`, open the student → **Reset password**. You get a temporary password like `tante-fest-4821` to give them; they change it under *Your profile → Change password*.
+
+## What the admin numbers mean
+
+| Number | Definition |
+| --- | --- |
+| Profiles created | All accounts, admins included |
+| New this week | Profiles created in the last 7 days |
+| Studied today (daily active) | Answered at least one card today |
+| Opened today | Opened the app today, whether or not they studied |
+| Active this week / month | Studied on at least one of the last 7 / 30 days |
+| Streak | Days in a row with at least one answer (today counts once you study) |
+| Active words | Words a student has started learning and not paused |
+
+"Today" follows `APP_TIMEZONE`.
 
 ## Scripts
 
@@ -38,91 +88,77 @@ For a faster production server: `npm run build` then `npm start`.
 | --- | --- |
 | `npm run dev` | Development server with hot reload |
 | `npm run build` / `npm start` | Production build and server |
-| `npm test` | Unit tests (Vitest): SRS engine, queue, parser, search |
+| `npm test` | Unit + database integration tests (Vitest) |
 | `npm run typecheck` | Generate route types, then `tsc --noEmit` |
 | `npm run lint` | ESLint (Next.js + React Compiler rules) |
-
-## Features
-
-- **Study tab**: today's New / Learning / To review counts, deck picker, a 7-day "coming up" strip, leech warnings.
-- **Review mode**: full screen, index-card design, 3D flip, swipe left = Again, swipe right = Good, rating buttons that show the next interval, undo, pronunciation through the browser's German voice, keeps the screen awake.
-  Keyboard: `Space` flip (then Good), `1–4` rate, `Z` undo, `P` play the word, `Esc` end.
-- **Words tab**: table with a sticky header and word column, or a card gallery. Search (treats `o’ o' oʻ` and umlauts as equal), filter by deck / status / der-die-das / type / tag, sort (A–Z ignores the article), choose visible fields, copy as CSV.
-- **Record sheet**: edit every field, see progress per card direction, pause or reset a word, delete it.
-- **Import**: paste a list (`word – meaning`, tab, `=`, `;`, or meaning on the next line). A `Lektion 4` line becomes the deck name. Duplicates are skipped.
-- **Progress tab**: streak, 30-day retention, the Leitner box ("Fach 1–5"), a 14-day forecast, the last 14 days of answers, and your hardest words.
-- **Settings**: new cards per day, reviews per day, recognition and/or production cards, learning steps, voice language, auto-play, reset progress.
 
 ## How the scheduling works
 
 All of it is in `src/lib/srs.ts` (pure functions, tested in `src/lib/srs.test.ts`).
 
-1. **New cards** go through short learning steps: 1 minute, then 10 minutes. Ease is not changed here.
+1. **New cards** go through short learning steps: 1 minute, then 10 minutes.
 2. When you get a card right, it **graduates** to a 1-day interval (Easy: 4 days).
-3. **Review cards** grow by the card's ease factor (EF, starting at 2.5):
-   - Good: `interval × EF`
-   - Hard: `interval × 1.2`
-   - Easy: `interval × EF × 1.3`
+3. **Review cards** grow by the card's ease factor (EF, starting at 2.5): Good `× EF`, Hard `× 1.2`, Easy `× EF × 1.3`.
 4. After each review, EF is updated with the SM-2 formula, where Again = 2, Hard = 3, Good = 4, Easy = 5:
 
    `EF' = EF + 0.1 − (5 − q)(0.08 + (5 − q) · 0.02)`, never below 1.3
 
    Worked example, Hard (q = 3): 5 − 3 = 2 → 0.08 + 2 × 0.02 = 0.12 → 2 × 0.12 = 0.24 → 0.1 − 0.24 = **−0.14**.
-5. **Again** on a review card is a lapse: the interval halves, EF drops by 0.32, and the card goes back to a 10-minute relearning step. After 4 lapses a word is flagged as a **leech**.
-6. A small ±5% seeded "fuzz" spreads words you learned together over neighbouring days. Because it is seeded, the time on each button is exactly what you get.
+5. **Again** on a review card halves the interval, drops EF by 0.32 and sends the card to a 10-minute relearning step. After 4 lapses a word is a **leech**.
+6. A small ±5% seeded "fuzz" spreads words learned together over neighbouring days.
 
 Pressing Good every time gives intervals of 1 → 4 → 10 → 24 → 60 → 144 days.
 
 ## Architecture
 
 ```
-Browser (React client components)
-  useStore()  ── useSyncExternalStore ──►  src/lib/client/store.ts
-                                             optimistic writes, rollback on error,
-                                             one request at a time per document
-        │ fetch
-        ▼
-Route handlers (src/app/api/*)  ── validate input (src/lib/server/validate.ts)
-        │
-        ▼
-src/lib/server/db.ts  ── data/store.json (atomic write: temp file + rename, one write queue)
+Browser
+  /login, /signup ── Server Actions (src/app/actions/auth.ts) ── scrypt hash, session cookie
+  /               ── client app ── useStore() ── fetch /api/*
+  /admin          ── Server Component behind <Suspense> ── Server Actions (src/app/admin/actions.ts)
+
+src/proxy.ts       no session cookie → redirect to /login (fast first check only)
+src/app/api/*      requireUser() on every route: valid session, role, same-origin
+src/lib/server/    repo.ts (all SQL) · db.ts (schema, seed) · session.ts · password.ts · rate-limit.ts
+SQLite / Turso     users · sessions · words · cards · prefs · activity · cheers · settings
 ```
 
-| Endpoint | Purpose |
-| --- | --- |
-| `GET /api/state` | All words, progress and settings |
-| `PUT /api/words/:id` / `DELETE /api/words/:id` | Create/replace or delete a word (delete also removes its progress) |
-| `POST /api/words` | Add many words at once (Import) |
-| `PUT /api/cards/:wordId` / `DELETE /api/cards/:wordId` | Save or reset one word's progress |
-| `DELETE /api/cards` | Reset all progress |
-| `PUT /api/prefs` | Save settings |
+| Endpoint | Who | Purpose |
+| --- | --- | --- |
+| `GET /api/state` | signed in | You, the words, your progress, settings, new cheers |
+| `PUT/DELETE /api/words/:id`, `POST /api/words` | admin | Edit, delete, import words |
+| `PUT/DELETE /api/cards/:wordId`, `DELETE /api/cards` | signed in | Save or reset **your** progress |
+| `PUT /api/prefs` | signed in | Your settings |
+| `GET /api/class` | signed in | Classmates' streaks and counts |
+| `POST /api/cheers`, `POST /api/cheers/seen` | signed in | Send a cheer (1 per classmate per day), mark yours as read |
 
-Ids are created on the client, so creating a word is an idempotent `PUT`: a retried request can never create a duplicate.
+### Security
 
-```
-src/
-  app/            layout (fonts, viewport), page, manifest, icons, globals.css, api/
-  components/     KarteikastenApp (shell), StudyView, ReviewSession, WordsView,
-                  WordSheet, ImportSheet, WordsSheets, SettingsSheet, StatsView, BottomSheet, ui
-  lib/            types, srs, queue (what to study next + stats), words-view (search/filter/sort),
-                  text, time, import-parser, seed
-  lib/client/     store, hooks (clock, localStorage state), speech
-  lib/server/     db, validate, http
-```
-
-## Your data
-
-- Everything lives in `data/store.json` (created on first start, ignored by git). Copy that file to back up.
-- Delete it to start over with the Lektion 3 list.
-- Set `DATA_DIR=/some/folder` to keep it somewhere else.
-- Table layout, sort and visible fields are remembered per device in `localStorage`.
+- Passwords: scrypt (N=2¹⁵) with a random salt; comparison in constant time; unknown usernames take the same time as wrong passwords.
+- Sessions: a random 256-bit token in an **HttpOnly, SameSite=Lax** cookie (Secure on HTTPS). The database stores only its SHA-256, so a leaked database can't be used to log in. 30-day sliding expiry; a password change or reset signs out other devices.
+- Every API route and Server Action checks the session and role on the server. Hiding a button is never the protection.
+- Mutating requests from other sites are rejected (Origin check, on top of SameSite cookies and Next.js's own Server Action origin check).
+- Login and sign-up are rate-limited per IP and username. This is in memory: with several server instances, use a shared store such as Redis.
+- Sign-up needs the center's join code, so strangers can't create profiles. Make a new code in `/admin` if it leaks.
 
 ## Deploying
 
-The JSON file needs a persistent disk, so this works on a VPS, Render or Railway, but not on serverless hosts like Vercel (their file system is read-only). To deploy there, replace `src/lib/server/db.ts` with a real database (Postgres, SQLite/Turso, etc.). The route handlers only use `readData()` and `mutate()`, so that is the only file to change. For several users you would also add sign-in and key progress by user id.
+**Free option: Vercel + Turso**
+
+1. Create a free database at [turso.tech](https://turso.tech), then copy its URL (`libsql://…`) and an auth token.
+2. Import this GitHub repo on [vercel.com](https://vercel.com). Add the environment variables `DATABASE_URL`, `DATABASE_AUTH_TOKEN`, `JOIN_CODE` and `APP_TIMEZONE`.
+3. Deploy, open `https://<your-app>/signup` and create the first (admin) profile with your `JOIN_CODE`.
+
+**Or a server with a disk** (Render with a persistent disk, Railway, a VPS): `npm run build && npm start`, and keep `data/` (or set `DATA_DIR`) on the persistent disk. Free Render instances lose their files on every restart, so use Turso there.
+
+## Your data
+
+- Local: `data/karteikasten.db` (ignored by git). Stop the app and copy the file to back up.
+- Turso: `turso db shell <name> .dump > backup.sql`.
+- Table layout, sort, visible fields and the last open tab are remembered per device in `localStorage`.
 
 ## Notes
 
 - `npm run build` prints "Failed to find font override values for Atkinson Hyperlegible …". That is harmless: Next.js has no fallback metrics for these newer fonts yet.
-- Pronunciation uses the voices installed on your device. On iPhone, German voices are under Settings → Accessibility → Spoken Content → Voices.
-- `npm audit` reports advisories in **dev tools only** (`npm audit --omit=dev` finds 0 in what the app runs). They come from the Vitest 3 test runner and from the ESLint config that ships with Next.js 16.4. Vitest 4+ fixes its part, but npm 10's installer crashes on it ("Cannot read properties of null (reading 'edgesOut')"). If `npm -v` shows 11 or newer, upgrade with `npm i -D vitest@latest`.
+- Pronunciation uses the voices installed on the device. On iPhone, German voices are under Settings → Accessibility → Spoken Content → Voices.
+- `npm audit --omit=dev` finds 0 vulnerabilities in what the app runs. The advisories `npm audit` shows are in dev tools (the Vitest 3 test runner and Next.js's ESLint config). Vitest 4+ fixes its part, but npm 10's installer crashes on it; if `npm -v` shows 11 or newer, run `npm i -D vitest@latest`.

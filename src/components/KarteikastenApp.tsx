@@ -2,14 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { tick, useLocalState } from '@/lib/client/hooks';
-import { store } from '@/lib/client/store';
+import { store, useStore } from '@/lib/client/store';
 import { buildQueue, pickNext, type QueueItem } from '@/lib/queue';
 import { EMPTY_FILTERS, SORTS, type Sort } from '@/lib/words-view';
+import { AccountSheet, CheerSheet, PasswordSheet } from './AccountSheets';
+import { BrandMark } from './auth/AuthShell';
+import { ClassView } from './ClassView';
 import { ReviewSession } from './ReviewSession';
 import { SettingsSheet } from './SettingsSheet';
 import { StatsView } from './StatsView';
 import { StudyView } from './StudyView';
-import { Icon, type IconName } from './ui';
+import { Avatar, Icon, type IconName } from './ui';
 import { UIContext, type Layout, type SheetSpec, type Tab, type UI, type WordsQuery } from './ui-context';
 import { CsvSheet, FieldsSheet, FilterSheet, MoreSheet, SortSheet } from './WordsSheets';
 import { ImportSheet } from './ImportSheet';
@@ -19,15 +22,17 @@ import { WordSheet } from './WordSheet';
 const TABS: { id: Tab; label: string; icon: IconName }[] = [
   { id: 'study', label: 'Study', icon: 'cards' },
   { id: 'words', label: 'Words', icon: 'table' },
+  { id: 'class', label: 'Class', icon: 'people' },
   { id: 'stats', label: 'Progress', icon: 'chart' },
 ];
 const DEFAULT_SORT: Sort = { key: 'source', dir: 'asc' };
-const isTab = (v: unknown) => v === 'study' || v === 'words' || v === 'stats';
+const isTab = (v: unknown) => v === 'study' || v === 'words' || v === 'class' || v === 'stats';
 const isLayout = (v: unknown) => v === 'table' || v === 'gallery';
 const isSort = (v: unknown) =>
   !!v && typeof v === 'object' && (v as Sort).key in SORTS && ((v as Sort).dir === 'asc' || (v as Sort).dir === 'desc');
 
 export default function KarteikastenApp() {
+  const { me } = useStore();
   const [tab, setTab] = useLocalState<Tab>('kk.tab', 'study', isTab);
   const [layout, setLayout] = useLocalState<Layout>('kk.layout', 'table', isLayout);
   const [sort, setSort] = useLocalState<Sort>('kk.sort', DEFAULT_SORT, isSort);
@@ -83,6 +88,7 @@ export default function KarteikastenApp() {
       if (document.hidden) return;
       tick();
       store.load();
+      if (store.getSnapshot().classData) store.loadClass();
     };
     document.addEventListener('visibilitychange', refresh);
     window.addEventListener('focus', refresh);
@@ -121,12 +127,27 @@ export default function KarteikastenApp() {
   return (
     <UIContext.Provider value={ui}>
       <div className="app">
+        <header className="appbar">
+          <span className="appbar-brand">
+            <BrandMark size={26} />
+            Karteikasten
+          </span>
+          {me && (
+            <button className="appbar-user" onClick={() => openSheet({ kind: 'account' })} aria-label={`Your profile, ${me.displayName}`}>
+              <span className="appbar-name">{me.displayName.split(' ')[0]}</span>
+              <Avatar id={me.id} name={me.displayName} size="sm" />
+            </button>
+          )}
+        </header>
         <main className="views">
           <section className="view" aria-label="Study" hidden={tab !== 'study'}>
             <StudyView />
           </section>
           <section className="view view-words" aria-labelledby="h-words" hidden={tab !== 'words'}>
             <WordsView />
+          </section>
+          <section className="view" aria-label="Class" hidden={tab !== 'class'}>
+            <ClassView active={tab === 'class'} />
           </section>
           <section className="view" aria-label="Progress" hidden={tab !== 'stats'}>
             <StatsView />
@@ -171,5 +192,11 @@ function SheetHost({ spec }: { spec: SheetSpec }) {
       return <SettingsSheet />;
     case 'csv':
       return <CsvSheet text={spec.text} />;
+    case 'account':
+      return <AccountSheet />;
+    case 'password':
+      return <PasswordSheet />;
+    case 'cheer':
+      return <CheerSheet to={spec.to} />;
   }
 }
