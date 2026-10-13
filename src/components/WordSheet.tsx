@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 import { useNow } from '@/lib/client/hooks';
+import { requestAiWords } from '@/lib/client/ai';
 import { speak, useSpeechSupported } from '@/lib/client/speech';
 import { store, useStore } from '@/lib/client/store';
 import { addsSharedWords, canEditWord, MY_WORDS_DECK } from '@/lib/ownership';
@@ -9,6 +10,7 @@ import { currentDeck, deckNames, enabledDirs, lapsesOf, latestDeck, LEECH_AT, ne
 import { cleanTerm, guessPos, newId, norm, parseTags } from '@/lib/text';
 import { dayIndex, DAY, fmtSpan, plural } from '@/lib/time';
 import { POS_OPTIONS, RATING_LABEL, type Pos, type Word } from '@/lib/types';
+import { LanguageSelect, useAiLanguage } from './AiSheet';
 import { BottomSheet } from './BottomSheet';
 import { ConfirmButton, Icon, StatusPill, Term } from './ui';
 import { useUI } from './ui-context';
@@ -22,6 +24,8 @@ export function WordSheet({ id }: { id: string | null }) {
   // Fill the form once from the word as it was when the sheet opened, so live updates never overwrite typing.
   const [initial] = useState<Word | null>(() => (id ? data.words.get(id) ?? null : null));
   const [errors, setErrors] = useState<{ term?: string; meaning?: string }>({});
+  const [aiLang, setAiLang] = useAiLanguage();
+  const [filling, setFilling] = useState(false);
   const canEdit = canEditWord(data.me, initial); // the server enforces this too
   const shared = initial ? !initial.personal : addsSharedWords(data.me);
 
@@ -88,6 +92,49 @@ export function WordSheet({ id }: { id: string | null }) {
     void store.saveWord(word).then((ok) => ok && ui.toast(initial ? 'Saved' : `Added “${term}”`));
   };
 
+  /** Ask the AI for everything still empty: meaning, IPA, forms, example, memory hook, tags. Never overwrites what you typed. */
+  const fill = async () => {
+    const form = document.getElementById('word-form') as HTMLFormElement | null;
+    const field = (name: string) => form?.elements.namedItem(name) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null;
+    const termEl = field('term');
+    const term = termEl?.value.trim() ?? '';
+    if (!term) {
+      setErrors({ term: 'Type the German word first.' });
+      termEl?.focus();
+      return;
+    }
+    const given = field('meaning')?.value.trim();
+    setFilling(true);
+    try {
+      const r = await requestAiWords({ mode: 'text', language: aiLang, text: given ? `${term} – ${given}` : term });
+      const w = r.words[0];
+      if (!w) {
+        ui.toast(r.note || 'The AI didn’t recognise this as a German word.');
+        return;
+      }
+      // Take the AI's spelling when it only adds the article or fixes capitals ("bahnhof" → "der Bahnhof").
+      if (termEl && norm(w.term) !== norm(term) && norm(w.term).endsWith(norm(term))) termEl.value = w.term;
+      const fillEmpty = (name: string, value: string) => {
+        const el = field(name);
+        if (el && !el.value.trim() && value) el.value = value;
+      };
+      fillEmpty('meaning', w.meaning);
+      fillEmpty('pronunciation', w.pronunciation);
+      fillEmpty('pos', w.pos);
+      fillEmpty('forms', w.forms);
+      fillEmpty('example', w.example);
+      fillEmpty('exampleTr', w.exampleTr);
+      fillEmpty('mnemonic', w.mnemonic);
+      fillEmpty('tags', w.tags.join(', '));
+      setErrors({});
+      ui.toast('Filled in. Check it, then save.');
+    } catch (e) {
+      ui.toast((e as Error).message);
+    } finally {
+      setFilling(false);
+    }
+  };
+
   const remove = () => {
     if (!initial) return;
     ui.closeSheet();
@@ -121,6 +168,15 @@ export function WordSheet({ id }: { id: string | null }) {
             aria-describedby="f-term-hint f-term-err" aria-invalid={!!errors.term} data-autofocus={initial ? undefined : true} />
           {canEdit && <p className="hint" id="f-term-hint">Start nouns with der, die or das to get the gender colour.</p>}
           {errors.term && <p className="err" id="f-term-err">{errors.term}</p>}
+          {data.ai && canEdit && (
+            <div className="ai-fill">
+              <button type="button" className="btn btn-sm" onClick={fill} disabled={filling} aria-busy={filling}>
+                <Icon name="sparkle" />{filling ? 'Filling in…' : 'Fill in the rest with AI'}
+              </button>
+              <label className="sr-only" htmlFor="f-ai-lang">Meanings in</label>
+              <LanguageSelect id="f-ai-lang" value={aiLang} onChange={setAiLang} />
+            </div>
+          )}
         </div>
         <div className="field">
           <label htmlFor="f-meaning">Meaning</label>

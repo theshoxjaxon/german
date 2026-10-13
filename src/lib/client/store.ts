@@ -19,6 +19,7 @@ export interface Snapshot {
   me: Me | null;
   guest: boolean; // studying without a profile; progress lives in this browser only
   guestWords: number; // signed in, with guest progress on this device waiting for a decision
+  ai: boolean; // the AI word helper is available
   words: Map<string, Word>;
   cards: Map<string, CardDoc>;
   prefs: Prefs;
@@ -30,7 +31,7 @@ type Kind = 'words' | 'cards';
 type Doc<K extends Kind> = K extends 'words' ? Word : CardDoc;
 
 const INITIAL: Snapshot = {
-  status: 'loading', me: null, guest: false, guestWords: 0, words: new Map(), cards: new Map(), prefs: DEFAULT_PREFS,
+  status: 'loading', me: null, guest: false, guestWords: 0, ai: false, words: new Map(), cards: new Map(), prefs: DEFAULT_PREFS,
   cheers: [], classData: null, classStatus: 'idle',
 };
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -165,7 +166,7 @@ class Store {
       }
       // A guest: progress and settings come from this browser.
       this.emit({
-        status: 'ready', me: null, guest: true, guestWords: 0, words, cheers: [],
+        status: 'ready', me: null, guest: true, guestWords: 0, ai: false, words, cheers: [],
         cards: new Map(Object.entries(readGuestCards())),
         prefs: { ...DEFAULT_PREFS, ...readGuest(GUEST_PREFS) } as Prefs,
       });
@@ -179,6 +180,7 @@ class Store {
       status: 'ready',
       me: data.me,
       guest: false,
+      ai: data.ai === true,
       words,
       cards,
       cheers: data.cheers,

@@ -6,6 +6,7 @@ import { store, useStore } from '@/lib/client/store';
 import { buildQueue, pickNext, type QueueItem } from '@/lib/queue';
 import { EMPTY_FILTERS, SORTS, type Sort } from '@/lib/words-view';
 import { AccountSheet, CheerSheet, PasswordSheet } from './AccountSheets';
+import { AiSheet } from './AiSheet';
 import { BrandMark } from './auth/AuthShell';
 import { ClassView } from './ClassView';
 import { GuestActions, LockedView } from './GuestViews';
@@ -188,6 +189,8 @@ function SheetHost({ spec }: { spec: SheetSpec }) {
       return <WordSheet key={spec.id ?? 'new'} id={spec.id} />;
     case 'import':
       return <ImportSheet />;
+    case 'ai':
+      return <AiSheet />;
     case 'filter':
       return <FilterSheet />;
     case 'sort':

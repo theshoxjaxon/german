@@ -668,3 +668,32 @@ a.btn { text-decoration: none; }
   background: var(--mark-soft); color: var(--ink); font-size: 11.5px; font-weight: 700; letter-spacing: .02em;
 }
 .owner-note { font-size: 13.5px; color: var(--ink-2); margin-bottom: 4px; }
+
+/* ---------- AI word helper ---------- */
+.icon-btn.ai-btn { color: var(--ink); }
+.ai-modes { justify-self: start; }
+.ai-photo { display: grid; gap: 12px; }
+.ai-preview { display: grid; gap: 10px; justify-items: start; margin: 0; }
+.ai-preview img { display: block; max-width: 100%; max-height: 260px; border-radius: 12px; border: 1px solid var(--line); object-fit: contain; background: var(--surface-2); }
+.ai-status { display: flex; align-items: center; gap: 10px; font-size: 14.5px; color: var(--ink-2); }
+.spinner { width: 18px; height: 18px; flex: none; border-radius: 50%; border: 2.5px solid var(--line-strong); border-top-color: var(--ink); animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
+.ai-list-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; }
+.ai-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.ai-row {
+  display: flex; align-items: flex-start; gap: 12px; padding: 12px; border-radius: 12px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface);
+}
+.ai-row.is-on { border-color: var(--ink-3); background: var(--surface-2); }
+.ai-row input { width: 20px; height: 20px; margin-top: 2px; flex: none; accent-color: var(--ink); }
+.ai-main { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.ai-term { font-family: var(--font-display); font-weight: 700; font-size: 17px; overflow-wrap: anywhere; }
+.ai-ipa { font-family: var(--font-ipa); font-size: 14px; color: var(--ink-3); }
+.ai-meaning { font-size: 15px; overflow-wrap: anywhere; }
+.ai-example { font-size: 13.5px; color: var(--ink-2); font-style: italic; overflow-wrap: anywhere; }
+.ai-side { display: grid; gap: 6px; justify-items: end; flex: none; }
+.ai-dup { font-size: 11.5px; font-weight: 700; color: var(--hard); white-space: nowrap; }
+.ai-empty { display: grid; gap: 8px; padding: 8px 0; }
+.ai-fill { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+.ai-fill select { width: auto; min-height: 34px; padding: 0 28px 0 10px; font-size: 13.5px; }

@@ -10,6 +10,7 @@ export type Layout = 'table' | 'gallery';
 export type SheetSpec =
   | { kind: 'word'; id: string | null }
   | { kind: 'import' }
+  | { kind: 'ai' }
   | { kind: 'filter' }
   | { kind: 'sort' }
   | { kind: 'fields' }

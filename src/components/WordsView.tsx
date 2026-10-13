@@ -106,6 +106,9 @@ export function WordsView() {
           </h1>
         </div>
         <div className="vhead-actions">
+          {canAdd && data.ai && (
+            <button className="icon-btn ai-btn" onClick={() => ui.openSheet({ kind: 'ai' })} aria-label="Add words with AI"><Icon name="sparkle" /></button>
+          )}
           {canAdd && (
             <button className="icon-btn" onClick={() => ui.openSheet({ kind: 'import' })} aria-label="Import a word list"><Icon name="paste" /></button>
           )}
