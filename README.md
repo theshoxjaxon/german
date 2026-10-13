@@ -2,7 +2,8 @@
 
 A mobile-first vocabulary app for a learning center. Students study German words with spaced-repetition flashcards, each with their own private progress, and see how their classmates are doing. The teacher manages the words and sees who is active on an admin dashboard.
 
-- **Accounts**: sign up with the center's join code, log in, log out, change password.
+- **Try it without an account**: anyone can open the app and practise the flashcards as a guest. Progress is kept in that browser, and moves into their profile when they sign up.
+- **Accounts**: sign up with the center's join code, log in, log out, change password. Signing up is optional and unlocks Words, Class and Progress.
 - **Study**: Anki-style flashcards (SM-2): tap to flip, swipe or tap Again / Hard / Good / Easy. Every student's progress is private.
 - **Class**: Snapchat-style daily streaks, each classmate's active-word count, a leaderboard, and cheers you can send each other.
 - **Words**: an Airtable-style table and card gallery: search, filter, sort. Teachers edit and import; students read.
@@ -56,13 +57,16 @@ Copy `.env.example` to `.env.local` and change what you need. All are optional.
 
 ## Roles and privacy
 
-| | Student | Admin (teacher) |
-| --- | --- | --- |
-| Study, own progress, settings | ✓ | ✓ |
-| See classmates' streaks, active words, answers | ✓ | ✓ |
-| See anyone else's cards | – | – |
-| Add, edit, import, delete words | – | ✓ |
-| `/admin`: stats, reset passwords, make admins, delete profiles, change join code | – | ✓ |
+| | Guest (no profile) | Student | Admin (teacher) |
+| --- | --- | --- | --- |
+| Study the flashcards, settings | ✓ (saved in this browser) | ✓ | ✓ |
+| Words table, Progress, streaks | – | ✓ | ✓ |
+| See classmates' streaks, active words, answers | – | ✓ | ✓ |
+| See anyone else's cards | – | – | – |
+| Add, edit, import, delete words | – | – | ✓ |
+| `/admin`: stats, reset passwords, make admins, delete profiles, change join code | – | – | ✓ |
+
+**Guests.** `/` opens straight to the flashcards. Nothing is sent to the server except the request for the word list, so guests never show up in the admin numbers or the Class tab. The word list itself is public, because guests need it to study. On sign-up, the guest's progress and settings move into the new profile. A guest who logs in to a profile that already has progress is asked first (*Add to my profile* / *No, discard it*), because on a shared classroom computer that guest may have been someone else. Words the profile already studied always keep the profile's progress.
 
 Only counts are shared on the Class tab. Nobody, the admin included, sees another person's individual cards or answers.
 
@@ -114,10 +118,10 @@ Pressing Good every time gives intervals of 1 → 4 → 10 → 24 → 60 → 144
 ```
 Browser
   /login, /signup ── Server Actions (src/app/actions/auth.ts) ── scrypt hash, session cookie
-  /               ── client app ── useStore() ── fetch /api/*
+  /               ── client app ── useStore() ── fetch /api/*  (guests: localStorage for progress)
   /admin          ── Server Component behind <Suspense> ── Server Actions (src/app/admin/actions.ts)
 
-src/proxy.ts       no session cookie → redirect to /login (fast first check only)
+src/proxy.ts       /admin without a session cookie → redirect to /login (fast first check only)
 src/app/api/*      requireUser() on every route: valid session, role, same-origin
 src/lib/server/    repo.ts (all SQL) · db.ts (schema, seed) · session.ts · password.ts · rate-limit.ts
 SQLite / Turso     users · sessions · words · cards · prefs · activity · cheers · settings
@@ -125,7 +129,9 @@ SQLite / Turso     users · sessions · words · cards · prefs · activity · c
 
 | Endpoint | Who | Purpose |
 | --- | --- | --- |
-| `GET /api/state` | signed in | You, the words, your progress, settings, new cheers |
+| `GET /api/state` | anyone | Signed in: you, the words, your progress, settings, new cheers. Guest: `{ me: null, words }` |
+| `POST /api/cards/import` | signed in | Add progress made as a guest (never overwrites existing progress) |
+| `POST /api/logout` | signed in | Sign out; a plain form post, so the full page reload clears the old profile from memory |
 | `PUT/DELETE /api/words/:id`, `POST /api/words` | admin | Edit, delete, import words |
 | `PUT/DELETE /api/cards/:wordId`, `DELETE /api/cards` | signed in | Save or reset **your** progress |
 | `PUT /api/prefs` | signed in | Your settings |
@@ -156,6 +162,7 @@ SQLite / Turso     users · sessions · words · cards · prefs · activity · c
 - Local: `data/karteikasten.db` (ignored by git). Stop the app and copy the file to back up.
 - Turso: `turso db shell <name> .dump > backup.sql`.
 - Table layout, sort, visible fields and the last open tab are remembered per device in `localStorage`.
+- Guest progress lives in `localStorage` (`kk.guest.cards`, `kk.guest.prefs`) until it moves into a profile. Clearing the browser's site data deletes it.
 
 ## Notes
 

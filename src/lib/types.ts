@@ -146,6 +146,12 @@ export interface AppData {
   cheers: Cheer[]; // cheers received and not yet seen
 }
 
+/** What GET /api/state returns to a guest (not signed in). Their progress stays in their browser. */
+export interface GuestData {
+  me: null;
+  words: Record<string, Word>;
+}
+
 /** What the UI works with: Maps for fast lookup. */
 export interface StudyData {
   words: Map<string, Word>;

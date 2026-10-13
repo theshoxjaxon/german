@@ -257,6 +257,59 @@ export async function deleteAllCards(userId: string): Promise<void> {
   await db.execute({ sql: 'DELETE FROM cards WHERE user_id = ?', args: [userId] });
 }
 
+/**
+ * Add the progress someone made as a guest, before they had a profile. Never overwrites:
+ * words already studied in the profile keep that progress, and so do saved settings.
+ * Answers given today count toward today's activity. Returns how many words were added.
+ */
+export async function importCards(userId: string, cards: Record<string, CardDoc>, prefs?: unknown, now = Date.now()): Promise<number> {
+  const db = await getDb();
+  const [wordRows, mine] = await db.batch(
+    [
+      { sql: 'SELECT id FROM words', args: [] },
+      { sql: 'SELECT word_id FROM cards WHERE user_id = ?', args: [userId] },
+    ],
+    'read',
+  );
+  const words = new Set(wordRows.rows.map((r) => str(r.id)));
+  const have = new Set(mine.rows.map((r) => str(r.word_id)));
+  const today = todayKey(now);
+  const isToday = (t: number) => t > 0 && t <= now && todayKey(t) === today;
+  const stmts: InStatement[] = [];
+  let answers = 0;
+  let newCards = 0;
+  for (const [wordId, doc] of Object.entries(cards)) {
+    if (!words.has(wordId) || have.has(wordId)) continue;
+    const flags = cardFlags(doc);
+    stmts.push({
+      sql: `INSERT INTO cards (user_id, word_id, data, started, mature, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT (user_id, word_id) DO NOTHING`,
+      args: [userId, wordId, JSON.stringify(doc), flags.started, flags.mature, now],
+    });
+    for (const s of [doc.f, doc.r]) {
+      if (!s) continue;
+      answers += s.log.filter((e) => isToday(e.t)).length;
+      if (s.type !== 'new' && isToday(s.first)) newCards++;
+    }
+  }
+  const added = stmts.length;
+  if (answers || newCards) {
+    stmts.push({
+      sql: `INSERT INTO activity (user_id, day, answers, new_cards) VALUES (?, ?, ?, ?)
+            ON CONFLICT (user_id, day) DO UPDATE SET answers = answers + excluded.answers, new_cards = new_cards + excluded.new_cards`,
+      args: [userId, today, Math.min(answers, 1000), Math.min(newCards, 400)],
+    });
+  }
+  if (prefs !== undefined) {
+    stmts.push({
+      sql: 'INSERT INTO prefs (user_id, data) VALUES (?, ?) ON CONFLICT (user_id) DO NOTHING',
+      args: [userId, JSON.stringify(sanitizePrefs(prefs, DEFAULT_PREFS))],
+    });
+  }
+  if (stmts.length) await db.batch(stmts, 'write');
+  return added;
+}
+
 export async function getPrefs(userId: string): Promise<Prefs> {
   const db = await getDb();
   const r = await db.execute({ sql: 'SELECT data FROM prefs WHERE user_id = ?', args: [userId] });

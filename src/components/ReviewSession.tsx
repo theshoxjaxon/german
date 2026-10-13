@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { Fragment, useEffect, useEffectEvent, useRef, useState, type PointerEvent } from 'react';
 import { useNow } from '@/lib/client/hooks';
 import { speak, stopSpeech } from '@/lib/client/speech';
@@ -424,6 +425,11 @@ function DoneScreen({ answered, again, startedAt, now, onClose, onMore }: {
           )}
           {next && <p>{next}</p>}
           {canLearnMore && <button className="btn" onClick={learnMore}>Learn 10 more new words</button>}
+          {data.guest && answered > 0 && (
+            <p className="done-nudge">
+              <Link href="/signup">Create a free profile</Link> to keep this progress and start a streak.
+            </p>
+          )}
         </section>
       </div>
       <div className="rv-actions">

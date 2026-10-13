@@ -6,6 +6,7 @@ import { buildQueue, currentDeck, deckCounts, dueForecast, LEECH_AT, lapsesOf, n
 import { dayIndex, dayLong, fmtSpan, plural, studyDayTitle, weekday } from '@/lib/time';
 import { EMPTY_FILTERS } from '@/lib/words-view';
 import { CheersBanner } from './ClassView';
+import { GuestImportBanner, GuestNote } from './GuestViews';
 import { EmptyBox, Icon, LoadError, SyncNote } from './ui';
 import { useUI } from './ui-context';
 
@@ -38,7 +39,7 @@ export function StudyView() {
       </div>
     );
   }
-  if (!data.words.size) return <div className="page">{head}<EmptyBox /><SyncNote /></div>;
+  if (!data.words.size) return <div className="page">{head}<EmptyBox />{data.guest && <GuestNote />}<SyncNote /></div>;
 
   const q = buildQueue(data, now);
   const c = q.counts;
@@ -78,6 +79,7 @@ export function StudyView() {
     <div className="page">
       {head}
       <CheersBanner />
+      <GuestImportBanner />
       {decks.some(([d]) => d) && (
         <div className="decks" role="radiogroup" aria-label="Deck">
           <button className="chip" role="radio" aria-checked={deck === 'all'} onClick={() => store.setPrefs({ studyDeck: 'all' })}>
@@ -105,6 +107,8 @@ export function StudyView() {
         )}
         <p className="today-note">{note}</p>
       </section>
+
+      {data.guest && <GuestNote />}
 
       <section className="panel" aria-labelledby="week-h">
         <div className="panel-h">

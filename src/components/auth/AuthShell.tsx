@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 /** The frame around the login and sign-up forms: an index card on the desk. */
@@ -13,6 +14,9 @@ export function AuthShell({ title, lede, children }: { title: string; lede: stri
         <p className="lede">{lede}</p>
         {children}
       </div>
+      <p className="auth-guest">
+        Just want to practise? <Link href="/">Study the flashcards as a guest</Link>
+      </p>
     </main>
   );
 }

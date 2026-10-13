@@ -1,7 +1,7 @@
 'use server';
 
 /**
- * Sign up, log in, log out and change password, as Server Actions.
+ * Sign up, log in and change password, as Server Actions. (Log out is POST /api/logout.)
  * Forms post here directly (they even work before JavaScript loads). Next.js also checks
  * that the request comes from this site (Origin vs Host) before running an action.
  */
@@ -10,7 +10,7 @@ import { cleanDisplayName, displayNameError, normalizeUsername, passwordError, s
 import { burnPasswordCheck, hashPassword, verifyPassword } from '@/lib/server/password';
 import { clientIp, hit } from '@/lib/server/rate-limit';
 import * as repo from '@/lib/server/repo';
-import { currentUser, endSession, sessionToken, startSession } from '@/lib/server/session';
+import { currentUser, sessionToken, startSession } from '@/lib/server/session';
 import { HOUR, MIN } from '@/lib/time';
 
 export interface FormState {
@@ -67,11 +67,6 @@ export async function signup(_prev: FormState, form: FormData): Promise<FormStat
 
   await startSession(user.id);
   redirect('/');
-}
-
-export async function logout(): Promise<void> {
-  await endSession();
-  redirect('/login');
 }
 
 export async function changePassword(_prev: FormState, form: FormData): Promise<FormState> {

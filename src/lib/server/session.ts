@@ -59,7 +59,7 @@ export async function currentUser(): Promise<repo.UserRow | null> {
 const json = (status: number, error: string) => Response.json({ error }, { status, headers: { 'Cache-Control': 'no-store' } });
 
 /** Reject requests whose Origin is another site (defense in depth on top of SameSite cookies). */
-function sameOrigin(req: Request): boolean {
+export function sameOrigin(req: Request): boolean {
   const origin = req.headers.get('origin');
   if (!origin) return true;
   const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host');

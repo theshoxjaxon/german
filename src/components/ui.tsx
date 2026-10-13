@@ -35,6 +35,7 @@ const ICONS = {
   shield: '<path d="M12 3.5 19 6v5.5c0 4.4-3 7.7-7 9-4-1.3-7-4.6-7-9V6z"/><path d="m9 12 2.2 2.2L15.5 10"/>',
   key: '<circle cx="8" cy="15" r="3.8"/><path d="m10.8 12.3 8-8M16.5 6.5l2.3 2.3M14 9l2 2"/>',
   star: '<path d="m12 3.8 2.5 5.1 5.6.8-4 3.9 1 5.6-5.1-2.7-5 2.7 1-5.6-4.1-3.9 5.6-.8z"/>',
+  lock: '<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>',
   book: '<path d="M4 5.5c2.7-1 5.3-1 8 .8 2.7-1.8 5.3-1.8 8-.8v13c-2.7-1-5.3-1-8 .8-2.7-1.8-5.3-1.8-8-.8z"/><path d="M12 6.3v13"/>',
 } as const;
 export type IconName = keyof typeof ICONS;
@@ -154,10 +155,11 @@ export function EmptyBox() {
 }
 
 export function SyncNote() {
+  const { guest } = useStore();
   return (
-    <p className="sync">
+    <p className={`sync${guest ? ' is-local' : ''}`}>
       <span className="dot" />
-      Progress saved to your profile
+      {guest ? 'Progress saved on this device only' : 'Progress saved to your profile'}
     </p>
   );
 }

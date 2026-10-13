@@ -519,7 +519,7 @@ mark { background: linear-gradient(transparent 52%, var(--mark-soft) 52%); color
 
 /* ---------- login / sign-up ---------- */
 .auth {
-  min-height: 100%; display: grid; place-items: center; padding: calc(24px + env(safe-area-inset-top, 0px)) 16px calc(24px + env(safe-area-inset-bottom, 0px));
+  min-height: 100%; display: grid; place-items: center; align-content: center; gap: 18px; padding: calc(24px + env(safe-area-inset-top, 0px)) 16px calc(24px + env(safe-area-inset-bottom, 0px));
 }
 .auth-card { width: 100%; max-width: 420px; display: grid; gap: 10px; background: var(--card); border-radius: 20px; box-shadow: var(--shadow-card); padding: 20px 20px 24px; }
 .auth-brand { display: flex; align-items: center; gap: 10px; padding-bottom: 14px; margin-bottom: 6px; border-bottom: 1.5px solid var(--rule-red); font-family: var(--font-display); font-weight: 700; font-size: 18px; }
@@ -528,6 +528,8 @@ mark { background: linear-gradient(transparent 52%, var(--mark-soft) 52%); color
 .auth-switch { text-align: center; font-size: 15px; color: var(--ink-2); }
 .auth-switch a, .auth-card a { color: var(--ink); font-weight: 700; text-decoration-color: var(--mark); text-decoration-thickness: 3px; text-underline-offset: 3px; }
 .auth-note { text-align: center; }
+.auth-guest { max-width: 420px; text-align: center; font-size: 15px; color: var(--ink-2); text-wrap: balance; }
+.auth-guest a { color: var(--ink); font-weight: 700; text-decoration-color: var(--mark); text-decoration-thickness: 3px; text-underline-offset: 3px; }
 .reveal {
   position: absolute; right: 4px; top: 50%; transform: translateY(-50%); height: 36px; padding: 0 10px; border: 0; border-radius: 8px;
   background: transparent; color: var(--ink-2); font-size: 13px; font-weight: 700; cursor: pointer;
@@ -630,3 +632,32 @@ mark { background: linear-gradient(transparent 52%, var(--mark-soft) 52%); color
 .callout-ok { background: var(--good-soft); }
 .temp-password { font-family: var(--font-mono); font-size: 22px; font-weight: 500; padding: 4px 0; user-select: all; }
 .center { text-align: center; }
+
+/* ---------- guests (no profile yet) ---------- */
+.btn-sm { min-height: 38px; padding: 0 14px; font-size: 14px; border-radius: 10px; text-decoration: none; }
+.appbar-guest { display: inline-flex; align-items: center; gap: 6px; }
+.appbar-guest .btn-quiet { color: var(--ink); }
+.tab .tab-ic { position: relative; }
+.tab-lock { position: absolute; top: -1px; right: -4px; display: grid; place-items: center; width: 16px; height: 16px; color: var(--ink-3); }
+.tab .tab-lock .ic { width: 12px; height: 12px; }
+.locked { display: grid; justify-items: center; gap: 12px; text-align: center; padding: 40px 8px 8px; }
+.locked h1 { font-family: var(--font-display); font-size: 26px; line-height: 1.15; text-wrap: balance; }
+.locked > p { color: var(--ink-2); max-width: 38ch; text-wrap: pretty; }
+.locked > p.muted { color: var(--ink-3); }
+.locked-ic { position: relative; display: grid; place-items: center; width: 72px; height: 72px; border-radius: 22px; background: var(--mark-soft); color: var(--ink); }
+.locked-ic > .ic { width: 34px; height: 34px; }
+.locked-badge {
+  position: absolute; right: -6px; bottom: -6px; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%;
+  background: var(--ink); color: var(--ink-inv); border: 3px solid var(--bg);
+}
+.locked-badge .ic { width: 15px; height: 15px; }
+.locked-actions { display: grid; gap: 12px; width: 100%; max-width: 360px; margin-top: 6px; }
+.locked-actions .btn { text-decoration: none; }
+.locked a:not(.btn) { color: var(--ink); font-weight: 700; text-decoration-color: var(--mark); text-decoration-thickness: 3px; text-underline-offset: 3px; }
+.guest-note { display: grid; gap: 10px; padding: 16px; border-radius: 16px; background: var(--surface); border: 1.5px dashed var(--line-strong); }
+.guest-note h2 { font-size: 16px; font-weight: 700; }
+.guest-note p { color: var(--ink-2); font-size: 14.5px; text-wrap: pretty; }
+.guest-note .btn { text-decoration: none; }
+.done-nudge { font-size: 14.5px; }
+.done-nudge a { color: var(--ink); font-weight: 700; text-decoration-color: var(--mark); text-decoration-thickness: 3px; text-underline-offset: 3px; }
+a.btn { text-decoration: none; }

@@ -97,6 +97,29 @@ describe('database', () => {
     expect((await repo.classOverview(teacher.id)).members.find((x) => x.username === 'malika')?.cheeredToday).toBe(true);
   });
 
+  it('adds guest progress to a profile without overwriting what is there', async () => {
+    const created = await repo.createUser({ username: 'guest_now', displayName: 'Dilnoza', passwordHash: 'x' });
+    if (created === 'taken') throw new Error('taken');
+    const t = Date.now();
+    const mine = doc(answer(null, 'easy', t));
+    await repo.putCard(created.id, 'l3-mutter', mine);
+    const guest = {
+      'l3-mutter': doc(answer(null, 'again', t)), // already studied in the profile: keep the profile's
+      'l3-vater': doc(answer(answer(null, 'good', t - 60_000), 'good', t)),
+      'no-such-word': doc(answer(null, 'good', t)),
+    };
+    expect(await repo.importCards(created.id, guest, { newPerDay: 5 })).toBe(1);
+    const cards = await repo.listCards(created.id);
+    expect(Object.keys(cards).sort()).toEqual(['l3-mutter', 'l3-vater']);
+    expect(cards['l3-mutter'].f?.log.at(-1)?.r).toBe('easy');
+    expect((await repo.getPrefs(created.id)).newPerDay).toBe(5);
+    const me = (await repo.classOverview(created.id)).members.find((m) => m.isMe)!;
+    expect(me).toMatchObject({ activeWords: 2, answersToday: 3, studiedToday: true });
+    // Importing again changes nothing.
+    expect(await repo.importCards(created.id, guest)).toBe(0);
+    await repo.deleteUser(created.id);
+  });
+
   it('deletes a profile with everything that belongs to it', async () => {
     const malika = (await repo.findUserByUsername('malika'))!;
     await repo.deleteUser(malika.id);

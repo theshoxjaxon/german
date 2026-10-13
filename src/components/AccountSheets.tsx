@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useActionState, useState } from 'react';
-import { changePassword, logout, type FormState } from '@/app/actions/auth';
+import { changePassword, type FormState } from '@/app/actions/auth';
 import { store, useStore } from '@/lib/client/store';
 import { CHEERS, type CheerKind } from '@/lib/types';
 import { BottomSheet } from './BottomSheet';
@@ -33,7 +33,7 @@ export function AccountSheet() {
         <button className="opt" onClick={() => ui.openSheet({ kind: 'settings' })}>Study settings <Icon name="sliders" /></button>
         <button className="opt" onClick={() => ui.openSheet({ kind: 'password' })}>Change password <Icon name="key" /></button>
       </div>
-      <form action={logout}>
+      <form method="post" action="/api/logout">
         <button className="btn btn-xl" type="submit">
           <Icon name="logout" /> Log out
         </button>

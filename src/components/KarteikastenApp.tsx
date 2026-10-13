@@ -8,6 +8,7 @@ import { EMPTY_FILTERS, SORTS, type Sort } from '@/lib/words-view';
 import { AccountSheet, CheerSheet, PasswordSheet } from './AccountSheets';
 import { BrandMark } from './auth/AuthShell';
 import { ClassView } from './ClassView';
+import { GuestActions, LockedView } from './GuestViews';
 import { ReviewSession } from './ReviewSession';
 import { SettingsSheet } from './SettingsSheet';
 import { StatsView } from './StatsView';
@@ -32,7 +33,7 @@ const isSort = (v: unknown) =>
   !!v && typeof v === 'object' && (v as Sort).key in SORTS && ((v as Sort).dir === 'asc' || (v as Sort).dir === 'desc');
 
 export default function KarteikastenApp() {
-  const { me } = useStore();
+  const { me, guest } = useStore();
   const [tab, setTab] = useLocalState<Tab>('kk.tab', 'study', isTab);
   const [layout, setLayout] = useLocalState<Layout>('kk.layout', 'table', isLayout);
   const [sort, setSort] = useLocalState<Sort>('kk.sort', DEFAULT_SORT, isSort);
@@ -138,30 +139,37 @@ export default function KarteikastenApp() {
               <Avatar id={me.id} name={me.displayName} size="sm" />
             </button>
           )}
+          {guest && <GuestActions />}
         </header>
         <main className="views">
           <section className="view" aria-label="Study" hidden={tab !== 'study'}>
             <StudyView />
           </section>
-          <section className="view view-words" aria-labelledby="h-words" hidden={tab !== 'words'}>
-            <WordsView />
+          {/* Guests practise the flashcards; the other sections come with a free profile. */}
+          <section className={`view${guest ? '' : ' view-words'}`} aria-label="Words" hidden={tab !== 'words'}>
+            {guest ? <LockedView feature="words" /> : <WordsView />}
           </section>
           <section className="view" aria-label="Class" hidden={tab !== 'class'}>
-            <ClassView active={tab === 'class'} />
+            {guest ? <LockedView feature="class" /> : <ClassView active={tab === 'class'} />}
           </section>
           <section className="view" aria-label="Progress" hidden={tab !== 'stats'}>
-            <StatsView />
+            {guest ? <LockedView feature="stats" /> : <StatsView />}
           </section>
         </main>
         <nav className="tabbar" aria-label="Sections">
-          {TABS.map((t) => (
-            <button key={t.id} className="tab" aria-current={tab === t.id ? 'page' : 'false'} onClick={() => setTab(t.id)}>
-              <span className="tab-ic">
-                <Icon name={t.icon} />
-              </span>
-              {t.label}
-            </button>
-          ))}
+          {TABS.map((t) => {
+            const locked = guest && t.id !== 'study';
+            return (
+              <button key={t.id} className="tab" aria-current={tab === t.id ? 'page' : 'false'} onClick={() => setTab(t.id)}
+                aria-label={locked ? `${t.label} (needs a profile)` : undefined}>
+                <span className="tab-ic">
+                  <Icon name={t.icon} />
+                  {locked && <span className="tab-lock"><Icon name="lock" /></span>}
+                </span>
+                {t.label}
+              </button>
+            );
+          })}
         </nav>
       </div>
 

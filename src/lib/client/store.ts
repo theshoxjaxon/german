@@ -7,13 +7,18 @@
  * Writes are optimistic: the snapshot changes immediately, the request goes out in the
  * background, and on failure the change is rolled back. Writes to the same document are
  * chained, so two quick answers on one card can never reach the server out of order.
+ *
+ * Guests (no profile yet) can practise the flashcards too. Their progress and settings are
+ * kept in this browser's localStorage; after they sign up it is moved into their profile.
  */
 import { useSyncExternalStore } from 'react';
-import { DEFAULT_PREFS, type AppData, type CardDoc, type Cheer, type CheerKind, type ClassData, type Me, type Prefs, type Word } from '../types';
+import { DEFAULT_PREFS, type AppData, type CardDoc, type Cheer, type CheerKind, type ClassData, type GuestData, type Me, type Prefs, type Word } from '../types';
 
 export interface Snapshot {
   status: 'loading' | 'ready' | 'error';
   me: Me | null;
+  guest: boolean; // studying without a profile; progress lives in this browser only
+  guestWords: number; // signed in, with guest progress on this device waiting for a decision
   words: Map<string, Word>;
   cards: Map<string, CardDoc>;
   prefs: Prefs;
@@ -25,9 +30,48 @@ type Kind = 'words' | 'cards';
 type Doc<K extends Kind> = K extends 'words' ? Word : CardDoc;
 
 const INITIAL: Snapshot = {
-  status: 'loading', me: null, words: new Map(), cards: new Map(), prefs: DEFAULT_PREFS, cheers: [], classData: null, classStatus: 'idle',
+  status: 'loading', me: null, guest: false, guestWords: 0, words: new Map(), cards: new Map(), prefs: DEFAULT_PREFS,
+  cheers: [], classData: null, classStatus: 'idle',
 };
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
+
+/* ---------- guest progress, kept in this browser ---------- */
+const GUEST_CARDS = 'kk.guest.cards';
+const GUEST_PREFS = 'kk.guest.prefs';
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+function readGuest(key: string): Record<string, unknown> {
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(key) ?? 'null');
+    return isObj(v) ? v : {};
+  } catch {
+    return {}; // storage blocked or bad JSON
+  }
+}
+function readGuestCards(): Record<string, CardDoc> {
+  const out: Record<string, CardDoc> = {};
+  for (const [id, doc] of Object.entries(readGuest(GUEST_CARDS))) {
+    if (isObj(doc) && typeof doc.suspended === 'boolean') out[id] = doc as unknown as CardDoc;
+  }
+  return out;
+}
+/** Returns false when the browser refuses to store (private mode, storage full). */
+function writeGuest(key: string, value: unknown): boolean {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch {
+    return false;
+  }
+}
+function clearGuest() {
+  try {
+    localStorage.removeItem(GUEST_CARDS);
+    localStorage.removeItem(GUEST_PREFS);
+  } catch {
+    /* ignore */
+  }
+}
 
 class HttpError extends Error {
   constructor(public status: number, message: string) {
@@ -96,21 +140,7 @@ class Store {
     if (this.loading) return this.loading;
     this.loading = (async () => {
       try {
-        const res = await send('/api/state', { cache: 'no-store' });
-        const data = (await res.json()) as AppData;
-        const words = new Map(Object.entries(data.words));
-        const cards = new Map(Object.entries(data.cards));
-        // Keep local changes that the server has not confirmed yet.
-        for (const id of this.pending.words.keys()) this.keepLocal(words, this.snap.words, id);
-        for (const id of this.pending.cards.keys()) this.keepLocal(cards, this.snap.cards, id);
-        this.emit({
-          status: 'ready',
-          me: data.me,
-          words,
-          cards,
-          cheers: data.cheers,
-          prefs: this.prefsDirty ? this.snap.prefs : { ...DEFAULT_PREFS, ...data.prefs },
-        });
+        if (await this.fetchState()) await this.checkGuestProgress();
       } catch (e) {
         if (this.snap.status === 'loading' && !(e instanceof HttpError && e.status === 401)) this.emit({ status: 'error' });
       } finally {
@@ -118,6 +148,91 @@ class Store {
       }
     })();
     return this.loading;
+  }
+
+  /** Load the signed-in person's data, or the guest view. Resolves true when signed in. */
+  private async fetchState(): Promise<boolean> {
+    const res = await fetch('/api/state', { cache: 'no-store' });
+    if (!res.ok) throw new HttpError(res.status, `Request failed (${res.status})`);
+    const data = (await res.json()) as AppData | GuestData;
+    const words = new Map(Object.entries(data.words));
+    if (!data.me) {
+      // Signed in a moment ago but not any more (expired, or signed out on another device).
+      if (this.snap.me) {
+        toLogin();
+        throw new HttpError(401, 'Signed out');
+      }
+      // A guest: progress and settings come from this browser.
+      this.emit({
+        status: 'ready', me: null, guest: true, guestWords: 0, words, cheers: [],
+        cards: new Map(Object.entries(readGuestCards())),
+        prefs: { ...DEFAULT_PREFS, ...readGuest(GUEST_PREFS) } as Prefs,
+      });
+      return false;
+    }
+    const cards = new Map(Object.entries(data.cards));
+    // Keep local changes that the server has not confirmed yet.
+    for (const id of this.pending.words.keys()) this.keepLocal(words, this.snap.words, id);
+    for (const id of this.pending.cards.keys()) this.keepLocal(cards, this.snap.cards, id);
+    this.emit({
+      status: 'ready',
+      me: data.me,
+      guest: false,
+      words,
+      cards,
+      cheers: data.cheers,
+      prefs: this.prefsDirty ? this.snap.prefs : { ...DEFAULT_PREFS, ...data.prefs },
+    });
+    return true;
+  }
+
+  /**
+   * After signing in: did this person study as a guest on this device first? A profile with
+   * no progress yet (just created) takes it over right away; otherwise we ask first, because
+   * on a shared computer that guest may have been someone else.
+   */
+  private async checkGuestProgress() {
+    const n = Object.keys(readGuestCards()).length;
+    const prefs = Object.keys(readGuest(GUEST_PREFS)).length > 0;
+    if ((n || prefs) && this.snap.cards.size === 0) await this.importGuestProgress(false);
+    else if (!n && prefs) clearGuest(); // only settings, and the profile has its own: keep the profile's
+    else if (n !== this.snap.guestWords) this.emit({ guestWords: n });
+  }
+
+  /** Move guest progress from this browser into the profile. Words already studied keep the profile's progress. */
+  async importGuestProgress(asked = true): Promise<boolean> {
+    const cards = readGuestCards();
+    const prefs = readGuest(GUEST_PREFS);
+    try {
+      const res = await send('/api/cards/import', {
+        method: 'POST',
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ cards, prefs: Object.keys(prefs).length ? prefs : undefined }),
+      });
+      const { imported } = (await res.json()) as { imported: number };
+      clearGuest();
+      this.emit({ guestWords: 0 });
+      await this.fetchState().catch(() => {}); // saved either way; the next refresh shows it
+      if (imported) this.report(`Your guest progress (${imported} ${imported === 1 ? 'word' : 'words'}) is now saved in your profile.`);
+      else if (asked) this.report('Your profile already had progress on those words, so it stays as it was.');
+      return true;
+    } catch (e) {
+      this.report(saveError(e, 'Could not add your guest progress. Try again.'));
+      return false;
+    }
+  }
+
+  /** Throw away guest progress left on this device. */
+  discardGuestProgress() {
+    clearGuest();
+    this.emit({ guestWords: 0 });
+  }
+
+  /** Guests: save all progress to this browser. */
+  private saveGuestCards(cards: Map<string, CardDoc>) {
+    if (!writeGuest(GUEST_CARDS, Object.fromEntries(cards))) {
+      this.report('This browser won’t save progress (private mode?). Create a free profile to keep it.');
+    }
   }
 
   private keepLocal<T>(fresh: Map<string, T>, current: Map<string, T>, id: string) {
@@ -133,6 +248,18 @@ class Store {
   }
 
   private async write<K extends Kind>(kind: K, id: string, doc: Doc<K> | null): Promise<boolean> {
+    if (this.snap.guest) {
+      if (kind === 'words') {
+        this.report('Create a free profile to edit words.');
+        return false;
+      }
+      const cards = new Map(this.snap.cards);
+      if (doc) cards.set(id, doc as CardDoc);
+      else cards.delete(id);
+      this.emit({ cards });
+      this.saveGuestCards(cards);
+      return true;
+    }
     const prev = this.snap[kind].get(id) as Doc<K> | undefined;
     const seq = ++this.seq;
     this.pending[kind].set(id, seq);
@@ -203,6 +330,10 @@ class Store {
   async resetAllProgress(): Promise<boolean> {
     const before = this.snap.cards;
     this.emit({ cards: new Map() });
+    if (this.snap.guest) {
+      this.saveGuestCards(new Map());
+      return true;
+    }
     try {
       await send('/api/cards', { method: 'DELETE' });
       return true;
@@ -216,6 +347,10 @@ class Store {
   /** Settings change instantly and save after a short pause, so tapping + five times sends one request. */
   setPrefs(patch: Partial<Prefs>, immediate = false) {
     this.emit({ prefs: { ...this.snap.prefs, ...patch } });
+    if (this.snap.guest) {
+      writeGuest(GUEST_PREFS, this.snap.prefs);
+      return;
+    }
     this.prefsDirty = true;
     if (this.prefsTimer) clearTimeout(this.prefsTimer);
     this.prefsTimer = setTimeout(async () => {
