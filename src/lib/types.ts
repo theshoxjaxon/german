@@ -62,7 +62,12 @@ export interface WordData {
 }
 export interface Word extends WordData {
   id: string;
+  /** Your own word: only you see it and can change it. Absent on shared lesson words. Set by the server. */
+  personal?: boolean;
 }
+
+/** How many own words one person may have. */
+export const MAX_OWN_WORDS = 2000;
 
 export interface Prefs {
   newPerDay: number;

@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { store, useStore } from '@/lib/client/store';
 import { parseList, suggestDeck } from '@/lib/import-parser';
+import { addsSharedWords, MY_WORDS_DECK } from '@/lib/ownership';
 import { deckNames, nextOrder } from '@/lib/queue';
 import { guessPos, newId, norm, parseTags } from '@/lib/text';
 import { plural } from '@/lib/time';
@@ -21,7 +22,8 @@ export function ImportSheet() {
   const [busy, setBusy] = useState(false);
 
   const parsed = useMemo(() => parseList(text), [text]);
-  const deck = deckInput ?? (parsed.deckHint || suggestDeck(deckNames(data.words)));
+  const shared = addsSharedWords(data.me);
+  const deck = deckInput ?? (parsed.deckHint || (shared ? suggestDeck(deckNames(data.words)) : MY_WORDS_DECK));
   const todo = useMemo(() => {
     const have = new Set([...data.words.values()].filter((w) => (w.deck || '') === deck).map((w) => norm(w.term)));
     const seen = new Set<string>();
@@ -33,7 +35,7 @@ export function ImportSheet() {
     });
   }, [parsed, deck, data.words]);
   const dupes = parsed.pairs.length - todo.length;
-  if (data.me?.role !== 'admin') return null; // only teachers change the shared word list
+  if (!data.me) return null; // guests study only
 
   const run = async () => {
     if (!todo.length || busy) return;
@@ -52,6 +54,7 @@ export function ImportSheet() {
       order: base + i,
       createdAt: now + i,
       updatedAt: now + i,
+      ...(shared ? {} : { personal: true }),
     }));
     const ok = await store.addWords(list);
     setBusy(false);
@@ -76,6 +79,7 @@ export function ImportSheet() {
       <p className="lede">
         Paste one word per line. Put a tab, a spaced dash ( – ), = or ; between the word and its meaning. A list with each meaning on the line under its word works too.
       </p>
+      <p className="hint">{shared ? 'These become lesson words for everyone in your class.' : 'These become your own words. Only you see them.'}</p>
       <div className="field">
         <label htmlFor="imp-text">Word list</label>
         <textarea id="imp-text" rows={7} spellCheck={false} autoCapitalize="off" data-autofocus value={text} onChange={(e) => setText(e.target.value)}

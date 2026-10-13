@@ -1,24 +1,38 @@
 /**
- * Integration tests: the real queries against a throw-away SQLite file.
+ * Integration tests: the real queries against a real Postgres.
+ *
+ * By default that is PGlite, Postgres compiled to WebAssembly, running in memory: nothing to
+ * install. To run them against a Postgres server instead, set TEST_DATABASE_URL to an EMPTY
+ * database you can throw away (the tests create tables and users in it).
  */
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { answer } from '../srs';
-import type { CardDoc } from '../types';
+import type { CardDoc, WordData } from '../types';
 import { hashPassword, temporaryPassword, verifyPassword } from './password';
 
-const dir = mkdtempSync(path.join(tmpdir(), 'kk-test-'));
 let repo: typeof import('./repo');
+let close = async () => {};
 
 beforeAll(async () => {
-  process.env.DATA_DIR = dir;
-  delete process.env.DATABASE_URL;
   process.env.JOIN_CODE = 'TEST42';
+  const db = await import('./db');
+  if (process.env.TEST_DATABASE_URL) {
+    process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
+  } else {
+    const { PGlite, types } = await import('@electric-sql/pglite');
+    const pg = await PGlite.create({ parsers: { [types.INT8]: Number, [types.NUMERIC]: Number } });
+    close = () => pg.close();
+    db.setDatabase({
+      async query<R extends Record<string, unknown>>(text: string, params?: unknown[]) {
+        const r = params?.length ? await pg.query<R>(text, params) : ((await pg.exec(text)).at(-1) as { rows: R[]; affectedRows?: number } | undefined);
+        const rows = (r?.rows ?? []) as R[];
+        return { rows, rowCount: Math.max(r?.affectedRows ?? 0, rows.length) };
+      },
+    });
+  }
   repo = await import('./repo');
 });
-afterAll(() => rmSync(dir, { recursive: true, force: true }));
+afterAll(() => close());
 
 describe('passwords', () => {
   it('hashes with a salt and verifies', async () => {
@@ -39,7 +53,7 @@ describe('database', () => {
   const doc = (f: CardDoc['f']): CardDoc => ({ f, r: null, suspended: false, updatedAt: Date.now() });
 
   it('seeds the Lektion 3 words and the join code', async () => {
-    expect(Object.keys(await repo.listWords())).toHaveLength(34);
+    expect(Object.keys(await repo.listWords(null))).toHaveLength(34);
     expect(await repo.getJoinCode()).toBe('TEST42');
   });
 
@@ -120,11 +134,49 @@ describe('database', () => {
     await repo.deleteUser(created.id);
   });
 
+  it('keeps each person’s own words private and only lets the owner change them', async () => {
+    const aziz = await repo.createUser({ username: 'aziz', displayName: 'Aziz', passwordHash: 'x' });
+    const malika = (await repo.findUserByUsername('malika'))!;
+    const teacher = (await repo.findUserByUsername('teacher'))!;
+    if (aziz === 'taken') throw new Error('taken');
+    const word = (term: string): WordData => ({
+      term, meaning: 'vokzal', pos: 'noun', pronunciation: '', forms: '', example: '', exampleTr: '', mnemonic: '', notes: '',
+      tags: [], deck: 'My words', order: 0, createdAt: 1, updatedAt: 1,
+    });
+
+    expect(await repo.saveWord(repo.ownerFor(malika), 'm-bahnhof', word('der Bahnhof'))).toBe('ok');
+    const mine = await repo.listWords(malika.id);
+    expect(mine['m-bahnhof']).toMatchObject({ term: 'der Bahnhof', personal: true });
+    expect(mine['l3-familie'].personal).toBeUndefined(); // shared words stay shared
+    expect(Object.keys(mine)).toHaveLength(35);
+    expect((await repo.listWords(aziz.id))['m-bahnhof']).toBeUndefined(); // others don't see it
+    expect((await repo.listWords(teacher.id))['m-bahnhof']).toBeUndefined(); // not even the admin
+    expect((await repo.listWords(null))['m-bahnhof']).toBeUndefined(); // nor guests
+
+    // Nobody else can change, delete or study it; students can't change lesson words.
+    expect(await repo.saveWord(repo.ownerFor(aziz), 'm-bahnhof', word('hijacked'))).toBe('forbidden');
+    expect(await repo.saveWord(repo.ownerFor(teacher), 'm-bahnhof', word('hijacked'))).toBe('forbidden');
+    expect(await repo.deleteWord(repo.ownerFor(aziz), 'm-bahnhof')).toBe('forbidden');
+    expect(await repo.saveWord(repo.ownerFor(malika), 'l3-familie', word('changed'))).toBe('forbidden');
+    expect(await repo.putCard(aziz.id, 'm-bahnhof', doc(answer(null, 'good', Date.now())))).toBe('no-word');
+    expect((await repo.listWords(malika.id))['m-bahnhof'].term).toBe('der Bahnhof');
+
+    // The owner studies it like any other word; bulk import lands in their own words too.
+    expect(await repo.putCard(malika.id, 'm-bahnhof', doc(answer(null, 'good', Date.now())))).toBe('ok');
+    expect(await repo.putWords(repo.ownerFor(malika), [{ id: 'm-zug', data: word('der Zug') }, { id: 'm-bus', data: word('der Bus') }])).toBe(2);
+    expect(await repo.countOwnWords(malika.id)).toBe(3);
+    expect(await repo.deleteWord(repo.ownerFor(malika), 'm-bus')).toBe('ok');
+    expect(await repo.countOwnWords(malika.id)).toBe(2);
+    await repo.deleteUser(aziz.id);
+  });
+
   it('deletes a profile with everything that belongs to it', async () => {
     const malika = (await repo.findUserByUsername('malika'))!;
     await repo.deleteUser(malika.id);
     expect(await repo.findUserById(malika.id)).toBeNull();
     expect(await repo.listCards(malika.id)).toEqual({});
+    expect(await repo.countOwnWords(malika.id)).toBe(0); // her own words went too
+    expect(Object.keys(await repo.listWords(null))).toHaveLength(34); // the shared ones stay
     expect((await repo.adminStats()).totals.profiles).toBe(1);
   });
 });

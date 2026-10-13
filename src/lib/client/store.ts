@@ -99,8 +99,9 @@ async function send(url: string, init: RequestInit): Promise<Response> {
   return res;
 }
 
+/** The server explains refusals (not your word, too many words…); network trouble gets the fallback. */
 const saveError = (e: unknown, fallback: string) =>
-  e instanceof HttpError && e.status === 403 ? 'Only your teacher can change the word list.' : e instanceof HttpError && e.status === 401 ? '' : fallback;
+  e instanceof HttpError && (e.status === 400 || e.status === 403) ? e.message : e instanceof HttpError && e.status === 401 ? '' : fallback;
 
 class Store {
   private snap: Snapshot = INITIAL;

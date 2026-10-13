@@ -134,11 +134,23 @@ export function LoadError() {
 export function EmptyBox() {
   const ui = useUI();
   const { me } = useStore();
-  if (me?.role !== 'admin') {
+  if (!me) {
     return (
       <section className="panel empty">
         <h2>No words yet</h2>
-        <p>Your teacher hasn’t added any words. Check back soon.</p>
+        <p>The teacher hasn’t added any words. Check back soon.</p>
+      </section>
+    );
+  }
+  if (me.role !== 'admin') {
+    return (
+      <section className="panel empty">
+        <h2>No words yet</h2>
+        <p>Your teacher hasn’t added lesson words yet. You can add your own words now: only you see them.</p>
+        <div className="btn-row">
+          <button className="btn btn-primary" onClick={() => ui.openSheet({ kind: 'word', id: null })}>Add a word</button>
+          <button className="btn" onClick={() => ui.openSheet({ kind: 'import' })}>Paste a list</button>
+        </div>
       </section>
     );
   }

@@ -6,21 +6,24 @@ A mobile-first vocabulary app for a learning center. Students study German words
 - **Accounts**: sign up with the center's join code, log in, log out, change password. Signing up is optional and unlocks Words, Class and Progress.
 - **Study**: Anki-style flashcards (SM-2): tap to flip, swipe or tap Again / Hard / Good / Easy. Every student's progress is private.
 - **Class**: Snapchat-style daily streaks, each classmate's active-word count, a leaderboard, and cheers you can send each other.
-- **Words**: an Airtable-style table and card gallery: search, filter, sort. Teachers edit and import; students read.
+- **Words**: an Airtable-style table and card gallery: search, filter, sort. Teachers manage the shared lesson words; every student can also add **their own words**, which only they see and study.
 - **Admin dashboard** at `/admin`: profiles created, new sign-ups, daily / weekly / monthly active students, 30-day charts, a student table, password resets and the join code.
 
 It starts with the 34 words of **Lektion 3** (German → Uzbek), with IPA, example sentences, plural/verb forms and memory hooks.
 
-Built with Next.js 16 (App Router), React 19, TypeScript and SQLite (libSQL). No database server needed to start.
+Built with Next.js 16 (App Router), React 19, TypeScript and PostgreSQL (Supabase).
 
 ## Run it
 
-You need **Node.js 20.9 or newer** (`node -v` to check).
+You need **Node.js 20.9 or newer** (`node -v` to check) and a Postgres database. A free Supabase project is the easiest (2 minutes, see [Supabase](#supabase) below).
 
 ```bash
 npm install
+cp .env.example .env.local   # then paste your Supabase connection string into DATABASE_URL
 npm run dev
 ```
+
+The tables are created on the first start.
 
 The terminal prints a line like:
 
@@ -42,15 +45,34 @@ npm run dev -- -H 0.0.0.0
 
 Find your computer's local IP (macOS: `ipconfig getifaddr en0`, Windows: `ipconfig`) and open `http://<that-ip>:3000`. **Share → Add to Home Screen** gives a full-screen app icon. To let students use it from home, deploy it (see below).
 
+## Supabase
+
+1. Create a free project at [supabase.com](https://supabase.com). Pick the region closest to your students and to where the app runs (for Uzbekistan, Frankfurt `eu-central-1` is a good choice). Save the database password it asks for.
+2. In the project, press **Connect** and copy a connection string:
+   - **Transaction pooler** (port 6543) when the app runs on Vercel or other serverless hosting.
+   - **Session pooler** (port 5432) works for `npm run dev` and for a normal server.
+3. Put it in `.env.local` as `DATABASE_URL`, with your password in place of `[YOUR-PASSWORD]`.
+4. `npm run dev`. On the first start the app creates its tables, loads the Lektion 3 words and prints the join code.
+
+Open **Table Editor** in Supabase to see the data: `users` (profiles; `password_hash` is a one-way scrypt hash, never the password), `words`, `cards` (each person's progress), and so on. The app talks to Postgres directly from the server, so you don't need Supabase's API keys or `supabase-js`. Row Level Security is switched on for every table with no policies, which keeps them closed to Supabase's public REST API.
+
+**Why it stays fast**
+
+- One connection pool per server process; with Supabase's pooler, many app instances share a few database connections.
+- Every query is served by a primary key or an index (`words.owner_id`, `cards (user_id, word_id)`, `activity.day`, …).
+- Opening the app costs 2 round trips to the database (session check, then words + progress + settings + cheers in parallel). Saving an answer is 2 round trips, and the screen never waits for them: the app updates instantly and saves in the background.
+- Actions that touch several tables (save an answer and count it for today; move guest progress into a profile) are a single SQL statement.
+- Keep the database and the app in the same region: each round trip then takes a few milliseconds instead of ~100.
+
 ## Settings (environment variables)
 
-Copy `.env.example` to `.env.local` and change what you need. All are optional.
+Copy `.env.example` to `.env.local`. Only `DATABASE_URL` is required.
 
 | Variable | Default | What it does |
 | --- | --- | --- |
-| `DATABASE_URL` | `file:data/karteikasten.db` | Where the data lives. Use a `libsql://…turso.io` URL in production. |
-| `DATABASE_AUTH_TOKEN` | – | Token for a Turso database. |
-| `DATA_DIR` | `./data` | Folder for the local database file (when `DATABASE_URL` is not set). |
+| `DATABASE_URL` | – (required) | Postgres connection string (Supabase → Connect). |
+| `DATABASE_CA_CERT` | – | Supabase's CA certificate, to also verify the server's identity. Without it the connection is still encrypted. |
+| `DATABASE_POOL_MAX` | `5` | Database connections per server process. |
 | `JOIN_CODE` | random | The first join code. You can change it later in `/admin`. |
 | `APP_TIMEZONE` | `Asia/Tashkent` | When a "day" starts for streaks and daily active users. |
 | `COOKIE_SECURE` | auto | Force `true`/`false`. By default the session cookie is Secure whenever the site is on HTTPS. |
@@ -61,14 +83,17 @@ Copy `.env.example` to `.env.local` and change what you need. All are optional.
 | --- | --- | --- | --- |
 | Study the flashcards, settings | ✓ (saved in this browser) | ✓ | ✓ |
 | Words table, Progress, streaks | – | ✓ | ✓ |
+| Add, edit, import, delete **your own** words (only you see them) | – | ✓ | – |
 | See classmates' streaks, active words, answers | – | ✓ | ✓ |
 | See anyone else's cards | – | – | – |
-| Add, edit, import, delete words | – | – | ✓ |
+| Add, edit, import, delete the shared lesson words | – | – | ✓ |
 | `/admin`: stats, reset passwords, make admins, delete profiles, change join code | – | – | ✓ |
 
 **Guests.** `/` opens straight to the flashcards. Nothing is sent to the server except the request for the word list, so guests never show up in the admin numbers or the Class tab. The word list itself is public, because guests need it to study. On sign-up, the guest's progress and settings move into the new profile. A guest who logs in to a profile that already has progress is asked first (*Add to my profile* / *No, discard it*), because on a shared classroom computer that guest may have been someone else. Words the profile already studied always keep the profile's progress.
 
-Only counts are shared on the Class tab. Nobody, the admin included, sees another person's individual cards or answers.
+Only counts are shared on the Class tab. Nobody, the admin included, sees another person's individual cards, answers or own words.
+
+**Words.** One `words` table holds both kinds: `owner_id` is empty for a shared lesson word and holds the student's id for their own word. The server only ever returns the shared words plus your own, and only lets the owner (or, for lesson words, an admin) change or delete a word. Each person can have up to 2,000 own words. Deleting a profile deletes their own words and progress with it.
 
 **Forgotten password?** In `/admin`, open the student → **Reset password**. You get a temporary password like `tante-fest-4821` to give them; they change it under *Your profile → Change password*.
 
@@ -92,7 +117,7 @@ Only counts are shared on the Class tab. Nobody, the admin included, sees anothe
 | --- | --- |
 | `npm run dev` | Development server with hot reload |
 | `npm run build` / `npm start` | Production build and server |
-| `npm test` | Unit + database integration tests (Vitest) |
+| `npm test` | Unit + database integration tests (Vitest). The database tests run on PGlite, an in-memory Postgres, so they need no setup. `TEST_DATABASE_URL=postgres://… npm test` runs them on a real Postgres instead (use an empty database you can throw away). |
 | `npm run typecheck` | Generate route types, then `tsc --noEmit` |
 | `npm run lint` | ESLint (Next.js + React Compiler rules) |
 
@@ -123,8 +148,8 @@ Browser
 
 src/proxy.ts       /admin without a session cookie → redirect to /login (fast first check only)
 src/app/api/*      requireUser() on every route: valid session, role, same-origin
-src/lib/server/    repo.ts (all SQL) · db.ts (schema, seed) · session.ts · password.ts · rate-limit.ts
-SQLite / Turso     users · sessions · words · cards · prefs · activity · cheers · settings
+src/lib/server/    repo.ts (all SQL) · db.ts (pool, schema, seed) · session.ts · password.ts · rate-limit.ts
+Postgres/Supabase  users · sessions · words · cards · prefs · activity · cheers · settings
 ```
 
 | Endpoint | Who | Purpose |
@@ -132,7 +157,7 @@ SQLite / Turso     users · sessions · words · cards · prefs · activity · c
 | `GET /api/state` | anyone | Signed in: you, the words, your progress, settings, new cheers. Guest: `{ me: null, words }` |
 | `POST /api/cards/import` | signed in | Add progress made as a guest (never overwrites existing progress) |
 | `POST /api/logout` | signed in | Sign out; a plain form post, so the full page reload clears the old profile from memory |
-| `PUT/DELETE /api/words/:id`, `POST /api/words` | admin | Edit, delete, import words |
+| `PUT/DELETE /api/words/:id`, `POST /api/words` | signed in | Add, edit, delete, import words: admins the shared lesson words, everyone else their own |
 | `PUT/DELETE /api/cards/:wordId`, `DELETE /api/cards` | signed in | Save or reset **your** progress |
 | `PUT /api/prefs` | signed in | Your settings |
 | `GET /api/class` | signed in | Classmates' streaks and counts |
@@ -149,18 +174,17 @@ SQLite / Turso     users · sessions · words · cards · prefs · activity · c
 
 ## Deploying
 
-**Free option: Vercel + Turso**
+**Free option: Vercel + Supabase**
 
-1. Create a free database at [turso.tech](https://turso.tech), then copy its URL (`libsql://…`) and an auth token.
-2. Import this GitHub repo on [vercel.com](https://vercel.com). Add the environment variables `DATABASE_URL`, `DATABASE_AUTH_TOKEN`, `JOIN_CODE` and `APP_TIMEZONE`.
+1. Create the Supabase project (see [Supabase](#supabase)) and copy the **Transaction pooler** connection string.
+2. Import this GitHub repo on [vercel.com](https://vercel.com). Set the function region to the one closest to your Supabase project (Project Settings → Functions). Add the environment variables `DATABASE_URL`, `JOIN_CODE` and `APP_TIMEZONE`.
 3. Deploy, open `https://<your-app>/signup` and create the first (admin) profile with your `JOIN_CODE`.
 
-**Or a server with a disk** (Render with a persistent disk, Railway, a VPS): `npm run build && npm start`, and keep `data/` (or set `DATA_DIR`) on the persistent disk. Free Render instances lose their files on every restart, so use Turso there.
+**Or any Node.js server** (Render, Railway, a VPS): set the same variables, then `npm run build && npm start`.
 
 ## Your data
 
-- Local: `data/karteikasten.db` (ignored by git). Stop the app and copy the file to back up.
-- Turso: `turso db shell <name> .dump > backup.sql`.
+- Everything lives in your Postgres database. Supabase backs it up daily (paid plans add point-in-time recovery). For your own copy: `pg_dump "$DATABASE_URL" > backup.sql`.
 - Table layout, sort, visible fields and the last open tab are remembered per device in `localStorage`.
 - Guest progress lives in `localStorage` (`kk.guest.cards`, `kk.guest.prefs`) until it moves into a profile. Clearing the browser's site data deletes it.
 

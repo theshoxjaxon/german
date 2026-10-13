@@ -5,6 +5,7 @@ import { useNow } from '@/lib/client/hooks';
 import { useStore } from '@/lib/client/store';
 import type { WordInfo } from '@/lib/queue';
 import { dayIndex, fmtSpan, DAY, plural, shortDate } from '@/lib/time';
+import { addsSharedWords } from '@/lib/ownership';
 import { POS_LABEL, type Word } from '@/lib/types';
 import { activeFilterCount, FILTER_LABEL, SORTS, STATUS_OPTS, visibleRows, type FilterGroup, type Row, type SortKey } from '@/lib/words-view';
 import { EmptyBox, Icon, LoadError, StatusPill, Term } from './ui';
@@ -68,7 +69,7 @@ export function WordsView() {
   const rows = useMemo(() => (ready ? visibleRows(data, now, q, filters, ui.sort) : []), [ready, data, now, q, filters, ui.sort]);
   const nf = activeFilterCount(filters);
   const total = data.words.size;
-  const canEdit = data.me?.role === 'admin';
+  const canAdd = !!data.me; // students add their own words, teachers add lesson words
 
   const setQ = (value: string) => ui.setQuery((s) => ({ ...s, q: value }));
   const removeFilter = (group: FilterGroup, value: string) =>
@@ -98,14 +99,14 @@ export function WordsView() {
     <>
       <header className="vhead">
         <div>
-          <p className="eyebrow">{canEdit ? 'Word database' : 'Your class’s words'}</p>
+          <p className="eyebrow">{addsSharedWords(data.me) ? 'Word database' : 'Lesson words + your own'}</p>
           <h1 id="h-words">
             Words
             {ready && <span className="count">{rows.length === total ? total : `${rows.length}/${total}`}</span>}
           </h1>
         </div>
         <div className="vhead-actions">
-          {canEdit && (
+          {canAdd && (
             <button className="icon-btn" onClick={() => ui.openSheet({ kind: 'import' })} aria-label="Import a word list"><Icon name="paste" /></button>
           )}
           <button className="icon-btn" onClick={() => ui.openSheet({ kind: 'more' })} aria-label="More actions"><Icon name="more" /></button>
@@ -162,7 +163,7 @@ export function WordsView() {
       )}
 
       <div className="scroller" tabIndex={-1}>{body}</div>
-      {ready && canEdit && (
+      {ready && canAdd && (
         <button className="fab" onClick={() => ui.openSheet({ kind: 'word', id: null })} aria-label="Add a word">
           <Icon name="plus" />
         </button>
@@ -218,6 +219,7 @@ function WordTable({ rows, now }: { rows: Row[]; now: number }) {
               <span className="term-cell">
                 <span className="rownum">{n + 1}</span>
                 <span className="t" lang="de"><Term term={w.term} /></span>
+                {w.personal && <MineBadge />}
               </span>
             </th>
             {cols.map((c) => {
@@ -233,6 +235,11 @@ function WordTable({ rows, now }: { rows: Row[]; now: number }) {
       </tbody>
     </table>
   );
+}
+
+/** Marks your own words (only you see them) among the shared lesson words. */
+export function MineBadge() {
+  return <span className="mine" title="Your own word: only you see it">Mine</span>;
 }
 
 function Gallery({ rows, now }: { rows: Row[]; now: number }) {
@@ -252,6 +259,7 @@ function Gallery({ rows, now }: { rows: Row[]; now: number }) {
             <span className="gcard-meaning">{w.meaning}</span>
             <span className="gcard-foot">
               <StatusPill info={i} />
+              {w.personal && <MineBadge />}
               {(w.tags || []).slice(0, 2).map((t) => <span key={t} className="tag">{t}</span>)}
             </span>
           </button>

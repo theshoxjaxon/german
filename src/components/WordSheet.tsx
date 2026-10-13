@@ -4,6 +4,7 @@ import { useState, type FormEvent } from 'react';
 import { useNow } from '@/lib/client/hooks';
 import { speak, useSpeechSupported } from '@/lib/client/speech';
 import { store, useStore } from '@/lib/client/store';
+import { addsSharedWords, canEditWord, MY_WORDS_DECK } from '@/lib/ownership';
 import { currentDeck, deckNames, enabledDirs, lapsesOf, latestDeck, LEECH_AT, nextOrder, stateInfo } from '@/lib/queue';
 import { cleanTerm, guessPos, newId, norm, parseTags } from '@/lib/text';
 import { dayIndex, DAY, fmtSpan, plural } from '@/lib/time';
@@ -21,7 +22,8 @@ export function WordSheet({ id }: { id: string | null }) {
   // Fill the form once from the word as it was when the sheet opened, so live updates never overwrite typing.
   const [initial] = useState<Word | null>(() => (id ? data.words.get(id) ?? null : null));
   const [errors, setErrors] = useState<{ term?: string; meaning?: string }>({});
-  const canEdit = data.me?.role === 'admin'; // the server enforces this too
+  const canEdit = canEditWord(data.me, initial); // the server enforces this too
+  const shared = initial ? !initial.personal : addsSharedWords(data.me);
 
   if (id && !initial) {
     return (
@@ -38,9 +40,11 @@ export function WordSheet({ id }: { id: string | null }) {
     ? initial.deck
     : ui.query.filters.deck.length === 1
       ? ui.query.filters.deck[0]
-      : currentDeck(data) !== 'all'
-        ? currentDeck(data)
-        : latestDeck(data.words);
+      : !shared
+        ? MY_WORDS_DECK
+        : currentDeck(data) !== 'all'
+          ? currentDeck(data)
+          : latestDeck(data.words);
 
   const onSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -78,6 +82,7 @@ export function WordSheet({ id }: { id: string | null }) {
       order: initial && initial.deck === deck ? initial.order : nextOrder(words, deck),
       createdAt: initial?.createdAt ?? now,
       updatedAt: now,
+      ...(shared ? {} : { personal: true }),
     };
     ui.closeSheet();
     void store.saveWord(word).then((ok) => ok && ui.toast(initial ? 'Saved' : `Added “${term}”`));
@@ -104,6 +109,11 @@ export function WordSheet({ id }: { id: string | null }) {
       }
     >
       <form id="word-form" noValidate onSubmit={onSubmit}>
+        <p className="owner-note">
+          {shared
+            ? canEdit ? 'Lesson word: everyone in your class studies it.' : 'Lesson word from your teacher. Add your own words with the + button.'
+            : 'Your own word: only you see and study it.'}
+        </p>
         <fieldset className="form" disabled={!canEdit}>
         <div className="field">
           <label htmlFor="f-term">German word or phrase</label>
