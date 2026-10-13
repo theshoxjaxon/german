@@ -163,14 +163,40 @@ const toNumber = (v: string) => Number(v);
 const typeParser = ((oid: number, format?: string) =>
   oid === 20 || oid === 1700 ? toNumber : pg.types.getTypeParser(oid, format as 'text')) as typeof pg.types.getTypeParser;
 
+/**
+ * Read DATABASE_URL. Passwords often contain characters that mean something in a URL
+ * (@ # / ? % +); when the string doesn't parse, the password is URL-encoded for you.
+ * Errors never repeat the string, so the password can't end up in logs.
+ */
+export function parseDatabaseUrl(raw: string): URL {
+  const text = raw.trim();
+  try {
+    return new URL(text);
+  } catch {
+    // postgresql://USER:PASSWORD@HOST:PORT/DB?… — the password runs up to the last @.
+    const m = /^(postgres(?:ql)?:\/\/)([^:/?#@]+):(.*)@([^@/?#]+(?:\/[^?#]*)?(?:\?[^#]*)?)$/.exec(text);
+    if (m) {
+      try {
+        return new URL(`${m[1]}${m[2]}:${encodeURIComponent(m[3])}@${m[4]}`);
+      } catch {
+        /* fall through */
+      }
+    }
+    throw new Error(
+      'DATABASE_URL is not a valid connection string. Copy it again from Supabase → Connect, and replace [YOUR-PASSWORD] (brackets included) with your database password.',
+    );
+  }
+}
+
 function poolConfig(): pg.PoolConfig {
   const raw = process.env.DATABASE_URL;
   if (!raw) {
     throw new Error('DATABASE_URL is not set. Put your Supabase connection string in .env.local (see README → Supabase).');
   }
-  const url = new URL(raw);
+  const url = parseDatabaseUrl(raw);
   const local = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(url.hostname) || url.searchParams.get('sslmode') === 'disable';
   url.searchParams.delete('sslmode'); // TLS is configured below
+  url.searchParams.delete('pgbouncer'); // a Prisma setting some guides add; not used here
   const ca = process.env.DATABASE_CA_CERT?.replace(/\\n/g, '\n');
   return {
     connectionString: url.toString(),

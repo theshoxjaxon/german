@@ -51,7 +51,7 @@ Find your computer's local IP (macOS: `ipconfig getifaddr en0`, Windows: `ipconf
 2. In the project, press **Connect** and copy a connection string:
    - **Transaction pooler** (port 6543) when the app runs on Vercel or other serverless hosting.
    - **Session pooler** (port 5432) works for `npm run dev` and for a normal server.
-3. Put it in `.env.local` as `DATABASE_URL`, with your password in place of `[YOUR-PASSWORD]`.
+3. Put it in `.env.local` as `DATABASE_URL`, with your password in place of `[YOUR-PASSWORD]` (brackets included). Passwords with special characters (`@ # / ? % +`) work as they are; the app encodes them. Keep the password only in `.env.local` (ignored by git), never in `.env.example`.
 4. `npm run dev`. On the first start the app creates its tables, loads the Lektion 3 words and prints the join code.
 
 Open **Table Editor** in Supabase to see the data: `users` (profiles; `password_hash` is a one-way scrypt hash, never the password), `words`, `cards` (each person's progress), and so on. The app talks to Postgres directly from the server, so you don't need Supabase's API keys or `supabase-js`. Row Level Security is switched on for every table with no policies, which keeps them closed to Supabase's public REST API.
