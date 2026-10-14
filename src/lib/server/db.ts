@@ -12,7 +12,7 @@
  */
 import { randomBytes } from 'node:crypto';
 import pg from 'pg';
-import { seedWords } from '../seed';
+import { packWords, SEED_PACKS } from '../seed';
 
 export type Row = Record<string, unknown>;
 
@@ -21,7 +21,8 @@ export interface Db {
   query<R extends Row = Row>(text: string, params?: unknown[]): Promise<{ rows: R[]; rowCount: number }>;
 }
 
-const SCHEMA_VERSION = '1';
+/** Bump when the schema or the built-in word lists change: every database then runs migrate() once more. */
+const SCHEMA_VERSION = '2';
 
 /*
  * Times are milliseconds since 1970 (JavaScript's Date.now()) in BIGINT columns; days are
@@ -132,16 +133,23 @@ async function migrate(db: Db): Promise<void> {
   let status = await db.query(STATUS).catch(() => null); // fails when the tables don't exist yet
   if (status?.rows[0]?.version !== SCHEMA_VERSION) {
     await db.query(SCHEMA);
-    // First start: load the Lektion 3 words as shared words. One statement, so it happens exactly
-    // once even with several servers, and deleting them all later doesn't bring them back.
+    // Load each built-in list (Lektion 3, Lektion 5, …) as shared words, once per database. One
+    // statement per list, so it happens exactly once even with several servers, and deleting
+    // the words later doesn't bring them back. Words the center already has (same term,
+    // shared) are skipped, so a list typed in by hand isn't doubled.
     const now = Date.now();
-    await db.query(
-      `WITH first AS (INSERT INTO settings (key, value) VALUES ('seeded', '1') ON CONFLICT (key) DO NOTHING RETURNING 1)
-       INSERT INTO words (id, owner_id, data, updated_at)
-       SELECT x.id, NULL, x.data, $2 FROM jsonb_to_recordset($1::jsonb) AS x(id text, data jsonb), first
-       ON CONFLICT (id) DO NOTHING`,
-      [JSON.stringify(Object.values(seedWords(now)).map(({ id, ...data }) => ({ id, data }))), now],
-    );
+    for (const pack of SEED_PACKS) {
+      await db.query(
+        `WITH first AS (INSERT INTO settings (key, value) VALUES ($3, '1') ON CONFLICT (key) DO NOTHING RETURNING 1)
+         INSERT INTO words (id, owner_id, data, updated_at)
+         SELECT x.id, NULL, x.data, $2 FROM jsonb_to_recordset($1::jsonb) AS x(id text, data jsonb), first
+         WHERE NOT EXISTS (
+           SELECT 1 FROM words w WHERE w.owner_id IS NULL AND lower(w.data->>'term') = lower(x.data->>'term')
+         )
+         ON CONFLICT (id) DO NOTHING`,
+        [JSON.stringify(Object.values(packWords(pack, now)).map(({ id, ...data }) => ({ id, data }))), now, pack.flag],
+      );
+    }
     // The code students need to create a profile. JOIN_CODE sets the first one; the admin can change it later.
     const initialCode = process.env.JOIN_CODE?.trim().toUpperCase() || newJoinCode();
     await db.query(`INSERT INTO settings (key, value) VALUES ('join_code', $1) ON CONFLICT (key) DO NOTHING`, [initialCode]);

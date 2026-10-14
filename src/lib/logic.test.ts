@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseList, suggestDeck } from './import-parser';
 import { buildQueue, pickNext } from './queue';
-import { seedWords } from './seed';
+import { packWords, SEED_PACKS } from './seed';
 import { answer } from './srs';
 import { cleanTerm, guessPos, highlightParts, norm, splitTerm } from './text';
 import { DEFAULT_PREFS, type CardDoc, type StudyData } from './types';
@@ -9,7 +9,7 @@ import { EMPTY_FILTERS, visibleRows } from './words-view';
 
 const NOW = Date.UTC(2026, 9, 12, 10);
 const data = (cards: Record<string, CardDoc> = {}): StudyData => ({
-  words: new Map(Object.entries(seedWords(NOW - 1000))),
+  words: new Map(Object.entries(packWords(SEED_PACKS[0], NOW - 1000))), // the Lektion 3 list as a fixture
   cards: new Map(Object.entries(cards)),
   prefs: DEFAULT_PREFS,
 });

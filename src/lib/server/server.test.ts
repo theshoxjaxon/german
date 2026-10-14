@@ -52,8 +52,11 @@ describe('passwords', () => {
 describe('database', () => {
   const doc = (f: CardDoc['f']): CardDoc => ({ f, r: null, suspended: false, updatedAt: Date.now() });
 
-  it('seeds the Lektion 3 words and the join code', async () => {
-    expect(Object.keys(await repo.listWords(null))).toHaveLength(34);
+  it('seeds the built-in lists (Lektion 3 and 5) and the join code', async () => {
+    const words = Object.values(await repo.listWords(null));
+    expect(words.filter((w) => w.deck === 'Lektion 3')).toHaveLength(34);
+    expect(words.filter((w) => w.deck === 'Lektion 5')).toHaveLength(59);
+    expect(words).toHaveLength(93);
     expect(await repo.getJoinCode()).toBe('TEST42');
   });
 
@@ -148,7 +151,7 @@ describe('database', () => {
     const mine = await repo.listWords(malika.id);
     expect(mine['m-bahnhof']).toMatchObject({ term: 'der Bahnhof', personal: true });
     expect(mine['l3-familie'].personal).toBeUndefined(); // shared words stay shared
-    expect(Object.keys(mine)).toHaveLength(35);
+    expect(Object.keys(mine)).toHaveLength(94);
     expect((await repo.listWords(aziz.id))['m-bahnhof']).toBeUndefined(); // others don't see it
     expect((await repo.listWords(teacher.id))['m-bahnhof']).toBeUndefined(); // not even the admin
     expect((await repo.listWords(null))['m-bahnhof']).toBeUndefined(); // nor guests
@@ -176,7 +179,34 @@ describe('database', () => {
     expect(await repo.findUserById(malika.id)).toBeNull();
     expect(await repo.listCards(malika.id)).toEqual({});
     expect(await repo.countOwnWords(malika.id)).toBe(0); // her own words went too
-    expect(Object.keys(await repo.listWords(null))).toHaveLength(34); // the shared ones stay
+    expect(Object.keys(await repo.listWords(null))).toHaveLength(93); // the shared ones stay
     expect((await repo.adminStats()).totals.profiles).toBe(1);
+  });
+
+  it('adds a new built-in list to an existing database once, without undoing the teacher’s changes', async () => {
+    const dbm = await import('./db');
+    const conn = await dbm.getDb();
+    // Make it look like a database from before Lektion 5 existed, where the teacher deleted a
+    // Lektion 3 word and had already typed one Lektion 5 word in by hand.
+    await conn.query(`DELETE FROM words WHERE id LIKE 'l5-%'`);
+    await conn.query(`DELETE FROM settings WHERE key = 'seeded:lektion-5'`);
+    await conn.query(`UPDATE settings SET value = '1' WHERE key = 'schema_version'`);
+    await repo.deleteWord(null, 'l3-oma');
+    await repo.saveWord(null, 'w-handmade', {
+      term: 'die Uhr', meaning: 'soat', pos: 'noun', pronunciation: '', forms: '', example: '', exampleTr: '', mnemonic: '', notes: '',
+      tags: [], deck: 'Lektion 5', order: 1, createdAt: 1, updatedAt: 1,
+    });
+
+    dbm.setDatabase(conn); // a server restart with the new version
+    await dbm.getDb();
+    const words = await repo.listWords(null);
+    expect(Object.values(words).filter((w) => w.deck === 'Lektion 5')).toHaveLength(59); // 58 new + the hand-made one
+    expect(words['l5-uhr']).toBeUndefined(); // not doubled
+    expect(words['l5-handy']?.meaning).toBe('mobil telefon');
+    expect(words['l3-oma']).toBeUndefined(); // deleted stays deleted
+
+    dbm.setDatabase(conn); // and again: nothing changes
+    await dbm.getDb();
+    expect(Object.keys(await repo.listWords(null))).toHaveLength(Object.keys(words).length);
   });
 });

@@ -9,7 +9,7 @@ A mobile-first vocabulary app for a learning center. Students study German words
 - **Words**: an Airtable-style table and card gallery: search, filter, sort. Teachers manage the shared lesson words; every student can also add **their own words**, which only they see and study.
 - **Admin dashboard** at `/admin`: profiles created, new sign-ups, daily / weekly / monthly active students, 30-day charts, a student table, password resets and the join code.
 
-It starts with the 34 words of **Lektion 3** (German → Uzbek), with IPA, example sentences, plural/verb forms and memory hooks.
+It comes with **Lektion 3** (34 words) and **Lektion 5** (59 words), German → Uzbek, with IPA, example sentences, plural/verb forms and memory hooks. New built-in lists are added to an existing database once, on the next start (`SEED_PACKS` in `src/lib/seed.ts`); words the teacher deleted don't come back, and words already typed in by hand aren't doubled.
 
 Built with Next.js 16 (App Router), React 19, TypeScript and PostgreSQL (Supabase).
 
