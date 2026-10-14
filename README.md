@@ -7,6 +7,7 @@ A mobile-first vocabulary app for a learning center. Students study German words
 - **Study**: Anki-style flashcards (SM-2): tap to flip, swipe or tap Again / Hard / Good / Easy. Every student's progress is private.
 - **Class**: Snapchat-style daily streaks, each classmate's active-word count, a leaderboard, and cheers you can send each other.
 - **Words**: an Airtable-style table and card gallery: search, filter, sort. Teachers manage the shared lesson words; every student can also add **their own words**, which only they see and study.
+- **AI word helper** (optional): take a photo of a word list (textbook page, worksheet, whiteboard, notes) or type German words, and Claude turns them into finished flashcards: article, meaning, IPA, forms, an example sentence and a memory hook. You tick the ones to keep and pick the topic. In the word form, **Fill in the rest with AI** completes a single word.
 - **Admin dashboard** at `/admin`: profiles created, new sign-ups, daily / weekly / monthly active students, 30-day charts, a student table, password resets and the join code.
 
 It comes with **Lektion 3** (34 words) and **Lektion 5** (59 words), German → Uzbek, with IPA, example sentences, plural/verb forms and memory hooks. New built-in lists are added to an existing database once, on the next start (`SEED_PACKS` in `src/lib/seed.ts`); words the teacher deleted don't come back, and words already typed in by hand aren't doubled.
@@ -64,6 +65,19 @@ Open **Table Editor** in Supabase to see the data: `users` (profiles; `password_
 - Actions that touch several tables (save an answer and count it for today; move guest progress into a profile) are a single SQL statement.
 - Keep the database and the app in the same region: each round trip then takes a few milliseconds instead of ~100.
 
+## AI word helper
+
+Set `ANTHROPIC_API_KEY` in `.env.local` (create a key at [console.anthropic.com](https://console.anthropic.com) → API keys) and restart. A ✨ button appears on the Words tab for everyone with a profile.
+
+- **Photo** → Claude finds the German words on the page (with their translations, if the page has them) and fills in everything else. **Type words** does the same for a list you type; meanings you type are kept.
+- Meanings and example translations can be in English, Uzbek or Russian (picker in the sheet, remembered per device).
+- Nothing is saved until you press **Add**: you see every word first, untick mistakes, and pick the topic (deck). Words you already have start unticked.
+- Teachers add lesson words for everyone; students add their own words.
+- Limits: 20 uses per hour for students, 60 for admins. Photos are shrunk to 2000 px before upload, sent to Anthropic's API to be read, and not stored by the app.
+- Cost estimate (Claude Opus 5.5 at $4 / $20 per million input / output tokens; the written-out flashcards are most of it): about 5–10 US cents for a photo of 20 words, about 1 cent for a single "Fill in". Check real spend in the Anthropic Console. Set `AI_MODEL` to use a different model.
+
+How it works: `src/lib/server/ai.ts` makes one streamed request with the image (or list), a system prompt describing a good flashcard, and a JSON schema the answer must follow (`output_config.format`). If Claude's safety checks decline a request, `fallbacks: "default"` lets the API retry it on its recommended fallback model. The answer is validated like any user input before the client sees it.
+
 ## Settings (environment variables)
 
 Copy `.env.example` to `.env.local`. Only `DATABASE_URL` is required.
@@ -73,6 +87,9 @@ Copy `.env.example` to `.env.local`. Only `DATABASE_URL` is required.
 | `DATABASE_URL` | – (required) | Postgres connection string (Supabase → Connect). |
 | `DATABASE_CA_CERT` | – | Supabase's CA certificate, to also verify the server's identity. Without it the connection is still encrypted. |
 | `DATABASE_POOL_MAX` | `5` | Database connections per server process. |
+| `ANTHROPIC_API_KEY` | – | Turns on the AI word helper. Without it the AI buttons don't appear. |
+| `AI_MODEL` | `claude-opus-5-5` | The Claude model the AI helper uses. |
+| `AI_ENABLED` | auto | `false` hides the AI helper even with a key; `true` turns it on with other Anthropic credentials (e.g. `ant auth login`). |
 | `JOIN_CODE` | random | The first join code. You can change it later in `/admin`. |
 | `APP_TIMEZONE` | `Asia/Tashkent` | When a "day" starts for streaks and daily active users. |
 | `COOKIE_SECURE` | auto | Force `true`/`false`. By default the session cookie is Secure whenever the site is on HTTPS. |
@@ -156,6 +173,7 @@ Postgres/Supabase  users · sessions · words · cards · prefs · activity · c
 | --- | --- | --- |
 | `GET /api/state` | anyone | Signed in: you, the words, your progress, settings, new cheers. Guest: `{ me: null, words }` |
 | `POST /api/cards/import` | signed in | Add progress made as a guest (never overwrites existing progress) |
+| `POST /api/ai/words` | signed in | AI word helper: photo or typed list → suggested flashcards (nothing is saved) |
 | `POST /api/logout` | signed in | Sign out; a plain form post, so the full page reload clears the old profile from memory |
 | `PUT/DELETE /api/words/:id`, `POST /api/words` | signed in | Add, edit, delete, import words: admins the shared lesson words, everyone else their own |
 | `PUT/DELETE /api/cards/:wordId`, `DELETE /api/cards` | signed in | Save or reset **your** progress |

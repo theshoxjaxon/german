@@ -149,6 +149,7 @@ export interface AppData {
   cards: Record<string, CardDoc>;
   prefs: Prefs;
   cheers: Cheer[]; // cheers received and not yet seen
+  ai: boolean; // the AI word helper is switched on for this server
 }
 
 /** What GET /api/state returns to a guest (not signed in). Their progress stays in their browser. */

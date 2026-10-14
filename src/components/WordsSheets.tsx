@@ -156,6 +156,9 @@ export function MoreSheet() {
     <BottomSheet title="Word list">
       <div className="optlist show-icons">
         <button className="opt" onClick={copy}>Copy {plural(rows.length, 'word', 'words')} as CSV <Icon name="copy" /></button>
+        {data.me && data.ai && (
+          <button className="opt" onClick={() => ui.openSheet({ kind: 'ai' })}>Add words with AI (photo or list) <Icon name="sparkle" /></button>
+        )}
         {data.me && (
           <button className="opt" onClick={() => ui.openSheet({ kind: 'import' })}>Import a pasted list <Icon name="paste" /></button>
         )}

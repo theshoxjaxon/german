@@ -1,3 +1,4 @@
+import { aiEnabled } from '@/lib/server/ai';
 import { ok } from '@/lib/server/http';
 import * as repo from '@/lib/server/repo';
 import { requireUser } from '@/lib/server/session';
@@ -20,5 +21,5 @@ export async function GET(req: Request) {
     repo.getPrefs(user.id),
     repo.unseenCheers(user.id),
   ]);
-  return ok({ me: repo.publicUser(user), words, cards, prefs, cheers });
+  return ok({ me: repo.publicUser(user), words, cards, prefs, cheers, ai: aiEnabled() });
 }
