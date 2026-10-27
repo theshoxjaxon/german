@@ -105,8 +105,9 @@ Copy `.env.example` to `.env.local`. Only `DATABASE_URL` is required.
 | See anyone else's cards | – | – | – |
 | Add, edit, import, delete the shared lesson words | – | – | ✓ |
 | `/admin`: stats, reset passwords, make admins, delete profiles, change join code | – | – | ✓ |
+| `/admin/analytics`: North Star, funnel, retention | – | – | ✓ |
 
-**Guests.** `/` opens straight to the flashcards. Nothing is sent to the server except the request for the word list, so guests never show up in the admin numbers or the Class tab. The word list itself is public, because guests need it to study. On sign-up, the guest's progress and settings move into the new profile. A guest who logs in to a profile that already has progress is asked first (*Add to my profile* / *No, discard it*), because on a shared classroom computer that guest may have been someone else. Words the profile already studied always keep the profile's progress.
+**Guests.** `/` opens straight to the flashcards. Guest progress stays in the browser; guests never show up in the admin numbers or the Class tab. For the funnel on `/admin/analytics` the browser sends one anonymous count a day: a random id it made up (kept in `localStorage` as `kk.visitor`) and whether it has answered a card. No name, no cookie, no IP address is stored. If that browser later signs up, the id is linked to the new profile, so the funnel can tell who tried the app first. The word list itself is public, because guests need it to study. On sign-up, the guest's progress and settings move into the new profile. A guest who logs in to a profile that already has progress is asked first (*Add to my profile* / *No, discard it*), because on a shared classroom computer that guest may have been someone else. Words the profile already studied always keep the profile's progress.
 
 Only counts are shared on the Class tab. Nobody, the admin included, sees another person's individual cards, answers or own words.
 
@@ -174,6 +175,7 @@ Postgres/Supabase  users · sessions · words · cards · prefs · activity · c
 | `GET /api/state` | anyone | Signed in: you, the words, your progress, settings, new cheers. Guest: `{ me: null, words }` |
 | `POST /api/cards/import` | signed in | Add progress made as a guest (never overwrites existing progress) |
 | `GET /api/health` | anyone | Is the database reachable, and if not, why (no secrets shown) |
+| `POST /api/visit` | anyone | Anonymous guest count for the funnel: `{ id, tried }`, at most once a day per browser (rate limited) |
 | `POST /api/ai/words` | signed in | AI word helper: photo or typed list → suggested flashcards (nothing is saved) |
 | `POST /api/logout` | signed in | Sign out; a plain form post, so the full page reload clears the old profile from memory |
 | `PUT/DELETE /api/words/:id`, `POST /api/words` | signed in | Add, edit, delete, import words: admins the shared lesson words, everyone else their own |
@@ -190,6 +192,23 @@ Postgres/Supabase  users · sessions · words · cards · prefs · activity · c
 - Mutating requests from other sites are rejected (Origin check, on top of SameSite cookies and Next.js's own Server Action origin check).
 - Login and sign-up are rate-limited per IP and username. This is in memory: with several server instances, use a shared store such as Redis.
 - Sign-up needs the center's join code, so strangers can't create profiles. Make a new code in `/admin` if it leaks.
+
+## Analytics (`/admin/analytics`)
+
+The teacher's analysis page, built on the metrics from the product deck. Only students count (admins testing the app would blur the numbers), and a "week" is the last 7 days, then the 7 before, and so on.
+
+| Section | What it shows |
+| --- | --- |
+| Users | Students, new this week, active today / week / month, **stickiness** (average daily actives ÷ monthly actives) and guests this week |
+| **North Star: words mastered per week** | A word counts as mastered the first time one of its review gaps reaches 21 days. It only grows when students come back over weeks and still remember, so it measures habit and real memory, not app opens. 12-week chart, change vs last week, per active learner |
+| What moves it (inputs) | Active learners, study days per learner, new words started, **recall rate** (reviews answered Good or Easy) |
+| Student journey (funnel) | Guests: **Visit** (opened the app without a profile) → **Try** (answered a card) → **Join** (made a profile within 7 days). New profiles: **Join** → **Start** (20+ answers on day one) → **Return** (studied in week two) → **Habit** (3+ study days in a week). Each step shows its conversion, and the biggest drop-off is highlighted. Pick 30 days, 90 days or all time |
+| Health checks | Recall rate, answers per study day, cheers per learner and number of reviews, this week vs the 4-week average |
+| Retention by sign-up week | Of the people who joined in a week, the share who studied in week 1, 2, 3, … after joining |
+
+Nothing extra is tracked for students: mastery and recall come from the review history every card already keeps (each card stores its last 30 answers), and older databases are filled in from that history once on the first start of this version. Guest visits are counted from this version on.
+
+**Vercel Web Analytics** (page views, visitors, countries, devices) is in the Vercel dashboard → your project → **Analytics**. The app loads Vercel's script on Vercel deployments only; enable Web Analytics there once.
 
 ## Deploying
 
@@ -210,6 +229,7 @@ Postgres/Supabase  users · sessions · words · cards · prefs · activity · c
 - Everything lives in your Postgres database. Supabase backs it up daily (paid plans add point-in-time recovery). For your own copy: `pg_dump "$DATABASE_URL" > backup.sql`.
 - Table layout, sort, visible fields and the last open tab are remembered per device in `localStorage`.
 - Guest progress lives in `localStorage` (`kk.guest.cards`, `kk.guest.prefs`) until it moves into a profile. Clearing the browser's site data deletes it.
+- The anonymous visit id lives in `localStorage` (`kk.visitor`). Clearing site data makes the browser count as a new visitor.
 
 ## Notes
 

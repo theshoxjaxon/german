@@ -12,6 +12,7 @@ import { burnPasswordCheck, hashPassword, verifyPassword } from '@/lib/server/pa
 import { clientIp, hit } from '@/lib/server/rate-limit';
 import * as repo from '@/lib/server/repo';
 import { currentUser, sessionToken, startSession } from '@/lib/server/session';
+import { VISITOR_RE } from '@/lib/text';
 import { HOUR, MIN } from '@/lib/time';
 
 export interface FormState {
@@ -62,6 +63,7 @@ export async function signup(_prev: FormState, form: FormData): Promise<FormStat
   const username = normalizeUsername(form.get('username'));
   const password = String(form.get('password') ?? '');
   const joinCode = String(form.get('joinCode') ?? '').toUpperCase().replace(/[\s-]/g, '');
+  const visitor = String(form.get('visitor') ?? '');
   const fields = { displayName, username, joinCode };
 
   if (!hit(`signup:${await clientIp()}`, 20, HOUR)) return { error: 'Too many new profiles from this network. Try again in an hour.', fields };
@@ -77,7 +79,12 @@ export async function signup(_prev: FormState, form: FormData): Promise<FormStat
     if (!joinCode || joinCode !== (await repo.getJoinCode())) fieldErrors.joinCode = 'This join code doesn’t match. Ask your teacher for the current code.';
     if (Object.keys(fieldErrors).length) return { fieldErrors, fields };
 
-    const user = await repo.createUser({ username, displayName, passwordHash: await hashPassword(password) });
+    const user = await repo.createUser({
+      username,
+      displayName,
+      passwordHash: await hashPassword(password),
+      visitorId: VISITOR_RE.test(visitor) ? visitor : null,
+    });
     if (user === 'taken') return { fieldErrors: { username: 'This username is taken. Try another one.' }, fields };
     await startSession(user.id);
   } catch (e) {

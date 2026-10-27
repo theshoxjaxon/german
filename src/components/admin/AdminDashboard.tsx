@@ -10,6 +10,7 @@ import { DAY, plural } from '@/lib/time';
 import { BottomSheet } from '../BottomSheet';
 import { Streak } from '../ClassView';
 import { Avatar, ConfirmButton, Icon } from '../ui';
+import { ColumnChart } from './charts';
 
 type Person = AdminStats['people'][number];
 
@@ -24,41 +25,10 @@ function lastActive(t: number | null, now: number): string {
   return days === 1 ? 'Yesterday' : `${days} days ago`;
 }
 
-/** Columns for the last 30 days. Tap a day to read its numbers. */
-function DayChart({ days, series, legend, describe }: {
-  days: string[];
-  series: { values: number[]; className: string }[]; // bottom to top
-  legend?: { label: string; className: string }[];
-  describe: (i: number) => string;
-}) {
-  const [sel, setSel] = useState<number | null>(null);
-  const totals = days.map((_, i) => series.reduce((n, s) => n + s.values[i], 0));
-  const max = Math.max(1, ...totals);
-  const peak = totals.indexOf(Math.max(...totals));
+/** Columns for the last 30 days, with a date under every 7th. Tap a day to read its numbers. */
+function DayChart({ days, ...chart }: Omit<Parameters<typeof ColumnChart>[0], 'labels' | 'className'> & { days: string[] }) {
   const last = days.length - 1;
-  return (
-    <>
-      <p className="chart-read" aria-live="polite">{describe(sel ?? last)}</p>
-      <div className="cols cols-30">
-        {days.map((d, i) => (
-          <button key={d} className={`col${i === last ? ' is-today' : ''}${sel === i ? ' is-sel' : ''}`} onClick={() => setSel(i)} aria-label={describe(i)}>
-            <span className="col-val">{totals[i] > 0 && (i === peak || i === last) ? totals[i] : ''}</span>
-            <span className="col-plot">
-              <span className="col-stack" style={{ height: `${((totals[i] / max) * 100).toFixed(1)}%` }}>
-                {[...series].reverse().map((s, k) => (s.values[i] > 0 ? <span key={k} className={s.className} style={{ flex: s.values[i] }} /> : null))}
-              </span>
-            </span>
-            <span className="col-x">{i % 7 === last % 7 ? dayLabel(d) : ''}</span>
-          </button>
-        ))}
-      </div>
-      {legend && (
-        <div className="legend">
-          {legend.map((l) => <span key={l.label}><i className={l.className} />{l.label}</span>)}
-        </div>
-      )}
-    </>
-  );
+  return <ColumnChart className="cols-30" labels={days.map((d, i) => (i % 7 === last % 7 ? dayLabel(d) : ''))} {...chart} />;
 }
 
 export function AdminDashboard({ stats, meId }: { stats: AdminStats; meId: string }) {

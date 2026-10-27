@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Atkinson_Hyperlegible_Mono, Atkinson_Hyperlegible_Next, Gentium_Book_Plus, Literata } from 'next/font/google';
+import Script from 'next/script';
 import './globals.css';
 
 // Display face for German words on the cards
@@ -30,7 +31,15 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
     <html lang="en" className={`${literata.variable} ${atkinson.variable} ${atkinsonMono.variable} ${gentium.variable}`}>
-      <body>{children}</body>
+      <body>
+        {children}
+        {/*
+          Vercel Web Analytics: page views and visitors in the Vercel dashboard (no cookies). This is
+          the script the @vercel/analytics package loads, added directly to skip that package's
+          framework peer dependencies. It only exists on Vercel, so it's left out elsewhere.
+        */}
+        {process.env.VERCEL && <Script src="/_vercel/insights/script.js" strategy="afterInteractive" />}
+      </body>
     </html>
   );
 }

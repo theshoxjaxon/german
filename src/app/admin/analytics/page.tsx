@@ -1,0 +1,25 @@
+import type { Metadata } from 'next';
+import { connection } from 'next/server';
+import { Suspense } from 'react';
+import { AnalyticsView } from '@/components/admin/AnalyticsView';
+import { parsePeriod } from '@/lib/analytics';
+import * as repo from '@/lib/server/repo';
+import { adminData, DatabaseDown } from '../guard';
+
+export const metadata: Metadata = { title: 'Analytics · Karteikasten' };
+
+export default function AnalyticsPage({ searchParams }: PageProps<'/admin/analytics'>) {
+  return (
+    <Suspense fallback={<div className="admin-main"><div className="panel loading" aria-busy="true">Loading analytics…</div></div>}>
+      <AnalyticsData searchParams={searchParams} />
+    </Suspense>
+  );
+}
+
+async function AnalyticsData({ searchParams }: Pick<PageProps<'/admin/analytics'>, 'searchParams'>) {
+  await connection(); // depends on the request and the current time
+  const period = parsePeriod((await searchParams).period);
+  const r = await adminData('/admin/analytics', () => repo.analytics(period));
+  if ('down' in r) return <DatabaseDown message={r.down} />;
+  return <AnalyticsView data={r.data} />;
+}
