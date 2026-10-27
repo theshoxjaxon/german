@@ -126,9 +126,14 @@ export function Avatar({ id, name, size = 'md' }: { id: string; name: string; si
 }
 
 export function LoadError() {
+  const { loadProblem } = useStore();
   return (
     <div className="panel error-panel" role="alert">
-      <p>Could not load your words. Check your internet connection, then try again.</p>
+      <p>
+        {loadProblem === 'server'
+          ? 'The app’s server is having trouble right now. Your progress is safe; try again in a few minutes.'
+          : 'Could not load your words. Check your internet connection, then try again.'}
+      </p>
       <button className="btn" onClick={() => store.load()}>Try again</button>
     </div>
   );

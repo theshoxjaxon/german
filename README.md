@@ -173,6 +173,7 @@ Postgres/Supabase  users · sessions · words · cards · prefs · activity · c
 | --- | --- | --- |
 | `GET /api/state` | anyone | Signed in: you, the words, your progress, settings, new cheers. Guest: `{ me: null, words }` |
 | `POST /api/cards/import` | signed in | Add progress made as a guest (never overwrites existing progress) |
+| `GET /api/health` | anyone | Is the database reachable, and if not, why (no secrets shown) |
 | `POST /api/ai/words` | signed in | AI word helper: photo or typed list → suggested flashcards (nothing is saved) |
 | `POST /api/logout` | signed in | Sign out; a plain form post, so the full page reload clears the old profile from memory |
 | `PUT/DELETE /api/words/:id`, `POST /api/words` | signed in | Add, edit, delete, import words: admins the shared lesson words, everyone else their own |
@@ -194,9 +195,13 @@ Postgres/Supabase  users · sessions · words · cards · prefs · activity · c
 
 **Free option: Vercel + Supabase**
 
-1. Create the Supabase project (see [Supabase](#supabase)) and copy the **Transaction pooler** connection string.
-2. Import this GitHub repo on [vercel.com](https://vercel.com). Set the function region to the one closest to your Supabase project (Project Settings → Functions). Add the environment variables `DATABASE_URL`, `JOIN_CODE` and `APP_TIMEZONE`.
-3. Deploy, open `https://<your-app>/signup` and create the first (admin) profile with your `JOIN_CODE`.
+1. Create the Supabase project (see [Supabase](#supabase)) and copy the **Transaction pooler** connection string (port 6543). Not the "Direct connection": that one is IPv6-only and Vercel can't reach it.
+2. Import this GitHub repo on [vercel.com](https://vercel.com). Set the function region to the one closest to your Supabase project (Project Settings → Functions).
+3. In Vercel → Project → **Settings → Environment Variables**, add `DATABASE_URL` (the pooler string with your password, no quotes, for the **Production** environment), plus `JOIN_CODE`, `APP_TIMEZONE` and, for the AI helper, `ANTHROPIC_API_KEY`. `.env.local` is never uploaded, so this step is required.
+4. **Redeploy** (Deployments → ⋯ → Redeploy): environment variables only reach new deployments.
+5. Open `https://<your-app>/api/health`. It should say `"ok": true`. Then open `/signup` and create the first (admin) profile with your `JOIN_CODE`.
+
+**"This page couldn’t load … A server error occurred"** when logging in or signing up means the server can't use the database. Open `https://<your-app>/api/health`: it names the problem (missing `DATABASE_URL`, wrong password, host not found, paused Supabase project, …) and what to do, without showing any secrets. Supabase pauses free projects after about a week without activity; restore it from the Supabase dashboard.
 
 **Or any Node.js server** (Render, Railway, a VPS): set the same variables, then `npm run build && npm start`.
 

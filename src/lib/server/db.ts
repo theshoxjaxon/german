@@ -171,13 +171,28 @@ const toNumber = (v: string) => Number(v);
 const typeParser = ((oid: number, format?: string) =>
   oid === 20 || oid === 1700 ? toNumber : pg.types.getTypeParser(oid, format as 'text')) as typeof pg.types.getTypeParser;
 
+/** A setup mistake (not a database outage): DATABASE_URL missing, malformed or still a template. */
+export class DbConfigError extends Error {
+  constructor(public problem: 'missing' | 'bad-url' | 'placeholder', message: string) {
+    super(message);
+  }
+}
+
 /**
  * Read DATABASE_URL. Passwords often contain characters that mean something in a URL
  * (@ # / ? % +); when the string doesn't parse, the password is URL-encoded for you.
+ * Common paste mistakes are forgiven: surrounding quotes, or a leading "DATABASE_URL=".
  * Errors never repeat the string, so the password can't end up in logs.
  */
 export function parseDatabaseUrl(raw: string): URL {
-  const text = raw.trim();
+  const text = raw
+    .trim()
+    .replace(/^DATABASE_URL\s*=\s*/, '')
+    .replace(/^(['"])([\s\S]*)\1$/, '$2')
+    .trim();
+  if (/\[YOUR-PASSWORD\]/i.test(text)) {
+    throw new DbConfigError('placeholder', 'DATABASE_URL still contains [YOUR-PASSWORD]. Replace it, brackets included, with your database password.');
+  }
   try {
     return new URL(text);
   } catch {
@@ -190,7 +205,8 @@ export function parseDatabaseUrl(raw: string): URL {
         /* fall through */
       }
     }
-    throw new Error(
+    throw new DbConfigError(
+      'bad-url',
       'DATABASE_URL is not a valid connection string. Copy it again from Supabase → Connect, and replace [YOUR-PASSWORD] (brackets included) with your database password.',
     );
   }
@@ -198,8 +214,11 @@ export function parseDatabaseUrl(raw: string): URL {
 
 function poolConfig(): pg.PoolConfig {
   const raw = process.env.DATABASE_URL;
-  if (!raw) {
-    throw new Error('DATABASE_URL is not set. Put your Supabase connection string in .env.local (see README → Supabase).');
+  if (!raw?.trim()) {
+    throw new DbConfigError(
+      'missing',
+      'DATABASE_URL is not set on this server. Locally it goes in .env.local; on Vercel in Project → Settings → Environment Variables (then redeploy).',
+    );
   }
   const url = parseDatabaseUrl(raw);
   const local = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(url.hostname) || url.searchParams.get('sslmode') === 'disable';

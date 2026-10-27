@@ -31,7 +31,7 @@ beforeAll(async () => {
     });
   }
   repo = await import('./repo');
-});
+}, 60_000); // PGlite (Postgres in WebAssembly) can take a while to boot on a busy machine
 afterAll(() => close());
 
 describe('passwords', () => {

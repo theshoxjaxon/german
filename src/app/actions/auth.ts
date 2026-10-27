@@ -7,6 +7,7 @@
  */
 import { redirect } from 'next/navigation';
 import { cleanDisplayName, displayNameError, normalizeUsername, passwordError, safeNext, usernameError } from '@/lib/account-rules';
+import { describeDbError } from '@/lib/server/db-health';
 import { burnPasswordCheck, hashPassword, verifyPassword } from '@/lib/server/password';
 import { clientIp, hit } from '@/lib/server/rate-limit';
 import * as repo from '@/lib/server/repo';
@@ -22,6 +23,16 @@ export interface FormState {
 
 const WRONG = 'Wrong username or password.';
 
+/**
+ * The database is down or misconfigured: say so on the form instead of crashing the page.
+ * The reason goes to the server log (and /api/health) for whoever runs the app.
+ */
+function unavailable(e: unknown, fields?: Record<string, string>): FormState {
+  const { problem, message } = describeDbError(e);
+  console.error(`Karteikasten: database unavailable (${problem}). ${message}`);
+  return { error: 'The app can’t reach its database right now. Please try again in a few minutes.', fields };
+}
+
 export async function login(_prev: FormState, form: FormData): Promise<FormState> {
   const username = normalizeUsername(form.get('username'));
   const password = String(form.get('password') ?? '');
@@ -32,15 +43,18 @@ export async function login(_prev: FormState, form: FormData): Promise<FormState
   }
   if (!username || !password) return { error: 'Enter your username and password.', fields };
 
-  const user = await repo.findUserByUsername(username);
-  if (!user) {
-    await burnPasswordCheck(password); // same timing whether or not the username exists
-    return { error: WRONG, fields };
+  try {
+    const user = await repo.findUserByUsername(username);
+    if (!user) {
+      await burnPasswordCheck(password); // same timing whether or not the username exists
+      return { error: WRONG, fields };
+    }
+    if (!(await verifyPassword(password, user.passwordHash))) return { error: WRONG, fields };
+    await startSession(user.id);
+  } catch (e) {
+    return unavailable(e, fields);
   }
-  if (!(await verifyPassword(password, user.passwordHash))) return { error: WRONG, fields };
-
-  await startSession(user.id);
-  redirect(safeNext(form.get('next')));
+  redirect(safeNext(form.get('next'))); // outside try: redirect() works by throwing
 }
 
 export async function signup(_prev: FormState, form: FormData): Promise<FormState> {
@@ -59,18 +73,26 @@ export async function signup(_prev: FormState, form: FormData): Promise<FormStat
   if (nameErr) fieldErrors.displayName = nameErr;
   if (userErr) fieldErrors.username = userErr;
   if (passErr) fieldErrors.password = passErr;
-  if (!joinCode || joinCode !== (await repo.getJoinCode())) fieldErrors.joinCode = 'This join code doesn’t match. Ask your teacher for the current code.';
-  if (Object.keys(fieldErrors).length) return { fieldErrors, fields };
+  try {
+    if (!joinCode || joinCode !== (await repo.getJoinCode())) fieldErrors.joinCode = 'This join code doesn’t match. Ask your teacher for the current code.';
+    if (Object.keys(fieldErrors).length) return { fieldErrors, fields };
 
-  const user = await repo.createUser({ username, displayName, passwordHash: await hashPassword(password) });
-  if (user === 'taken') return { fieldErrors: { username: 'This username is taken. Try another one.' }, fields };
-
-  await startSession(user.id);
+    const user = await repo.createUser({ username, displayName, passwordHash: await hashPassword(password) });
+    if (user === 'taken') return { fieldErrors: { username: 'This username is taken. Try another one.' }, fields };
+    await startSession(user.id);
+  } catch (e) {
+    return unavailable(e, fields);
+  }
   redirect('/');
 }
 
 export async function changePassword(_prev: FormState, form: FormData): Promise<FormState> {
-  const user = await currentUser();
+  let user: repo.UserRow | null;
+  try {
+    user = await currentUser();
+  } catch (e) {
+    return unavailable(e);
+  }
   if (!user) redirect('/login');
   const current = String(form.get('current') ?? '');
   const newPassword = String(form.get('newPassword') ?? '');
@@ -78,7 +100,11 @@ export async function changePassword(_prev: FormState, form: FormData): Promise<
   if (!(await verifyPassword(current, user.passwordHash))) return { fieldErrors: { current: 'That’s not your current password.' } };
   const err = passwordError(newPassword);
   if (err) return { fieldErrors: { newPassword: err } };
-  await repo.setPasswordHash(user.id, await hashPassword(newPassword));
-  await repo.deleteUserSessions(user.id, await sessionToken()); // sign out your other devices
+  try {
+    await repo.setPasswordHash(user.id, await hashPassword(newPassword));
+    await repo.deleteUserSessions(user.id, await sessionToken()); // sign out your other devices
+  } catch (e) {
+    return unavailable(e);
+  }
   return { success: 'Password changed. Your other devices were signed out.' };
 }

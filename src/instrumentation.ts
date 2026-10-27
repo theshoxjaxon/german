@@ -9,6 +9,8 @@ export async function register() {
     const { getDb } = await import('./lib/server/db');
     await getDb();
   } catch (e) {
-    console.error('Karteikasten: could not open the database.', e);
+    const { describeDbError } = await import('./lib/server/db-health');
+    const { problem, message } = describeDbError(e);
+    console.error(`Karteikasten: could not open the database (${problem}). ${message}`);
   }
 }

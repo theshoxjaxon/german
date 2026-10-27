@@ -16,6 +16,7 @@ import { DEFAULT_PREFS, type AppData, type CardDoc, type Cheer, type CheerKind, 
 
 export interface Snapshot {
   status: 'loading' | 'ready' | 'error';
+  loadProblem: 'offline' | 'server' | null; // why status is 'error'
   me: Me | null;
   guest: boolean; // studying without a profile; progress lives in this browser only
   guestWords: number; // signed in, with guest progress on this device waiting for a decision
@@ -31,7 +32,7 @@ type Kind = 'words' | 'cards';
 type Doc<K extends Kind> = K extends 'words' ? Word : CardDoc;
 
 const INITIAL: Snapshot = {
-  status: 'loading', me: null, guest: false, guestWords: 0, ai: false, words: new Map(), cards: new Map(), prefs: DEFAULT_PREFS,
+  status: 'loading', loadProblem: null, me: null, guest: false, guestWords: 0, ai: false, words: new Map(), cards: new Map(), prefs: DEFAULT_PREFS,
   cheers: [], classData: null, classStatus: 'idle',
 };
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -144,7 +145,9 @@ class Store {
       try {
         if (await this.fetchState()) await this.checkGuestProgress();
       } catch (e) {
-        if (this.snap.status === 'loading' && !(e instanceof HttpError && e.status === 401)) this.emit({ status: 'error' });
+        if (this.snap.status === 'loading' && !(e instanceof HttpError && e.status === 401)) {
+          this.emit({ status: 'error', loadProblem: e instanceof HttpError ? 'server' : 'offline' });
+        }
       } finally {
         this.loading = null;
       }
