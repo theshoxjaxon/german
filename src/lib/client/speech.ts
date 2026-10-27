@@ -6,14 +6,15 @@ export const speechSupported = () =>
 
 export const useSpeechSupported = () => useClientValue(speechSupported, false);
 
-export function speak(text: string | undefined, lang = 'de-DE') {
+/** Read `text` aloud; `slow` for beginners who want to hear every sound. */
+export function speak(text: string | undefined, lang = 'de-DE', slow = false) {
   if (!text || !speechSupported()) return;
   try {
     const synth = window.speechSynthesis;
     synth.cancel();
     const u = new SpeechSynthesisUtterance(text.replace(/…/g, ''));
     u.lang = lang;
-    u.rate = 0.88;
+    u.rate = slow ? 0.6 : 0.88;
     const base = lang.split('-')[0].toLowerCase();
     const voices = synth.getVoices();
     const voice = voices.find((v) => v.lang === lang) || voices.find((v) => (v.lang || '').toLowerCase().startsWith(base));

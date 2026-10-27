@@ -39,6 +39,16 @@ export async function setRoleAction(userId: string, role: Role): Promise<Result>
   return { ok: true };
 }
 
+/** Move someone into or out of the class. Out of it they keep studying, as a self-learner. */
+export async function setClassAction(userId: string, inClass: boolean): Promise<Result> {
+  if (!(await requireAdmin())) return denied;
+  if (typeof inClass !== 'boolean') return { ok: false, error: 'Unknown choice.' };
+  if (typeof userId !== 'string' || !(await repo.findUserById(userId))) return { ok: false, error: 'That profile no longer exists.' };
+  await repo.setInClass(userId, inClass);
+  refresh();
+  return { ok: true };
+}
+
 export async function deleteUserAction(userId: string): Promise<Result> {
   const admin = await requireAdmin();
   if (!admin) return denied;

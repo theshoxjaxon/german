@@ -3,6 +3,7 @@
  * Everything here is a pure function of (words, cards, prefs, now).
  */
 import { SRS_DEFAULTS, type SrsConfig } from './srs';
+import { genderOf, type Article } from './text';
 import { dayIndex } from './time';
 import type { CardDoc, CardState, Dir, Prefs, StudyData, Word } from './types';
 
@@ -120,6 +121,15 @@ export function buildQueue(data: StudyData, now: number): Queue {
 }
 
 /** Order: learning cards that are due → reviews → new cards → learning cards due soon. */
+/**
+ * The der/die/das quiz: on a recognition card for a noun with an article, the article is hidden
+ * and the learner picks it first. Returns the right article, or '' when there is no quiz.
+ */
+export function quizArticle(item: Pick<QueueItem, 'word' | 'dir'> | null, prefs: Pick<Prefs, 'genderQuiz'>): Article | '' {
+  if (!item || !prefs.genderQuiz || item.dir !== 'f') return '';
+  return genderOf(item.word.term);
+}
+
 export function pickNext(q: Queue, now: number): QueueItem | null {
   const dueLearning = q.learning.find((x) => x.s!.due <= now);
   if (dueLearning) return dueLearning;

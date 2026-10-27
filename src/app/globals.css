@@ -748,3 +748,71 @@ a.seg-btn { text-decoration: none; }
 .cohort td.cell.is-partial { font-style: italic; }
 .weekly summary { cursor: pointer; font-weight: 700; font-size: 15px; }
 .weekly[open] summary { margin-bottom: 10px; }
+
+/* ---------- study session polish ---------- */
+/* Rating buttons fade in while taps are ignored (REVEAL_LOCK_MS), so a double-tap can't rate an unseen card. */
+.ratings { animation: rate-in .4s ease-out; }
+@keyframes rate-in { from { opacity: .35; } }
+.hint-keys { display: none; }
+@media (hover: hover) and (pointer: fine) {
+  .hint-touch { display: none; }
+  .hint-keys { display: inline; }
+}
+.save-card { display: grid; gap: 12px; padding: 16px; border-radius: 16px; background: var(--mark-soft); text-align: left; text-wrap: pretty; }
+.save-card .btn { justify-self: stretch; }
+.auth-top { width: 100%; max-width: 420px; display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.auth-back { display: inline-flex; align-items: center; gap: 4px; min-height: 40px; color: var(--ink-2); font-size: 14.5px; font-weight: 600; text-decoration: none; }
+.auth-back:hover { color: var(--ink); }
+.auth-back .ic { width: 18px; height: 18px; }
+.lang-switch { display: inline-flex; padding: 3px; gap: 2px; border-radius: 999px; background: var(--surface-3); }
+.lang-switch button { height: 30px; padding: 0 10px; border: 0; border-radius: 999px; background: transparent; color: var(--ink-2); font-size: 13px; font-weight: 600; cursor: pointer; }
+.lang-switch button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
+.vhead-lede { margin-top: 6px; font-size: 14.5px; color: var(--ink-2); max-width: 46ch; text-wrap: pretty; }
+.guest-note .auth-switch { text-align: left; font-size: 14.5px; }
+details.advanced { border-top: 1px solid var(--line); padding-top: 12px; }
+details.advanced > summary { cursor: pointer; font-weight: 700; font-size: 15px; padding: 6px 0; }
+details.advanced[open] > summary { margin-bottom: 10px; }
+.teacher.self { background: var(--mark-soft); color: var(--ink); }
+.join-form { width: 100%; max-width: 360px; text-align: left; }
+
+/* ---------- der/die/das quiz ---------- */
+.articles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; animation: rate-in .25s ease-out; }
+.art-btn {
+  min-height: 56px; border-radius: 14px; border: 1.5px solid transparent; font-family: var(--font-display);
+  font-size: 22px; font-weight: 700; cursor: pointer;
+}
+.ab-der { background: var(--der-soft); color: var(--der); border-color: color-mix(in srgb, var(--der) 35%, transparent); }
+.ab-die { background: var(--die-soft); color: var(--die); border-color: color-mix(in srgb, var(--die) 35%, transparent); }
+.ab-das { background: var(--das-soft); color: var(--das); border-color: color-mix(in srgb, var(--das) 35%, transparent); }
+.art-btn:hover { filter: brightness(.97); }
+.art-blank { color: var(--ink-3); letter-spacing: .05em; }
+.quiz-result { display: flex; align-items: flex-start; gap: 8px; padding: 8px 12px; border-radius: 12px; font-size: 14.5px; margin-bottom: 4px; text-wrap: pretty; }
+.quiz-result .ic { width: 18px; height: 18px; margin-top: 2px; }
+.quiz-result.is-right { background: var(--good-soft); color: var(--ink); }
+.quiz-result.is-right .ic { color: var(--good); }
+.quiz-result.is-wrong { background: var(--again-soft); color: var(--ink); }
+.quiz-result.is-wrong .ic { color: var(--again); }
+
+/* ---------- daily goal and streak ---------- */
+.goal { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); }
+.ring { width: 52px; height: 52px; flex: none; }
+.ring-bg { fill: none; stroke: var(--surface-3); stroke-width: 6; }
+.ring-fg { fill: none; stroke: var(--good); stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset .5s ease; }
+.ring-check { fill: none; stroke: var(--good); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.goal-text { display: grid; flex: 1; min-width: 0; }
+.goal-text b { font-size: 15.5px; }
+.goal-text span { font-size: 13px; color: var(--ink-2); }
+.goal.is-reached { background: var(--good-soft); border-color: transparent; }
+.streak-big { display: grid; justify-items: center; flex: none; min-width: 52px; color: var(--flame); line-height: 1.1; }
+.streak-big .ic { width: 22px; height: 22px; }
+.streak-big b { font-size: 18px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.streak-big span { font-size: 11.5px; color: var(--ink-3); font-weight: 600; }
+.streak-big.is-zero { color: var(--ink-3); }
+.goal-line { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: var(--ink-2); }
+.goal-line .ic { width: 18px; height: 18px; color: var(--flame); }
+.goal-line.is-reached { color: var(--good); }
+.goal-line.is-reached .ic { color: var(--good); }
+
+/* Guests' Log in / Sign up: never wrap; on narrow phones the brand name makes room (the mark stays). */
+.appbar-guest .btn { white-space: nowrap; }
+@media (max-width: 419px) { .appbar:has(.appbar-guest) .appbar-word { display: none; } }

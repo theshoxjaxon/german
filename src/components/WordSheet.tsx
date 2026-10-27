@@ -2,13 +2,14 @@
 
 import { useState, type FormEvent } from 'react';
 import { useNow } from '@/lib/client/hooks';
+import { useT } from '@/lib/client/i18n';
 import { requestAiWords } from '@/lib/client/ai';
 import { speak, useSpeechSupported } from '@/lib/client/speech';
 import { store, useStore } from '@/lib/client/store';
 import { addsSharedWords, canEditWord, MY_WORDS_DECK } from '@/lib/ownership';
 import { currentDeck, deckNames, enabledDirs, lapsesOf, latestDeck, LEECH_AT, nextOrder, stateInfo } from '@/lib/queue';
 import { cleanTerm, guessPos, newId, norm, parseTags } from '@/lib/text';
-import { dayIndex, DAY, fmtSpan, plural } from '@/lib/time';
+import { dayIndex, DAY } from '@/lib/time';
 import { POS_OPTIONS, RATING_LABEL, type Pos, type Word } from '@/lib/types';
 import { LanguageSelect, useAiLanguage } from './AiSheet';
 import { BottomSheet } from './BottomSheet';
@@ -20,6 +21,7 @@ import { dueLabel } from './WordsView';
 export function WordSheet({ id }: { id: string | null }) {
   const data = useStore();
   const ui = useUI();
+  const { t, tn } = useT();
   const speech = useSpeechSupported();
   // Fill the form once from the word as it was when the sheet opened, so live updates never overwrite typing.
   const [initial] = useState<Word | null>(() => (id ? data.words.get(id) ?? null : null));
@@ -31,8 +33,8 @@ export function WordSheet({ id }: { id: string | null }) {
 
   if (id && !initial) {
     return (
-      <BottomSheet title="Word not found">
-        <p className="lede">This word was deleted.</p>
+      <BottomSheet title={t('Word not found')}>
+        <p className="lede">{t('This word was deleted.')}</p>
       </BottomSheet>
     );
   }
@@ -59,10 +61,10 @@ export function WordSheet({ id }: { id: string | null }) {
     const meaning = get('meaning');
     const deck = get('deck');
     const next: typeof errors = {};
-    if (!term) next.term = 'Enter the German word or phrase.';
-    if (!meaning) next.meaning = 'Enter what it means.';
+    if (!term) next.term = t('Enter the German word or phrase.');
+    if (!meaning) next.meaning = t('Enter what it means.');
     const dup = [...store.getSnapshot().words.values()].find((x) => x.id !== initial?.id && norm(x.term) === norm(term) && (x.deck || '') === deck);
-    if (term && dup) next.term = `This word is already in ${deck || 'your words'}.`;
+    if (term && dup) next.term = t('This word is already in {deck}.', { deck: deck || t('your words') });
     setErrors(next);
     if (next.term || next.meaning) {
       form.querySelector<HTMLInputElement>(next.term ? '#f-term' : '#f-meaning')?.focus();
@@ -89,7 +91,7 @@ export function WordSheet({ id }: { id: string | null }) {
       ...(shared ? {} : { personal: true }),
     };
     ui.closeSheet();
-    void store.saveWord(word).then((ok) => ok && ui.toast(initial ? 'Saved' : `Added “${term}”`));
+    void store.saveWord(word).then((ok) => ok && ui.toast(initial ? t('Saved') : t('Added “{term}”', { term })));
   };
 
   /** Ask the AI for everything still empty: meaning, IPA, forms, example, memory hook, tags. Never overwrites what you typed. */
@@ -99,7 +101,7 @@ export function WordSheet({ id }: { id: string | null }) {
     const termEl = field('term');
     const term = termEl?.value.trim() ?? '';
     if (!term) {
-      setErrors({ term: 'Type the German word first.' });
+      setErrors({ term: t('Type the German word first.') });
       termEl?.focus();
       return;
     }
@@ -109,7 +111,7 @@ export function WordSheet({ id }: { id: string | null }) {
       const r = await requestAiWords({ mode: 'text', language: aiLang, text: given ? `${term} – ${given}` : term });
       const w = r.words[0];
       if (!w) {
-        ui.toast(r.note || 'The AI didn’t recognise this as a German word.');
+        ui.toast(t(r.note || 'The AI didn’t recognise this as a German word.'));
         return;
       }
       // Take the AI's spelling when it only adds the article or fixes capitals ("bahnhof" → "der Bahnhof").
@@ -127,9 +129,9 @@ export function WordSheet({ id }: { id: string | null }) {
       fillEmpty('mnemonic', w.mnemonic);
       fillEmpty('tags', w.tags.join(', '));
       setErrors({});
-      ui.toast('Filled in. Check it, then save.');
+      ui.toast(t('Filled in. Check it, then save.'));
     } catch (e) {
-      ui.toast((e as Error).message);
+      ui.toast(t((e as Error).message));
     } finally {
       setFilling(false);
     }
@@ -138,105 +140,105 @@ export function WordSheet({ id }: { id: string | null }) {
   const remove = () => {
     if (!initial) return;
     ui.closeSheet();
-    void store.deleteWord(initial.id).then((ok) => ok && ui.toast(`Deleted “${initial.term}”`));
+    void store.deleteWord(initial.id).then((ok) => ok && ui.toast(t('Deleted “{term}”', { term: initial.term })));
   };
 
   return (
     <BottomSheet
-      title={initial ? <span lang="de"><Term term={initial.term} /></span> : 'New word'}
+      title={initial ? <span lang="de"><Term term={initial.term} /></span> : t('New word')}
       footer={
         canEdit ? (
           <>
-            <button className="btn" onClick={ui.closeSheet}>Cancel</button>
-            <button className="btn btn-primary" type="submit" form="word-form">{initial ? 'Save' : 'Add word'}</button>
+            <button className="btn" onClick={ui.closeSheet}>{t('Cancel')}</button>
+            <button className="btn btn-primary" type="submit" form="word-form">{t(initial ? 'Save' : 'Add word')}</button>
           </>
         ) : (
-          <button className="btn btn-primary" onClick={ui.closeSheet}>Close</button>
+          <button className="btn btn-primary" onClick={ui.closeSheet}>{t('Close')}</button>
         )
       }
     >
       <form id="word-form" noValidate onSubmit={onSubmit}>
         <p className="owner-note">
-          {shared
+          {t(shared
             ? canEdit ? 'Lesson word: everyone in your class studies it.' : 'Lesson word from your teacher. Add your own words with the + button.'
-            : 'Your own word: only you see and study it.'}
+            : 'Your own word: only you see and study it.')}
         </p>
         <fieldset className="form" disabled={!canEdit}>
         <div className="field">
-          <label htmlFor="f-term">German word or phrase</label>
+          <label htmlFor="f-term">{t('German word or phrase')}</label>
           <input id="f-term" name="term" defaultValue={initial?.term} required autoComplete="off" autoCapitalize="off" spellCheck={false} lang="de"
             aria-describedby="f-term-hint f-term-err" aria-invalid={!!errors.term} data-autofocus={initial ? undefined : true} />
-          {canEdit && <p className="hint" id="f-term-hint">Start nouns with der, die or das to get the gender colour.</p>}
+          {canEdit && <p className="hint" id="f-term-hint">{t('Start nouns with der, die or das to get the gender colour.')}</p>}
           {errors.term && <p className="err" id="f-term-err">{errors.term}</p>}
           {data.ai && canEdit && (
             <div className="ai-fill">
               <button type="button" className="btn btn-sm" onClick={fill} disabled={filling} aria-busy={filling}>
-                <Icon name="sparkle" />{filling ? 'Filling in…' : 'Fill in the rest with AI'}
+                <Icon name="sparkle" />{t(filling ? 'Filling in…' : 'Fill in the rest with AI')}
               </button>
-              <label className="sr-only" htmlFor="f-ai-lang">Meanings in</label>
+              <label className="sr-only" htmlFor="f-ai-lang">{t('Meanings in')}</label>
               <LanguageSelect id="f-ai-lang" value={aiLang} onChange={setAiLang} />
             </div>
           )}
         </div>
         <div className="field">
-          <label htmlFor="f-meaning">Meaning</label>
+          <label htmlFor="f-meaning">{t('Meaning')}</label>
           <input id="f-meaning" name="meaning" defaultValue={initial?.meaning} required autoComplete="off" aria-describedby="f-meaning-err" aria-invalid={!!errors.meaning} />
           {errors.meaning && <p className="err" id="f-meaning-err">{errors.meaning}</p>}
         </div>
         <div className="field-row">
           <div className="field">
-            <label htmlFor="f-pron">Pronunciation (IPA)</label>
+            <label htmlFor="f-pron">{t('Pronunciation (IPA)')}</label>
             <div className="input-wrap">
               <input id="f-pron" name="pronunciation" className="ipa-input" defaultValue={initial?.pronunciation} placeholder="[faˈmiːli̯ə]" autoComplete="off" spellCheck={false} />
               {speech && (
-                <button type="button" className="speak" aria-label="Hear the word"
-                  onClick={() => speak((document.getElementById('f-term') as HTMLInputElement | null)?.value, data.prefs.ttsLang)}>
+                <button type="button" className="speak" aria-label={t('Hear the word')}
+                  onClick={() => speak((document.getElementById('f-term') as HTMLInputElement | null)?.value, data.prefs.ttsLang, data.prefs.slowSpeech)}>
                   <Icon name="volume" />
                 </button>
               )}
             </div>
           </div>
           <div className="field">
-            <label htmlFor="f-pos">Type</label>
+            <label htmlFor="f-pos">{t('Type')}</label>
             <select id="f-pos" name="pos" defaultValue={initial?.pos ?? ''}>
-              <option value="">Detect from the word</option>
-              {POS_OPTIONS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+              <option value="">{t('Detect from the word')}</option>
+              {POS_OPTIONS.map(([k, l]) => <option key={k} value={k}>{t(l)}</option>)}
             </select>
           </div>
         </div>
         <div className="field">
-          <label htmlFor="f-forms">Forms</label>
-          <input id="f-forms" name="forms" defaultValue={initial?.forms} placeholder="Plural, or verb forms: er spricht · sprach · hat gesprochen" autoComplete="off" lang="de" />
+          <label htmlFor="f-forms">{t('Forms')}</label>
+          <input id="f-forms" name="forms" defaultValue={initial?.forms} placeholder={t('Plural, or verb forms: er spricht · sprach · hat gesprochen')} autoComplete="off" lang="de" />
         </div>
         <div className="field">
-          <label htmlFor="f-example">Example sentence</label>
+          <label htmlFor="f-example">{t('Example sentence')}</label>
           <textarea id="f-example" name="example" rows={2} lang="de" defaultValue={initial?.example} />
         </div>
         <div className="field">
-          <label htmlFor="f-exampleTr">Example translation</label>
+          <label htmlFor="f-exampleTr">{t('Example translation')}</label>
           <textarea id="f-exampleTr" name="exampleTr" rows={2} defaultValue={initial?.exampleTr} />
         </div>
         {lapses >= LEECH_AT && !initial?.mnemonic && (
           <div className="callout">
             <Icon name="alert" />
-            <span>You have forgotten this word {plural(lapses, 'time', 'times')}. A vivid memory hook helps most here.</span>
+            <span>{tn(lapses, 'You have forgotten this word {n} time. A vivid memory hook helps most here.', 'You have forgotten this word {n} times. A vivid memory hook helps most here.')}</span>
           </div>
         )}
         <div className="field">
-          <label htmlFor="f-mnemonic">Memory hook</label>
-          <textarea id="f-mnemonic" name="mnemonic" rows={2} placeholder="A picture, a sound-alike, a story that makes it stick" defaultValue={initial?.mnemonic} />
+          <label htmlFor="f-mnemonic">{t('Memory hook')}</label>
+          <textarea id="f-mnemonic" name="mnemonic" rows={2} placeholder={t('A picture, a sound-alike, a story that makes it stick')} defaultValue={initial?.mnemonic} />
         </div>
         <div className="field">
-          <label htmlFor="f-notes">Notes</label>
+          <label htmlFor="f-notes">{t('Notes')}</label>
           <textarea id="f-notes" name="notes" rows={2} defaultValue={initial?.notes} />
         </div>
         <div className="field-row">
           <div className="field">
-            <label htmlFor="f-tags">Tags</label>
+            <label htmlFor="f-tags">{t('Tags')}</label>
             <input id="f-tags" name="tags" defaultValue={(initial?.tags || []).join(', ')} placeholder="family, verbs" autoComplete="off" autoCapitalize="off" />
           </div>
           <div className="field">
-            <label htmlFor="f-deck">Deck</label>
+            <label htmlFor="f-deck">{t('Deck')}</label>
             <input id="f-deck" name="deck" defaultValue={deckDefault} list="deck-list" placeholder="Lektion 3" autoComplete="off" />
             <datalist id="deck-list">
               {deckNames(data.words).map((d) => <option key={d} value={d} />)}
@@ -244,8 +246,8 @@ export function WordSheet({ id }: { id: string | null }) {
           </div>
         </div>
         {initial && (
-          <ConfirmButton className="btn btn-danger" confirmLabel="Tap again to delete" onConfirm={remove}>
-            Delete word
+          <ConfirmButton className="btn btn-danger" confirmLabel={t('Tap again to delete')} onConfirm={remove}>
+            {t('Delete word')}
           </ConfirmButton>
         )}
         </fieldset>
@@ -264,6 +266,8 @@ function ProgressPanel({ wordId }: { wordId: string }) {
   const data = useStore();
   const now = useNow();
   const ui = useUI();
+  const tr = useT();
+  const { t, span } = tr;
   const doc = data.cards.get(wordId);
   const today = dayIndex(now);
   const dirs = DIRS.filter(([d]) => enabledDirs(data.prefs).includes(d) || doc?.[d]);
@@ -271,50 +275,50 @@ function ProgressPanel({ wordId }: { wordId: string }) {
   const toggleSuspend = () => {
     const suspended = !doc?.suspended;
     void store.setSuspended(wordId, suspended);
-    ui.toast(suspended ? 'Paused. It will not appear in study sessions.' : 'Back in your study sessions.');
+    ui.toast(t(suspended ? 'Paused. It will not appear in study sessions.' : 'Back in your study sessions.'));
   };
   const reset = () => {
     void store.saveCard(wordId, null);
-    ui.toast('Progress reset. The word is new again.');
+    ui.toast(t('Progress reset. The word is new again.'));
   };
 
   return (
-    <section className="progress-panel" aria-label="Your progress">
-      <h3>Your progress</h3>
+    <section className="progress-panel" aria-label={t('Your progress')}>
+      <h3>{t('Your progress')}</h3>
       {dirs.map(([d, title, sub]) => {
         const s = doc?.[d] ?? null;
         const info = stateInfo(s, !!doc?.suspended, today);
         return (
           <div key={d} className="dir-block">
             <div className="dir-title">
-              <span>{title} <span className="muted small">{sub}</span></span>
+              <span>{t(title)} <span className="muted small">{t(sub)}</span></span>
               <span><StatusPill info={info} /></span>
             </div>
             {s && s.type !== 'new' ? (
               <>
                 <dl className="facts">
-                  <div><dt>Due</dt><dd>{dueLabel(info, now)}</dd></div>
-                  <div><dt>Interval</dt><dd>{s.type === 'review' ? fmtSpan(s.ivl * DAY) : 'learning'}</dd></div>
-                  <div><dt>Ease</dt><dd>{Math.round(s.ease * 100)}%</dd></div>
-                  <div><dt>Reviews</dt><dd>{(s.log || []).length}</dd></div>
-                  <div><dt>Lapses</dt><dd>{s.lapses}</dd></div>
+                  <div><dt>{t('Due')}</dt><dd>{dueLabel(info, now, tr)}</dd></div>
+                  <div><dt>{t('Interval')}</dt><dd>{s.type === 'review' ? span(s.ivl * DAY) : t('learning')}</dd></div>
+                  <div><dt>{t('Ease')}</dt><dd>{Math.round(s.ease * 100)}%</dd></div>
+                  <div><dt>{t('Reviews')}</dt><dd>{(s.log || []).length}</dd></div>
+                  <div><dt>{t('Lapses')}</dt><dd>{s.lapses}</dd></div>
                 </dl>
-                <div className="dots" aria-label="Recent answers">
-                  {(s.log || []).slice(-12).map((e, i) => <i key={i} className={`r-${e.r}-bg`} title={RATING_LABEL[e.r]} />)}
-                  <span className="muted small">&nbsp;recent answers</span>
+                <div className="dots" aria-label={t('Recent answers')}>
+                  {(s.log || []).slice(-12).map((e, i) => <i key={i} className={`r-${e.r}-bg`} title={t(RATING_LABEL[e.r])} />)}
+                  <span className="muted small">&nbsp;{t('recent answers')}</span>
                 </div>
               </>
             ) : (
-              <p className="muted small">Not studied yet.</p>
+              <p className="muted small">{t('Not studied yet.')}</p>
             )}
           </div>
         );
       })}
       <div className="btn-row">
-        <button type="button" className="btn" onClick={toggleSuspend}>{doc?.suspended ? 'Resume studying' : 'Pause this word'}</button>
+        <button type="button" className="btn" onClick={toggleSuspend}>{t(doc?.suspended ? 'Resume studying' : 'Pause this word')}</button>
         {doc && (
-          <ConfirmButton confirmLabel="Tap again to reset" onConfirm={reset}>
-            Reset progress
+          <ConfirmButton confirmLabel={t('Tap again to reset')} onConfirm={reset}>
+            {t('Reset progress')}
           </ConfirmButton>
         )}
       </div>

@@ -2,6 +2,7 @@ import { aiEnabled } from '@/lib/server/ai';
 import { ok } from '@/lib/server/http';
 import * as repo from '@/lib/server/repo';
 import { requireUser } from '@/lib/server/session';
+import { isClassMember } from '@/lib/types';
 
 /**
  * GET /api/state → you, the shared words and your own words, your progress, your settings and new cheers for you.
@@ -15,11 +16,13 @@ export async function GET(req: Request) {
     return ok({ me: null, words: await repo.listWords(null) });
   }
   const { user } = auth;
-  const [words, cards, prefs, cheers] = await Promise.all([
+  const [words, cards, prefs, cheers, streak] = await Promise.all([
     repo.listWords(user.id),
     repo.listCards(user.id),
     repo.getPrefs(user.id),
     repo.unseenCheers(user.id),
+    repo.myStreak(user.id),
   ]);
-  return ok({ me: repo.publicUser(user), words, cards, prefs, cheers, ai: aiEnabled() });
+  // The AI helper costs the center money, so it's for class members.
+  return ok({ me: repo.publicUser(user), words, cards, prefs, cheers, ai: aiEnabled() && isClassMember(user), streak });
 }

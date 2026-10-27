@@ -15,6 +15,7 @@ export function norm(s: unknown): string {
 }
 
 export type Article = 'der' | 'die' | 'das';
+export const ARTICLES: Article[] = ['der', 'die', 'das'];
 const ART_RE = /^(der|die|das)\s+(.+)$/i;
 
 /** "die Familie" → { art: 'die', rest: 'Familie' } */

@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: 'Create a profile · Karteikasten' };
 
 export default function SignupPage() {
   return (
-    <AuthShell title="Create your profile" lede="Study German with your class. You need the join code from your teacher.">
+    <AuthShell title="Create your profile" lede="Free, and it takes a minute. Study on your own, or join your class with its code.">
       <SignupForm />
     </AuthShell>
   );

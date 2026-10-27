@@ -12,7 +12,7 @@ import { COHORTS, computeAnalytics, WEEKS, type Analytics, type Period } from '.
 import { cardFlags, dayKey, diffActivity, isRecalled, lastDays, masteredAt, safeTimeZone, shiftDay, streakFrom } from '../stats';
 import {
   DEFAULT_PREFS, MAX_OWN_WORDS,
-  type CardDoc, type Cheer, type CheerKind, type ClassData, type ClassMember, type Me, type Prefs, type Role, type Word, type WordData,
+  isClassMember, type CardDoc, type Cheer, type CheerKind, type ClassData, type ClassMember, type Me, type Prefs, type Role, type Word, type WordData,
 } from '../types';
 import { DAY } from '../time';
 import { getDb, newJoinCode, type Row } from './db';
@@ -43,19 +43,20 @@ export interface UserRow extends Me {
   passwordHash: string;
 }
 
-const USER_COLS = 'id, username, display_name, role, created_at, last_seen_at, password_hash';
+const USER_COLS = 'id, username, display_name, role, in_class, created_at, last_seen_at, password_hash';
 function toUser(r: Row): UserRow {
   return {
     id: str(r.id),
     username: str(r.username),
     displayName: str(r.display_name),
     role: r.role === 'admin' ? 'admin' : 'student',
+    inClass: r.in_class !== false,
     createdAt: num(r.created_at),
     lastSeenAt: r.last_seen_at == null ? null : num(r.last_seen_at),
     passwordHash: str(r.password_hash),
   };
 }
-export const publicUser = (u: UserRow): Me => ({ id: u.id, username: u.username, displayName: u.displayName, role: u.role });
+export const publicUser = (u: UserRow): Me => ({ id: u.id, username: u.username, displayName: u.displayName, role: u.role, inClass: u.inClass });
 
 export async function findUserByUsername(username: string): Promise<UserRow | null> {
   const db = await getDb();
@@ -70,13 +71,14 @@ export async function findUserById(id: string): Promise<UserRow | null> {
 }
 
 /**
- * Create a profile. The very first profile becomes the admin. Who is first is settled by the
- * unique 'first_admin' settings row inside the same statement, so two people signing up at the
- * same moment can't both become admin. `visitorId` (the browser's anonymous id) records that
- * this browser joined, for the Visit → Try → Join funnel.
+ * Create a profile. The first profile made with the class code becomes the admin (a self-learner
+ * who signs up before the teacher does not). Who is first is settled by the unique 'first_admin'
+ * settings row inside the same statement, so two people signing up at the same moment can't both
+ * become admin. `inClass`: signed up with the class code. `visitorId` (the browser's anonymous id)
+ * records that this browser joined, for the Visit → Try → Join funnel.
  */
 export async function createUser(
-  input: { username: string; displayName: string; passwordHash: string; visitorId?: string | null },
+  input: { username: string; displayName: string; passwordHash: string; inClass?: boolean; visitorId?: string | null },
   now = Date.now(),
 ): Promise<UserRow | 'taken'> {
   const db = await getDb();
@@ -84,11 +86,11 @@ export async function createUser(
   try {
     await db.query(
       `WITH claim AS (
-         INSERT INTO settings (key, value) SELECT 'first_admin', $1 WHERE NOT EXISTS (SELECT 1 FROM users)
+         INSERT INTO settings (key, value) SELECT 'first_admin', $1 WHERE $8::boolean AND NOT EXISTS (SELECT 1 FROM users WHERE role = 'admin')
          ON CONFLICT (key) DO NOTHING RETURNING 1
        ), u AS (
-         INSERT INTO users (id, username, display_name, password_hash, role, created_at, last_seen_at)
-         SELECT $1, $2, $3, $4, CASE WHEN EXISTS (SELECT 1 FROM claim) THEN 'admin' ELSE 'student' END, $5, $5
+         INSERT INTO users (id, username, display_name, password_hash, role, in_class, created_at, last_seen_at)
+         SELECT $1, $2, $3, $4, CASE WHEN EXISTS (SELECT 1 FROM claim) THEN 'admin' ELSE 'student' END, $8, $5, $5
          RETURNING id
        ), visitor AS (
          INSERT INTO visitors (id, first_day, last_day, user_id, joined_day)
@@ -97,7 +99,7 @@ export async function createUser(
            WHERE visitors.user_id IS NULL
        )
        INSERT INTO activity (user_id, day, visits) SELECT id, $6, 1 FROM u`,
-      [id, input.username, input.displayName, input.passwordHash, now, todayKey(now), input.visitorId ?? null],
+      [id, input.username, input.displayName, input.passwordHash, now, todayKey(now), input.visitorId ?? null, input.inClass ?? true],
     );
   } catch (e) {
     if ((e as { code?: string }).code === '23505' || /unique/i.test(String((e as Error).message))) return 'taken';
@@ -109,6 +111,22 @@ export async function createUser(
 export async function setPasswordHash(userId: string, passwordHash: string): Promise<void> {
   const db = await getDb();
   await db.query('UPDATE users SET password_hash = $2 WHERE id = $1', [userId, passwordHash]);
+}
+
+/** A self-learner adds the class code later. 'wrong-code' when it doesn't match the current one. */
+export async function joinClass(userId: string, code: string): Promise<'ok' | 'wrong-code'> {
+  const db = await getDb();
+  const r = await db.query(
+    `UPDATE users SET in_class = true WHERE id = $1 AND $2 = (SELECT value FROM settings WHERE key = 'join_code') RETURNING id`,
+    [userId, code],
+  );
+  return r.rowCount ? 'ok' : 'wrong-code';
+}
+
+/** Admins move someone into or out of the class (out: they keep studying, as a self-learner). */
+export async function setInClass(userId: string, inClass: boolean): Promise<void> {
+  const db = await getDb();
+  await db.query('UPDATE users SET in_class = $2 WHERE id = $1', [userId, inClass]);
 }
 
 export async function setRole(userId: string, role: Role): Promise<void> {
@@ -400,6 +418,15 @@ export async function putPrefs(userId: string, patch: unknown): Promise<Prefs> {
   return prefs;
 }
 
+/** Your streak: days in a row with an answer (up to yesterday if you haven't studied yet today). */
+export async function myStreak(userId: string, now = Date.now()): Promise<{ days: number; studiedToday: boolean }> {
+  const db = await getDb();
+  const today = todayKey(now);
+  const r = await db.query('SELECT day FROM activity WHERE user_id = $1 AND answers > 0 AND day >= $2', [userId, shiftDay(today, -400)]);
+  const days = new Set(r.rows.map((row) => str(row.day)));
+  return { days: streakFrom(days, today), studiedToday: days.has(today) };
+}
+
 /* ============================== cheers ============================== */
 
 export async function sendCheer(fromId: string, toId: string, kind: CheerKind, now = Date.now()): Promise<'ok' | 'already' | 'no-user' | 'self'> {
@@ -407,12 +434,13 @@ export async function sendCheer(fromId: string, toId: string, kind: CheerKind, n
   const db = await getDb();
   const r = await db.query(
     `INSERT INTO cheers (id, from_user, to_user, kind, day, created_at)
-     SELECT $1, $2, $3, $4, $5, $6 WHERE EXISTS (SELECT 1 FROM users WHERE id = $3)
+     SELECT $1, $2, $3, $4, $5, $6 WHERE EXISTS (SELECT 1 FROM users WHERE id = $3 AND (in_class OR role = 'admin'))
      ON CONFLICT (from_user, to_user, day) DO NOTHING RETURNING id`,
     [`c_${randomBytes(9).toString('base64url')}`, fromId, toId, kind, todayKey(now), now],
   );
   if (r.rowCount) return 'ok';
-  return (await findUserById(toId)) ? 'already' : 'no-user';
+  const to = await findUserById(toId);
+  return to && isClassMember(to) ? 'already' : 'no-user';
 }
 
 export async function unseenCheers(userId: string): Promise<Cheer[]> {
@@ -449,7 +477,7 @@ async function loadEveryone(now: number) {
   const db = await getDb();
   const since = shiftDay(todayKey(now), -400);
   const [users, cards, acts] = await Promise.all([
-    db.query('SELECT id, username, display_name, role, created_at, last_seen_at FROM users ORDER BY created_at'),
+    db.query('SELECT id, username, display_name, role, in_class, created_at, last_seen_at FROM users ORDER BY created_at'),
     db.query('SELECT user_id, sum(started)::int AS active, sum(mature)::int AS mature FROM cards GROUP BY user_id'),
     db.query('SELECT user_id, day, answers, visits FROM activity WHERE day >= $1', [since]),
   ]);
@@ -473,6 +501,7 @@ async function loadEveryone(now: number) {
       username: str(r.username),
       displayName: str(r.display_name),
       role: (r.role === 'admin' ? 'admin' : 'student') as Role,
+      inClass: r.in_class !== false,
       createdAt: num(r.created_at),
       lastSeenAt: r.last_seen_at == null ? null : num(r.last_seen_at),
       ...(counts.get(str(r.id)) ?? { active: 0, mature: 0 }),
@@ -483,7 +512,7 @@ async function loadEveryone(now: number) {
 
 const sumDays = (a: PersonActivity, days: string[]) => days.reduce((n, d) => n + (a.answersByDay.get(d) ?? 0), 0);
 
-/** Everyone in the center, with the numbers the Class tab shows. */
+/** Everyone in the class, with the numbers the Class tab shows. Self-learners aren't listed. */
 export async function classOverview(viewerId: string, now = Date.now()): Promise<ClassData> {
   const today = todayKey(now);
   const week = lastDays(today, 7);
@@ -493,7 +522,7 @@ export async function classOverview(viewerId: string, now = Date.now()): Promise
     db.query('SELECT to_user FROM cheers WHERE from_user = $1 AND day = $2', [viewerId, today]),
   ]);
   const cheered = new Set(cheers.rows.map((r) => str(r.to_user)));
-  const members: ClassMember[] = users.map((u) => ({
+  const members: ClassMember[] = users.filter(isClassMember).map((u) => ({
     id: u.id,
     username: u.username,
     displayName: u.displayName,
@@ -532,6 +561,7 @@ export interface AdminStats {
     username: string;
     displayName: string;
     role: Role;
+    inClass: boolean;
     createdAt: number;
     joinedDay: string; // 'YYYY-MM-DD' in the center's time zone
     lastSeenAt: number | null;
@@ -575,6 +605,7 @@ export async function adminStats(now = Date.now()): Promise<AdminStats> {
         username: u.username,
         displayName: u.displayName,
         role: u.role,
+        inClass: u.inClass,
         createdAt: u.createdAt,
         joinedDay: createdDay(u),
         lastSeenAt: u.lastSeenAt,
@@ -601,7 +632,7 @@ export async function analytics(period: Period, now = Date.now()): Promise<Analy
   const since = period === 'all' ? '' : [charts, shiftDay(today, -Number(period))].sort()[0];
   const masteredSince = now - (7 * WEEKS + 2) * DAY;
   const [students, study, mastered, cheers, visitors, totals] = await Promise.all([
-    db.query(`SELECT id, created_at FROM users WHERE role = 'student'`),
+    db.query(`SELECT id, created_at, in_class FROM users WHERE role = 'student'`),
     db.query(
       `SELECT a.user_id, a.day, a.answers, a.new_cards, a.reviews, a.recalled
        FROM activity a JOIN users u ON u.id = a.user_id
@@ -628,7 +659,7 @@ export async function analytics(period: Period, now = Date.now()): Promise<Analy
   return computeAnalytics(
     {
       today,
-      students: students.rows.map((r) => ({ id: str(r.id), joinedDay: dayKey(num(r.created_at), TIMEZONE) })),
+      students: students.rows.map((r) => ({ id: str(r.id), joinedDay: dayKey(num(r.created_at), TIMEZONE), inClass: r.in_class !== false })),
       study: study.rows.map((r) => ({
         userId: str(r.user_id),
         day: str(r.day),

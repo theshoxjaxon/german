@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseList, suggestDeck } from './import-parser';
-import { buildQueue, pickNext } from './queue';
+import { buildQueue, pickNext, quizArticle } from './queue';
 import { packWords, SEED_PACKS } from './seed';
 import { answer } from './srs';
 import { cleanTerm, guessPos, highlightParts, norm, splitTerm } from './text';
@@ -74,6 +74,14 @@ describe('study queue', () => {
   it('skips paused words', () => {
     const q = buildQueue(data({ 'l3-familie': { f: null, r: null, suspended: true, updatedAt: NOW } }), NOW);
     expect(pickNext(q, NOW)?.word.term).toBe('die Mutter');
+  });
+
+  it('quizzes the article on recognition cards for nouns only', () => {
+    const item = pickNext(buildQueue(data(), NOW), NOW)!; // die Familie
+    expect(quizArticle(item, { genderQuiz: true })).toBe('die');
+    expect(quizArticle(item, { genderQuiz: false })).toBe('');
+    expect(quizArticle({ ...item, dir: 'r' }, { genderQuiz: true })).toBe(''); // production cards ask for the whole word
+    expect(quizArticle({ ...item, word: { ...item.word, term: 'heißen' } }, { genderQuiz: true })).toBe(''); // no article
   });
 });
 
