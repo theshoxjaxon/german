@@ -4,7 +4,7 @@
  * Days are calendar dates in the learning center's time zone (APP_TIMEZONE, default
  * Asia/Tashkent), written as 'YYYY-MM-DD' strings so they sort and compare as text.
  */
-import type { CardDoc, CardState } from './types';
+import type { CardDoc, CardState, LogEntry } from './types';
 
 export const DEFAULT_TIMEZONE = 'Asia/Tashkent';
 
@@ -58,23 +58,47 @@ export function streakFrom(studyDays: Set<string>, today: string): number {
 const started = (s: CardState | null | undefined) => !!s && s.type !== 'new';
 const lastT = (s: CardState | null | undefined) => (s?.log?.length ? s.log[s.log.length - 1].t : 0);
 
+/** Good and Easy count as remembered (the recall rate); Again and Hard don't. */
+export const isRecalled = (e: LogEntry) => e.r === 'good' || e.r === 'easy';
+
 /**
  * How many new answers and newly started cards a progress write contains, by comparing the
  * stored doc with the incoming one. An undo writes an older doc, which counts as 0.
+ * Reviews are answers to cards already in day-based review; recalled is how many of those
+ * were Good or Easy.
  */
-export function diffActivity(prev: CardDoc | null, next: CardDoc | null): { answers: number; newCards: number } {
+export function diffActivity(prev: CardDoc | null, next: CardDoc | null): { answers: number; newCards: number; reviews: number; recalled: number } {
   let answers = 0;
   let newCards = 0;
+  let reviews = 0;
+  let recalled = 0;
   for (const dir of ['f', 'r'] as const) {
     const a = prev?.[dir];
     const b = next?.[dir];
     if (!b) continue;
     const since = lastT(a);
-    answers += (b.log || []).filter((e) => e.t > since).length;
+    const fresh = (b.log || []).filter((e) => e.t > since);
+    answers += fresh.length;
+    for (const e of fresh) {
+      if (e.k !== 'review') continue;
+      reviews++;
+      if (isRecalled(e)) recalled++;
+    }
     if (!started(a) && started(b)) newCards++;
   }
   // One write is one button press; anything larger is not a real study session.
-  return { answers: Math.min(answers, 2), newCards: Math.min(newCards, 2) };
+  reviews = Math.min(reviews, 2);
+  return { answers: Math.min(answers, 2), newCards: Math.min(newCards, 2), reviews, recalled: Math.min(recalled, reviews) };
+}
+
+/** The North Star's moment: when one of the word's directions first got a review gap of 21+ days. */
+export const MASTERED_DAYS = 21;
+export function masteredAt(doc: CardDoc | null): number | null {
+  let first: number | null = null;
+  for (const s of [doc?.f, doc?.r]) {
+    for (const e of s?.log ?? []) if (e.i >= MASTERED_DAYS && (first === null || e.t < first)) first = e.t;
+  }
+  return first;
 }
 
 /** Flags stored next to each progress row so leaderboards need no JSON parsing. */
@@ -83,7 +107,7 @@ export function cardFlags(doc: CardDoc | null): { started: 0 | 1; mature: 0 | 1 
   const states = [doc.f, doc.r];
   return {
     started: states.some(started) ? 1 : 0,
-    mature: states.some((s) => s?.type === 'review' && s.ivl >= 21) ? 1 : 0,
+    mature: states.some((s) => s?.type === 'review' && s.ivl >= MASTERED_DAYS) ? 1 : 0,
   };
 }
 
@@ -112,4 +136,15 @@ export const dayLabelShortDe = (day: string) => {
 export const dayLabelWithYear = (day: string) => {
   const p = parts(day);
   return `${p.dd} ${MONTHS[p.mm]} ${p.yy}`;
+};
+/** '2026-10-13', '2026-10-19' → '13–19 Oct'; across months → '28 Sep – 4 Oct' */
+export const rangeLabel = (start: string, end: string) => {
+  const a = parts(start);
+  const b = parts(end);
+  return a.mm === b.mm ? `${a.dd}–${b.dd} ${MONTHS[b.mm]}` : `${a.dd} ${MONTHS[a.mm]} – ${b.dd} ${MONTHS[b.mm]}`;
+};
+/** '2026-10-13' → '13 Oct' */
+export const dayLabelShort = (day: string) => {
+  const p = parts(day);
+  return `${p.dd} ${MONTHS[p.mm]}`;
 };

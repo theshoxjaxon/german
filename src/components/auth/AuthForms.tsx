@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState, useState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { login, signup, type FormState } from '@/app/actions/auth';
 import { useClientValue } from '@/lib/client/hooks';
+import { noteVisit, visitorId } from '@/lib/client/visitor';
 
 const readNext = () => new URLSearchParams(window.location.search).get('next') ?? '/';
 
@@ -59,8 +60,11 @@ export function LoginForm() {
 export function SignupForm() {
   const [state, action, pending] = useActionState<FormState, FormData>(signup, {});
   const e = state.fieldErrors ?? {};
+  const visitor = useClientValue(visitorId, null); // links this browser's guest visits to the new profile
+  useEffect(noteVisit, []);
   return (
     <form action={action} className="form auth-form" noValidate>
+      <input type="hidden" name="visitor" value={visitor ?? ''} />
       <TextField id="displayName" label="Your name" defaultValue={state.fields?.displayName} error={e.displayName}
         autoComplete="name" hint="Shown to your classmates, e.g. Sardor Aliyev" required maxLength={40} />
       <TextField id="username" label="Username" defaultValue={state.fields?.username} error={e.username}

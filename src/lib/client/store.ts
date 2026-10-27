@@ -12,6 +12,7 @@
  * kept in this browser's localStorage; after they sign up it is moved into their profile.
  */
 import { useSyncExternalStore } from 'react';
+import { noteTry, noteVisit } from './visitor';
 import { DEFAULT_PREFS, type AppData, type CardDoc, type Cheer, type CheerKind, type ClassData, type GuestData, type Me, type Prefs, type Word } from '../types';
 
 export interface Snapshot {
@@ -173,6 +174,7 @@ class Store {
         cards: new Map(Object.entries(readGuestCards())),
         prefs: { ...DEFAULT_PREFS, ...readGuest(GUEST_PREFS) } as Prefs,
       });
+      noteVisit(); // anonymous count for the analytics funnel
       return false;
     }
     const cards = new Map(Object.entries(data.cards));
@@ -264,6 +266,8 @@ class Store {
       else cards.delete(id);
       this.emit({ cards });
       this.saveGuestCards(cards);
+      const card = doc as CardDoc | null;
+      if (card?.f?.log.length || card?.r?.log.length) noteTry(); // a guest answered a card
       return true;
     }
     const prev = this.snap[kind].get(id) as Doc<K> | undefined;

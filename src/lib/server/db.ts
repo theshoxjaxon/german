@@ -13,6 +13,7 @@
 import { randomBytes } from 'node:crypto';
 import pg from 'pg';
 import { packWords, SEED_PACKS } from '../seed';
+import { safeTimeZone } from '../stats';
 
 export type Row = Record<string, unknown>;
 
@@ -22,7 +23,7 @@ export interface Db {
 }
 
 /** Bump when the schema or the built-in word lists change: every database then runs migrate() once more. */
-const SCHEMA_VERSION = '2';
+const SCHEMA_VERSION = '3';
 
 /*
  * Times are milliseconds since 1970 (JavaScript's Date.now()) in BIGINT columns; days are
@@ -103,6 +104,25 @@ CREATE TABLE IF NOT EXISTS cheers (
 );
 CREATE INDEX IF NOT EXISTS cheers_to_idx ON cheers (to_user, created_at DESC);
 
+-- Analytics (schema 3). The North Star counts a word as mastered the first time its review gap
+-- reaches 21 days; recall rate is the share of reviews answered Good or Easy.
+ALTER TABLE cards    ADD COLUMN IF NOT EXISTS mastered_at bigint;
+ALTER TABLE activity ADD COLUMN IF NOT EXISTS reviews  integer NOT NULL DEFAULT 0;
+ALTER TABLE activity ADD COLUMN IF NOT EXISTS recalled integer NOT NULL DEFAULT 0;
+CREATE INDEX IF NOT EXISTS cards_mastered_idx ON cards (mastered_at) WHERE mastered_at IS NOT NULL;
+
+-- Browsers that opened the app without a profile, for the Visit → Try → Join funnel. The id is a
+-- random string the browser made up: no name, no IP address, nothing personal.
+CREATE TABLE IF NOT EXISTS visitors (
+  id        text PRIMARY KEY,
+  first_day text NOT NULL,
+  last_day  text NOT NULL,
+  tried_day text,                     -- first day it answered a card as a guest
+  user_id   text REFERENCES users (id) ON DELETE SET NULL, -- the profile created in this browser
+  joined_day text
+);
+CREATE INDEX IF NOT EXISTS visitors_first_idx ON visitors (first_day);
+
 -- Supabase also publishes the public schema through its REST API. Row Level Security with no
 -- policies closes that door: only this server (connecting as the table owner) reads the data.
 ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
@@ -113,11 +133,45 @@ ALTER TABLE cards    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE prefs    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cheers   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE visitors ENABLE ROW LEVEL SECURITY;
 
 INSERT INTO settings (key, value) VALUES ('schema_version', '${SCHEMA_VERSION}')
   ON CONFLICT (key) DO UPDATE SET value = excluded.value;
 COMMIT;
 `;
+
+/**
+ * Fill the analytics columns from history the app already kept: every card stores its last 30
+ * answers. Runs once per database (the settings flag), in one statement.
+ */
+const BACKFILL = `
+WITH once AS (
+  INSERT INTO settings (key, value) VALUES ('analytics_backfill', '1') ON CONFLICT (key) DO NOTHING RETURNING 1
+), entries AS (
+  SELECT c.user_id, c.word_id, (e->>'t')::numeric::bigint AS t, e->>'r' AS r, e->>'k' AS k, (e->>'i')::numeric AS i
+  FROM cards c CROSS JOIN once,
+  LATERAL jsonb_array_elements(
+    CASE WHEN jsonb_typeof(c.data->'f'->'log') = 'array' THEN c.data->'f'->'log' ELSE '[]'::jsonb END ||
+    CASE WHEN jsonb_typeof(c.data->'r'->'log') = 'array' THEN c.data->'r'->'log' ELSE '[]'::jsonb END
+  ) AS e
+), mastered AS (
+  UPDATE cards c SET mastered_at = m.t
+  FROM (SELECT user_id, word_id, min(t) AS t FROM entries WHERE i >= 21 GROUP BY 1, 2) m
+  WHERE c.user_id = m.user_id AND c.word_id = m.word_id AND c.mastered_at IS NULL
+)
+INSERT INTO activity (user_id, day, reviews, recalled)
+SELECT user_id, to_char(to_timestamp(t / 1000.0) AT TIME ZONE $1, 'YYYY-MM-DD'), count(*), count(*) FILTER (WHERE r IN ('good', 'easy'))
+FROM entries WHERE k = 'review' GROUP BY 1, 2
+ON CONFLICT (user_id, day) DO UPDATE SET reviews = excluded.reviews, recalled = excluded.recalled`;
+
+async function backfillAnalytics(db: Db): Promise<void> {
+  try {
+    await db.query(BACKFILL, [safeTimeZone(process.env.APP_TIMEZONE)]);
+  } catch (e) {
+    // Only the history before this version is affected; new answers are counted as they come in.
+    console.error('Karteikasten: could not fill in past analytics.', (e as Error).message);
+  }
+}
 
 /** Six characters without look-alikes (no 0/O, 1/I/L), e.g. "K7M2QX". */
 export function newJoinCode(): string {
@@ -150,6 +204,7 @@ async function migrate(db: Db): Promise<void> {
         [JSON.stringify(Object.values(packWords(pack, now)).map(({ id, ...data }) => ({ id, data }))), now, pack.flag],
       );
     }
+    await backfillAnalytics(db);
     // The code students need to create a profile. JOIN_CODE sets the first one; the admin can change it later.
     const initialCode = process.env.JOIN_CODE?.trim().toUpperCase() || newJoinCode();
     await db.query(`INSERT INTO settings (key, value) VALUES ('join_code', $1) ON CONFLICT (key) DO NOTHING`, [initialCode]);

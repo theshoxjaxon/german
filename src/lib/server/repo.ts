@@ -8,11 +8,13 @@
  * tables (save an answer + count it for today), a WITH … INSERT statement does it all at once.
  */
 import { createHash, randomBytes } from 'node:crypto';
-import { cardFlags, dayKey, diffActivity, lastDays, safeTimeZone, shiftDay, streakFrom } from '../stats';
+import { COHORTS, computeAnalytics, WEEKS, type Analytics, type Period } from '../analytics';
+import { cardFlags, dayKey, diffActivity, isRecalled, lastDays, masteredAt, safeTimeZone, shiftDay, streakFrom } from '../stats';
 import {
   DEFAULT_PREFS, MAX_OWN_WORDS,
   type CardDoc, type Cheer, type CheerKind, type ClassData, type ClassMember, type Me, type Prefs, type Role, type Word, type WordData,
 } from '../types';
+import { DAY } from '../time';
 import { getDb, newJoinCode, type Row } from './db';
 import { sanitizeCard, sanitizePrefs, sanitizeWord } from './validate';
 
@@ -70,9 +72,13 @@ export async function findUserById(id: string): Promise<UserRow | null> {
 /**
  * Create a profile. The very first profile becomes the admin. Who is first is settled by the
  * unique 'first_admin' settings row inside the same statement, so two people signing up at the
- * same moment can't both become admin.
+ * same moment can't both become admin. `visitorId` (the browser's anonymous id) records that
+ * this browser joined, for the Visit → Try → Join funnel.
  */
-export async function createUser(input: { username: string; displayName: string; passwordHash: string }, now = Date.now()): Promise<UserRow | 'taken'> {
+export async function createUser(
+  input: { username: string; displayName: string; passwordHash: string; visitorId?: string | null },
+  now = Date.now(),
+): Promise<UserRow | 'taken'> {
   const db = await getDb();
   const id = `u_${randomBytes(12).toString('base64url')}`;
   try {
@@ -84,9 +90,14 @@ export async function createUser(input: { username: string; displayName: string;
          INSERT INTO users (id, username, display_name, password_hash, role, created_at, last_seen_at)
          SELECT $1, $2, $3, $4, CASE WHEN EXISTS (SELECT 1 FROM claim) THEN 'admin' ELSE 'student' END, $5, $5
          RETURNING id
+       ), visitor AS (
+         INSERT INTO visitors (id, first_day, last_day, user_id, joined_day)
+         SELECT $7, $6, $6, id, $6 FROM u WHERE $7::text IS NOT NULL
+         ON CONFLICT (id) DO UPDATE SET last_day = excluded.last_day, user_id = excluded.user_id, joined_day = excluded.joined_day
+           WHERE visitors.user_id IS NULL
        )
        INSERT INTO activity (user_id, day, visits) SELECT id, $6, 1 FROM u`,
-      [id, input.username, input.displayName, input.passwordHash, now, todayKey(now)],
+      [id, input.username, input.displayName, input.passwordHash, now, todayKey(now), input.visitorId ?? null],
     );
   } catch (e) {
     if ((e as { code?: string }).code === '23505' || /unique/i.test(String((e as Error).message))) return 'taken';
@@ -119,6 +130,19 @@ export async function recordVisit(userId: string, now = Date.now()): Promise<voi
      INSERT INTO activity (user_id, day, visits) SELECT id, $3, 1 FROM seen
      ON CONFLICT (user_id, day) DO UPDATE SET visits = activity.visits + 1`,
     [userId, now, todayKey(now)],
+  );
+}
+
+/**
+ * Someone opened the app without a profile (tried: and answered a card as a guest). Counted per
+ * browser and day; the id is random and says nothing about the person.
+ */
+export async function recordVisitor(visitorId: string, tried: boolean, now = Date.now()): Promise<void> {
+  const db = await getDb();
+  await db.query(
+    `INSERT INTO visitors (id, first_day, last_day, tried_day) VALUES ($1, $2, $2, CASE WHEN $3::boolean THEN $2 END)
+     ON CONFLICT (id) DO UPDATE SET last_day = excluded.last_day, tried_day = COALESCE(visitors.tried_day, excluded.tried_day)`,
+    [visitorId, todayKey(now), tried],
   );
 }
 
@@ -273,18 +297,21 @@ export async function putCard(userId: string, wordId: string, doc: CardDoc | nul
   if (!read.rows[0]?.visible) return 'no-word';
   const prev = sanitizeCard(parse(read.rows[0].prev));
   const flags = cardFlags(doc);
-  const { answers, newCards } = diffActivity(prev, doc);
+  const { answers, newCards, reviews, recalled } = diffActivity(prev, doc);
+  // Kept once set (COALESCE): a word stays mastered in the history even if it is forgotten later.
+  const mastered = masteredAt(doc) ?? (flags.mature ? now : null);
   try {
     await db.query(
       `WITH card AS (
-         INSERT INTO cards (user_id, word_id, data, started, mature, updated_at) VALUES ($1, $2, $3::jsonb, $4, $5, $6)
+         INSERT INTO cards (user_id, word_id, data, started, mature, mastered_at, updated_at) VALUES ($1, $2, $3::jsonb, $4, $5, $10::bigint, $6)
          ON CONFLICT (user_id, word_id) DO UPDATE SET data = excluded.data, started = excluded.started,
-           mature = excluded.mature, updated_at = excluded.updated_at
+           mature = excluded.mature, mastered_at = COALESCE(cards.mastered_at, excluded.mastered_at), updated_at = excluded.updated_at
        )
-       INSERT INTO activity (user_id, day, answers, new_cards) SELECT $1, $7, $8, $9 WHERE $8::int > 0 OR $9::int > 0
+       INSERT INTO activity (user_id, day, answers, new_cards, reviews, recalled) SELECT $1, $7, $8, $9, $11, $12 WHERE $8::int > 0 OR $9::int > 0
        ON CONFLICT (user_id, day) DO UPDATE SET answers = activity.answers + excluded.answers,
-         new_cards = activity.new_cards + excluded.new_cards`,
-      [userId, wordId, JSON.stringify(doc), flags.started, flags.mature, now, todayKey(now), answers, newCards],
+         new_cards = activity.new_cards + excluded.new_cards, reviews = activity.reviews + excluded.reviews,
+         recalled = activity.recalled + excluded.recalled`,
+      [userId, wordId, JSON.stringify(doc), flags.started, flags.mature, now, todayKey(now), answers, newCards, mastered, reviews, recalled],
     );
   } catch (e) {
     if ((e as { code?: string }).code === FOREIGN_KEY_VIOLATION) return 'no-word'; // deleted a moment ago
@@ -310,32 +337,43 @@ export async function importCards(userId: string, cards: Record<string, CardDoc>
   const rows = Object.entries(cards).map(([wordId, doc]) => {
     let answers = 0;
     let newCards = 0;
+    let reviews = 0;
+    let recalled = 0;
     for (const s of [doc.f, doc.r]) {
       if (!s) continue;
-      answers += s.log.filter((e) => isToday(e.t)).length;
+      const todays = s.log.filter((e) => isToday(e.t));
+      answers += todays.length;
+      for (const e of todays) {
+        if (e.k !== 'review') continue;
+        reviews++;
+        if (isRecalled(e)) recalled++;
+      }
       if (s.type !== 'new' && isToday(s.first)) newCards++;
     }
-    return { word_id: wordId, data: doc, ...cardFlags(doc), answers, new_cards: newCards };
+    const flags = cardFlags(doc);
+    const mastered = masteredAt(doc) ?? (flags.mature ? now : null);
+    return { word_id: wordId, data: doc, ...flags, mastered_at: mastered, answers, new_cards: newCards, reviews, recalled };
   });
   if (!rows.length && prefs === undefined) return 0;
   const db = await getDb();
   const r = await db.query(
     `WITH x AS (
        SELECT * FROM jsonb_to_recordset($2::jsonb)
-         AS x(word_id text, data jsonb, started int, mature int, answers int, new_cards int)
+         AS x(word_id text, data jsonb, started int, mature int, mastered_at bigint, answers int, new_cards int, reviews int, recalled int)
      ), added AS (
-       INSERT INTO cards (user_id, word_id, data, started, mature, updated_at)
-       SELECT $1, x.word_id, x.data, x.started, x.mature, $3
+       INSERT INTO cards (user_id, word_id, data, started, mature, mastered_at, updated_at)
+       SELECT $1, x.word_id, x.data, x.started, x.mature, x.mastered_at, $3
        FROM x JOIN words w ON w.id = x.word_id AND (w.owner_id IS NULL OR w.owner_id = $1)
        ON CONFLICT (user_id, word_id) DO NOTHING
        RETURNING word_id
      ), counted AS (
-       INSERT INTO activity (user_id, day, answers, new_cards)
-       SELECT $1, $4, LEAST(sum(x.answers), 1000), LEAST(sum(x.new_cards), 400)
+       INSERT INTO activity (user_id, day, answers, new_cards, reviews, recalled)
+       SELECT $1, $4, LEAST(sum(x.answers), 1000), LEAST(sum(x.new_cards), 400), LEAST(sum(x.reviews), 1000), LEAST(sum(x.recalled), 1000)
        FROM x JOIN added ON added.word_id = x.word_id
        HAVING sum(x.answers) > 0 OR sum(x.new_cards) > 0
        ON CONFLICT (user_id, day) DO UPDATE SET answers = activity.answers + excluded.answers,
-         new_cards = activity.new_cards + excluded.new_cards
+         new_cards = activity.new_cards + excluded.new_cards, reviews = activity.reviews + excluded.reviews,
+         recalled = activity.recalled + excluded.recalled
      ), saved_prefs AS (
        INSERT INTO prefs (user_id, data) SELECT $1, $5::jsonb WHERE $5::jsonb IS NOT NULL
        ON CONFLICT (user_id) DO NOTHING
@@ -549,6 +587,69 @@ export async function adminStats(now = Date.now()): Promise<AdminStats> {
       .sort((a, b) => (b.lastSeenAt ?? 0) - (a.lastSeenAt ?? 0)),
     joinCode,
   };
+}
+
+/**
+ * Everything /admin/analytics shows (see lib/analytics.ts for the definitions). Six small queries
+ * in parallel, each served by an index; the arithmetic happens in computeAnalytics().
+ */
+export async function analytics(period: Period, now = Date.now()): Promise<Analytics> {
+  const db = await getDb();
+  const today = todayKey(now);
+  // Far enough back for the weekly charts, the retention cohorts and the funnel's period
+  const charts = shiftDay(today, -Math.max(7 * WEEKS, 7 * COHORTS));
+  const since = period === 'all' ? '' : [charts, shiftDay(today, -Number(period))].sort()[0];
+  const masteredSince = now - (7 * WEEKS + 2) * DAY;
+  const [students, study, mastered, cheers, visitors, totals] = await Promise.all([
+    db.query(`SELECT id, created_at FROM users WHERE role = 'student'`),
+    db.query(
+      `SELECT a.user_id, a.day, a.answers, a.new_cards, a.reviews, a.recalled
+       FROM activity a JOIN users u ON u.id = a.user_id
+       WHERE u.role = 'student' AND a.answers > 0 AND a.day >= $1`,
+      [since],
+    ),
+    db.query(
+      `SELECT c.user_id, c.mastered_at FROM cards c JOIN users u ON u.id = c.user_id
+       WHERE u.role = 'student' AND c.mastered_at >= $1`,
+      [masteredSince],
+    ),
+    db.query(`SELECT c.day FROM cheers c JOIN users u ON u.id = c.from_user WHERE u.role = 'student' AND c.day >= $1`, [charts]),
+    db.query('SELECT first_day, last_day, tried_day, joined_day FROM visitors WHERE first_day >= $1 OR last_day >= $2', [
+      since,
+      shiftDay(today, -6),
+    ]),
+    db.query(
+      `SELECT (SELECT count(*)::int FROM cards c JOIN users u ON u.id = c.user_id
+               WHERE u.role = 'student' AND c.mastered_at IS NOT NULL) AS mastered,
+              (SELECT min(first_day) FROM visitors) AS visitors_since`,
+    ),
+  ]);
+  const t = totals.rows[0] ?? {};
+  return computeAnalytics(
+    {
+      today,
+      students: students.rows.map((r) => ({ id: str(r.id), joinedDay: dayKey(num(r.created_at), TIMEZONE) })),
+      study: study.rows.map((r) => ({
+        userId: str(r.user_id),
+        day: str(r.day),
+        answers: num(r.answers),
+        newCards: num(r.new_cards),
+        reviews: num(r.reviews),
+        recalled: num(r.recalled),
+      })),
+      mastered: mastered.rows.map((r) => ({ userId: str(r.user_id), day: dayKey(num(r.mastered_at), TIMEZONE) })),
+      masteredTotal: num(t.mastered),
+      cheerDays: cheers.rows.map((r) => str(r.day)),
+      visitors: visitors.rows.map((r) => ({
+        firstDay: str(r.first_day),
+        lastDay: str(r.last_day),
+        triedDay: r.tried_day == null ? null : str(r.tried_day),
+        joinedDay: r.joined_day == null ? null : str(r.joined_day),
+      })),
+      visitorsSince: t.visitors_since == null ? null : str(t.visitors_since),
+    },
+    period,
+  );
 }
 
 /* ============================== settings ============================== */

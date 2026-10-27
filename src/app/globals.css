@@ -697,3 +697,54 @@ a.btn { text-decoration: none; }
 .ai-empty { display: grid; gap: 8px; padding: 8px 0; }
 .ai-fill { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
 .ai-fill select { width: auto; min-height: 34px; padding: 0 28px 0 10px; font-size: 13.5px; }
+
+/* ---------- analytics (/admin/analytics) ---------- */
+/* One hue (--easy) for every data mark on the page; gray for context. */
+a.seg-btn { text-decoration: none; }
+.seg-btn[aria-current] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
+@media (max-width: 399px) { .admin .appbar-word { display: none; } }
+.sec-h { font-size: 15px; font-weight: 700; margin: 6px 0 8px; }
+.cols-12 { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+.seg-ns { background: var(--easy); }
+.ns-h { font-family: var(--font-display); font-size: 22px; font-weight: 700; line-height: 1.2; }
+.ns-hero { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 14px; margin-top: 10px; }
+.ns-v { font-size: 56px; font-weight: 700; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.ns-sub { font-size: 14px; color: var(--ink-2); margin: 6px 0 14px; }
+.delta { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 700; color: var(--ink-3); }
+.delta.up { color: var(--good); }
+.delta.down { color: var(--again); }
+.spark { display: flex; align-items: flex-end; gap: 2px; height: 26px; margin-top: 8px; }
+.spark i { flex: 1; height: 8%; background: var(--line-strong); border-radius: 2px 2px 0 0; }
+.spark i:last-child { background: var(--easy); }
+.spark i.is-empty { height: 1px; background: var(--line); }
+.fineprint { font-size: 12.5px; color: var(--ink-3); margin-top: 10px; text-wrap: pretty; }
+.fn-head { flex-wrap: wrap; align-items: center; }
+.fn-call { padding: 10px 14px; border-radius: 12px; background: var(--surface-2); font-size: 14px; margin-bottom: 12px; text-wrap: pretty; }
+.fn-grid { display: grid; gap: 16px; }
+@media (min-width: 760px) { .fn-grid { grid-template-columns: 1fr 1fr; } }
+.fn-h { font-size: 12px; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); font-weight: 700; margin-bottom: 6px; }
+.fn-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.fn-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; padding: 10px 10px 12px; border-radius: 12px; }
+.fn-row.is-drop { background: var(--mark-soft); }
+.fn-text { display: grid; min-width: 0; }
+.fn-text b { font-size: 15px; }
+.fn-text span { font-size: 12.5px; color: var(--ink-2); }
+.fn-nums { display: grid; justify-items: end; align-content: start; }
+.fn-nums b { font-size: 20px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.fn-nums span { font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
+.fn-track { grid-column: 1 / -1; height: 10px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+.fn-bar { display: block; height: 100%; min-width: 3px; border-radius: 999px; background: var(--easy); }
+.fn-flag { grid-column: 1 / -1; font-size: 12px; font-weight: 700; }
+.fn-notes { margin: 12px 0 0; padding-left: 18px; display: grid; gap: 2px; }
+.atbl-scroll { overflow-x: auto; margin-inline: -16px; padding-inline: 16px; }
+.atbl { border-collapse: collapse; min-width: 100%; font-size: 14px; }
+.atbl th, .atbl td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.atbl thead th { font-size: 12.5px; color: var(--ink-2); font-weight: 600; white-space: nowrap; }
+.atbl tbody th { font-weight: 600; white-space: nowrap; }
+.atbl .num { text-align: right; font-family: var(--font-mono); font-size: 13.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.atbl .why { color: var(--ink-2); min-width: 220px; }
+.cohort th, .cohort td { padding: 8px; }
+.cohort td.cell { text-align: center; border: 2px solid var(--surface); background: color-mix(in srgb, var(--easy) calc(var(--p) * .5%), var(--surface)); }
+.cohort td.cell.is-partial { font-style: italic; }
+.weekly summary { cursor: pointer; font-weight: 700; font-size: 15px; }
+.weekly[open] summary { margin-bottom: 10px; }

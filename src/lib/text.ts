@@ -79,3 +79,5 @@ export const parseTags = (s: string): string[] => [
 /** Ids are minted on the client, so creating a word is an idempotent PUT. */
 export const newId = () => 'w' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 export const ID_RE = /^[A-Za-z0-9_\-.~:@+]{1,120}$/;
+/** The random id a browser makes up for anonymous visit counting (a UUID). */
+export const VISITOR_RE = /^[A-Za-z0-9-]{16,64}$/;

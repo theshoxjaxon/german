@@ -210,3 +210,81 @@ describe('database', () => {
     expect(Object.keys(await repo.listWords(null))).toHaveLength(Object.keys(words).length);
   });
 });
+
+describe('analytics', () => {
+  const DAY = 86_400_000;
+  const now = Date.now();
+  const e1 = { t: now - 30 * DAY, r: 'good' as const, k: 'learning' as const, i: 1 };
+  const e2 = { t: now - 20 * DAY, r: 'hard' as const, k: 'review' as const, i: 6 };
+  const e3 = { t: now - 1000, r: 'easy' as const, k: 'review' as const, i: 22 }; // the first 21+ day gap
+  const state = (log: (typeof e1 | typeof e2 | typeof e3)[], ivl: number): CardDoc => ({
+    f: { type: 'review', step: 0, due: now + ivl * DAY, ivl, ease: 2.5, reps: log.length, lapses: 0, first: e1.t, last: log.at(-1)!.t, log },
+    r: null,
+    suspended: false,
+    updatedAt: now,
+  });
+  const V0 = '00000000-0000-4000-8000-000000000000';
+  const V1 = '11111111-1111-4111-8111-111111111111';
+  const V2 = '22222222-2222-4222-8222-222222222222';
+  const masteredAt = async (userId: string) => {
+    const conn = await (await import('./db')).getDb();
+    return (await conn.query('SELECT mastered_at FROM cards WHERE user_id = $1', [userId])).rows[0]?.mastered_at;
+  };
+
+  it('counts reviews, recall and the moment a word is mastered, and keeps it after an undo', async () => {
+    const nodira = await repo.createUser({ username: 'nodira', displayName: 'Nodira', passwordHash: 'x', visitorId: V0 });
+    if (nodira === 'taken') throw new Error('taken');
+    await repo.putCard(nodira.id, 'l3-familie', state([e1, e2], 6));
+    expect(await masteredAt(nodira.id)).toBeNull();
+    await repo.putCard(nodira.id, 'l3-familie', state([e1, e2, e3], 22));
+    expect(await masteredAt(nodira.id)).toBe(e3.t);
+    await repo.putCard(nodira.id, 'l3-familie', state([e1, e2], 6)); // undo
+    expect(await masteredAt(nodira.id)).toBe(e3.t);
+
+    const a = await repo.analytics('90');
+    expect(a.northStar).toMatchObject({ total: 1, learnersThisWeek: 1 });
+    expect(a.northStar.perWeek.at(-1)).toBe(1);
+    expect(a.inputs.recallRate.at(-1)).toBe(0.5); // Hard (not remembered) and Easy (remembered)
+    expect(a.users).toMatchObject({ students: 1, newThisWeek: 1, activeToday: 1 }); // the admin doesn't count
+  });
+
+  it('counts anonymous visitors and links the browser someone signs up in', async () => {
+    await repo.recordVisitor(V1, false);
+    await repo.recordVisitor(V1, true); // answered a card as a guest
+    await repo.recordVisitor(V2, false); // only looked
+    const jasur = await repo.createUser({ username: 'jasur', displayName: 'Jasur', passwordHash: 'x', visitorId: V1 });
+    expect(jasur).not.toBe('taken');
+
+    const { funnel, users } = await repo.analytics('30');
+    expect(funnel.guests.map((s) => s.count)).toEqual([3, 1, 1]); // V0, V1, V2 → V1 tried → V1 joined
+    expect(funnel.joinedDirectly).toBe(1); // V0 (nodira) signed up without trying
+    expect(funnel.learners[0].count).toBe(2);
+    expect(funnel.visitorsSince).toBe(repo.todayKey());
+    expect(users.visitorsWeek).toBe(1); // V2: no profile yet
+  });
+
+  it('fills in mastery and recall from the review history of an older database', async () => {
+    const dbm = await import('./db');
+    const conn = await dbm.getDb();
+    const nodira = (await repo.findUserByUsername('nodira'))!;
+    await repo.putCard(nodira.id, 'l3-familie', state([e1, e2, e3], 22));
+    // Make it look like a database from before analytics existed
+    await conn.query('UPDATE cards SET mastered_at = NULL');
+    await conn.query('UPDATE activity SET reviews = 0, recalled = 0');
+    await conn.query(`DELETE FROM settings WHERE key = 'analytics_backfill'`);
+    await conn.query(`UPDATE settings SET value = '2' WHERE key = 'schema_version'`);
+
+    dbm.setDatabase(conn); // a server restart with the new version
+    await dbm.getDb();
+    expect(await masteredAt(nodira.id)).toBe(e3.t);
+    const days = await conn.query<{ day: string; reviews: number; recalled: number }>(
+      'SELECT day, reviews, recalled FROM activity WHERE user_id = $1 AND reviews > 0 ORDER BY day',
+      [nodira.id],
+    );
+    // Each review lands on the day it was given: Hard 20 days ago, Easy today
+    expect(days.rows.map((r) => [r.day, r.reviews, r.recalled])).toEqual([
+      [repo.todayKey(e2.t), 1, 0],
+      [repo.todayKey(), 1, 1],
+    ]);
+  });
+});
