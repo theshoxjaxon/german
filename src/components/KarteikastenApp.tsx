@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { tick, useLocalState } from '@/lib/client/hooks';
+import { useT } from '@/lib/client/i18n';
 import { store, useStore } from '@/lib/client/store';
 import { buildQueue, pickNext, type QueueItem } from '@/lib/queue';
 import { EMPTY_FILTERS, SORTS, type Sort } from '@/lib/words-view';
@@ -35,6 +36,7 @@ const isSort = (v: unknown) =>
 
 export default function KarteikastenApp() {
   const { me, guest } = useStore();
+  const { t, lang } = useT();
   const [tab, setTab] = useLocalState<Tab>('kk.tab', 'study', isTab);
   const [layout, setLayout] = useLocalState<Layout>('kk.layout', 'table', isLayout);
   const [sort, setSort] = useLocalState<Sort>('kk.sort', DEFAULT_SORT, isSort);
@@ -100,6 +102,11 @@ export default function KarteikastenApp() {
     };
   }, [toast]);
 
+  // Screen readers and the browser's spell checking follow the interface language.
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
+
   // Escape closes the open sheet; "/" jumps to the word search.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -132,10 +139,10 @@ export default function KarteikastenApp() {
         <header className="appbar">
           <span className="appbar-brand">
             <BrandMark size={26} />
-            Karteikasten
+            <span className="appbar-word">Karteikasten</span>
           </span>
           {me && (
-            <button className="appbar-user" onClick={() => openSheet({ kind: 'account' })} aria-label={`Your profile, ${me.displayName}`}>
+            <button className="appbar-user" onClick={() => openSheet({ kind: 'account' })} aria-label={t('Your profile, {name}', { name: me.displayName })}>
               <span className="appbar-name">{me.displayName.split(' ')[0]}</span>
               <Avatar id={me.id} name={me.displayName} size="sm" />
             </button>
@@ -143,31 +150,31 @@ export default function KarteikastenApp() {
           {guest && <GuestActions />}
         </header>
         <main className="views">
-          <section className="view" aria-label="Study" hidden={tab !== 'study'}>
+          <section className="view" aria-label={t('Study')} hidden={tab !== 'study'}>
             <StudyView />
           </section>
-          {/* Guests practise the flashcards; the other sections come with a free profile. */}
-          <section className={`view${guest ? '' : ' view-words'}`} aria-label="Words" hidden={tab !== 'words'}>
-            {guest ? <LockedView feature="words" /> : <WordsView />}
+          {/* Guests practise the flashcards and browse the words (read-only); Class and Progress come with a free profile. */}
+          <section className="view view-words" aria-label={t('Words')} hidden={tab !== 'words'}>
+            <WordsView />
           </section>
-          <section className="view" aria-label="Class" hidden={tab !== 'class'}>
+          <section className="view" aria-label={t('Class')} hidden={tab !== 'class'}>
             {guest ? <LockedView feature="class" /> : <ClassView active={tab === 'class'} />}
           </section>
-          <section className="view" aria-label="Progress" hidden={tab !== 'stats'}>
+          <section className="view" aria-label={t('Progress')} hidden={tab !== 'stats'}>
             {guest ? <LockedView feature="stats" /> : <StatsView />}
           </section>
         </main>
-        <nav className="tabbar" aria-label="Sections">
-          {TABS.map((t) => {
-            const locked = guest && t.id !== 'study';
+        <nav className="tabbar" aria-label={t('Sections')}>
+          {TABS.map((tb) => {
+            const locked = guest && (tb.id === 'class' || tb.id === 'stats');
             return (
-              <button key={t.id} className="tab" aria-current={tab === t.id ? 'page' : 'false'} onClick={() => setTab(t.id)}
-                aria-label={locked ? `${t.label} (needs a profile)` : undefined}>
+              <button key={tb.id} className="tab" aria-current={tab === tb.id ? 'page' : 'false'} onClick={() => setTab(tb.id)}
+                aria-label={locked ? t('{label} (needs a profile)', { label: t(tb.label) }) : undefined}>
                 <span className="tab-ic">
-                  <Icon name={t.icon} />
+                  <Icon name={tb.icon} />
                   {locked && <span className="tab-lock"><Icon name="lock" /></span>}
                 </span>
-                {t.label}
+                {t(tb.label)}
               </button>
             );
           })}
@@ -177,7 +184,7 @@ export default function KarteikastenApp() {
       {review && <ReviewSession first={review.first} startedAt={review.startedAt} onClose={endReview} />}
       {sheet && <SheetHost spec={sheet} />}
       <div className={`toast${toastState.visible ? ' show' : ''}`} role="status" aria-live="polite">
-        {toastState.message}
+        {t(toastState.message)}
       </div>
     </UIContext.Provider>
   );

@@ -1,12 +1,13 @@
 import { badRequest, ok, readJson } from '@/lib/server/http';
 import * as repo from '@/lib/server/repo';
 import { requireUser } from '@/lib/server/session';
-import { CHEERS, type CheerKind } from '@/lib/types';
+import { CHEERS, isClassMember, type CheerKind } from '@/lib/types';
 
 /** POST /api/cheers { to, kind } sends a classmate encouragement. One per classmate per day. */
 export async function POST(req: Request) {
   const auth = await requireUser(req);
   if (auth.response) return auth.response;
+  if (!isClassMember(auth.user)) return Response.json({ error: 'Join your class to send cheers.' }, { status: 403 });
   const body = (await readJson(req)) as { to?: unknown; kind?: unknown } | undefined;
   const to = typeof body?.to === 'string' ? body.to : '';
   const kind = body?.kind as CheerKind;

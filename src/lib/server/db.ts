@@ -23,7 +23,7 @@ export interface Db {
 }
 
 /** Bump when the schema or the built-in word lists change: every database then runs migrate() once more. */
-const SCHEMA_VERSION = '3';
+const SCHEMA_VERSION = '4';
 
 /*
  * Times are milliseconds since 1970 (JavaScript's Date.now()) in BIGINT columns; days are
@@ -123,6 +123,10 @@ CREATE TABLE IF NOT EXISTS visitors (
 );
 CREATE INDEX IF NOT EXISTS visitors_first_idx ON visitors (first_day);
 
+-- Schema 4: signing up without the class code makes a self-learner (in_class = false). Everyone
+-- from before needed the code, so they are in the class.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS in_class boolean NOT NULL DEFAULT true;
+
 -- Supabase also publishes the public schema through its REST API. Row Level Security with no
 -- policies closes that door: only this server (connecting as the table owner) reads the data.
 ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
@@ -181,7 +185,7 @@ export function newJoinCode(): string {
 
 const STATUS = `SELECT (SELECT value FROM settings WHERE key = 'schema_version') AS version,
                        (SELECT value FROM settings WHERE key = 'join_code') AS join_code,
-                       (SELECT count(*) FROM users)::int AS users`;
+                       (SELECT count(*) FROM users WHERE role = 'admin')::int AS admins`;
 
 async function migrate(db: Db): Promise<void> {
   let status = await db.query(STATUS).catch(() => null); // fails when the tables don't exist yet
@@ -211,8 +215,8 @@ async function migrate(db: Db): Promise<void> {
     status = await db.query(STATUS);
   }
   const s = status.rows[0];
-  if (Number(s.users) === 0) {
-    console.log(`\n  Karteikasten: no profiles yet. Sign up with join code ${s.join_code} — the first profile becomes the admin.\n`);
+  if (Number(s.admins) === 0) {
+    console.log(`\n  Karteikasten: no teacher yet. Sign up with join code ${s.join_code}: the first profile with the code becomes the admin.\n`);
   }
 }
 

@@ -2,10 +2,11 @@
 
 import { useMemo, useRef, useEffect } from 'react';
 import { useNow } from '@/lib/client/hooks';
+import { useT } from '@/lib/client/i18n';
 import { useStore } from '@/lib/client/store';
 import { compareText, deckCounts, wordInfo } from '@/lib/queue';
 import { genderOf } from '@/lib/text';
-import { dayIndex, plural } from '@/lib/time';
+import { dayIndex } from '@/lib/time';
 import { POS_OPTIONS } from '@/lib/types';
 import { EMPTY_FILTERS, FILTER_LABEL, matchesStatus, SORTS, STATUS_OPTS, toCSV, visibleRows, type FilterGroup, type SortKey } from '@/lib/words-view';
 import { BottomSheet } from './BottomSheet';
@@ -24,6 +25,7 @@ export function FilterSheet() {
   const data = useStore();
   const now = useNow();
   const ui = useUI();
+  const { t, tn } = useT();
   const { filters } = ui.query;
 
   const groups = useMemo(() => {
@@ -33,19 +35,19 @@ export function FilterSheet() {
     const count = (pred: (i: number) => boolean) => words.reduce((n, _w, k) => n + (pred(k) ? 1 : 0), 0);
     const tags = [...new Set(words.flatMap((w) => w.tags || []))].sort(compareText);
     const out: Record<FilterGroup, Option[]> = {
-      deck: deckCounts(data.words).map(([d, n]) => ({ value: d, label: d || '(no deck)', count: n })),
-      status: STATUS_OPTS.map(([k, l]) => ({ value: k, label: l, count: count((i) => matchesStatus(k, infos[i])) })),
+      deck: deckCounts(data.words).map(([d, n]) => ({ value: d, label: d || t('(no deck)'), count: n })),
+      status: STATUS_OPTS.map(([k, l]) => ({ value: k, label: t(l), count: count((i) => matchesStatus(k, infos[i])) })),
       gender: (['der', 'die', 'das', 'none'] as const).map((k) => ({
-        value: k, label: k === 'none' ? 'no article' : k, art: k === 'none' ? undefined : k,
+        value: k, label: k === 'none' ? t('no article') : k, art: k === 'none' ? undefined : k,
         count: count((i) => (genderOf(words[i].term) || 'none') === k),
       })),
       pos: POS_OPTIONS.filter(([k]) => words.some((w) => (w.pos || 'other') === k)).map(([k, l]) => ({
-        value: k, label: l, count: count((i) => (words[i].pos || 'other') === k),
+        value: k, label: t(l), count: count((i) => (words[i].pos || 'other') === k),
       })),
-      tag: tags.map((t) => ({ value: t, label: t, count: count((i) => (words[i].tags || []).includes(t)) })),
+      tag: tags.map((tag) => ({ value: tag, label: tag, count: count((i) => (words[i].tags || []).includes(tag)) })),
     };
     return out;
-  }, [data, now]);
+  }, [data, now, t]);
 
   const shown = useMemo(() => visibleRows(data, now, ui.query.q, filters, ui.sort).length, [data, now, ui.query.q, filters, ui.sort]);
   const toggle = (group: FilterGroup, value: string) =>
@@ -56,18 +58,18 @@ export function FilterSheet() {
 
   return (
     <BottomSheet
-      title="Filter words"
+      title={t('Filter words')}
       footer={
         <>
-          <button className="btn" onClick={() => ui.setQuery(() => ({ q: '', filters: EMPTY_FILTERS }))}>Clear all</button>
-          <button className="btn btn-primary" onClick={ui.closeSheet}>Show {plural(shown, 'word', 'words')}</button>
+          <button className="btn" onClick={() => ui.setQuery(() => ({ q: '', filters: EMPTY_FILTERS }))}>{t('Clear all')}</button>
+          <button className="btn btn-primary" onClick={ui.closeSheet}>{tn(shown, 'Show {n} word', 'Show {n} words')}</button>
         </>
       }
     >
       <div className="form">
         {(Object.keys(groups) as FilterGroup[]).filter((g) => groups[g].length).map((group) => (
           <fieldset key={group}>
-            <legend>{FILTER_LABEL[group]}</legend>
+            <legend>{t(FILTER_LABEL[group])}</legend>
             <div className="chipset">
               {groups[group].map((o) => (
                 <button key={o.value} type="button" className="chip" aria-pressed={filters[group].includes(o.value)} onClick={() => toggle(group, o.value)}>
@@ -84,21 +86,22 @@ export function FilterSheet() {
 
 export function SortSheet() {
   const ui = useUI();
+  const { t } = useT();
   const set = (key: SortKey, dir = SORTS[key]?.dir ?? 'asc') => ui.setSort({ key, dir });
   return (
-    <BottomSheet title="Sort words">
+    <BottomSheet title={t('Sort words')}>
       <div className="form">
-        <div className="optlist" role="radiogroup" aria-label="Sort by">
+        <div className="optlist" role="radiogroup" aria-label={t('Sort by')}>
           {(Object.keys(SORTS) as SortKey[]).map((k) => (
             <button key={k} className="opt" role="radio" aria-checked={ui.sort.key === k} onClick={() => set(k)}>
-              <span>{SORTS[k]!.label}</span>
+              <span>{t(SORTS[k]!.label)}</span>
               <Icon name="check" />
             </button>
           ))}
         </div>
-        <span className="seg" role="group" aria-label="Direction" style={{ justifySelf: 'start' }}>
-          <button className="seg-btn" aria-pressed={ui.sort.dir === 'asc'} onClick={() => set(ui.sort.key, 'asc')}>Ascending</button>
-          <button className="seg-btn" aria-pressed={ui.sort.dir === 'desc'} onClick={() => set(ui.sort.key, 'desc')}>Descending</button>
+        <span className="seg" role="group" aria-label={t('Direction')} style={{ justifySelf: 'start' }}>
+          <button className="seg-btn" aria-pressed={ui.sort.dir === 'asc'} onClick={() => set(ui.sort.key, 'asc')}>{t('Ascending')}</button>
+          <button className="seg-btn" aria-pressed={ui.sort.dir === 'desc'} onClick={() => set(ui.sort.key, 'desc')}>{t('Descending')}</button>
         </span>
       </div>
     </BottomSheet>
@@ -107,27 +110,28 @@ export function SortSheet() {
 
 export function FieldsSheet() {
   const ui = useUI();
+  const { t } = useT();
   const toggle = (key: string, on: boolean) =>
     ui.setFields(COLUMNS.map((c) => c.key as string).filter((k) => (k === key ? on : ui.fields.includes(k))));
   return (
     <BottomSheet
-      title="Fields in the table"
+      title={t('Fields in the table')}
       footer={
         <>
-          <button className="btn" onClick={() => ui.setFields(DEFAULT_FIELDS)}>Default fields</button>
-          <button className="btn btn-primary" onClick={ui.closeSheet}>Done</button>
+          <button className="btn" onClick={() => ui.setFields(DEFAULT_FIELDS)}>{t('Default fields')}</button>
+          <button className="btn btn-primary" onClick={ui.closeSheet}>{t('Done')}</button>
         </>
       }
     >
       <div>
         <label className="toggle-row">
           <input type="checkbox" checked disabled />
-          <span>Word<small>Always shown</small></span>
+          <span>{t('Word')}<small>{t('Always shown')}</small></span>
         </label>
         {COLUMNS.map((c) => (
           <label key={c.key} className="toggle-row">
             <input type="checkbox" checked={ui.fields.includes(c.key)} onChange={(e) => toggle(c.key, e.target.checked)} />
-            <span>{c.label}</span>
+            <span>{t(c.label)}</span>
           </label>
         ))}
       </div>
@@ -139,6 +143,7 @@ export function MoreSheet() {
   const data = useStore();
   const now = useNow();
   const ui = useUI();
+  const { t, tn } = useT();
   const rows = visibleRows(data, now, ui.query.q, ui.query.filters, ui.sort);
   const copy = () => {
     const csv = toCSV(rows);
@@ -153,17 +158,17 @@ export function MoreSheet() {
     }
   };
   return (
-    <BottomSheet title="Word list">
+    <BottomSheet title={t('Word list')}>
       <div className="optlist show-icons">
-        <button className="opt" onClick={copy}>Copy {plural(rows.length, 'word', 'words')} as CSV <Icon name="copy" /></button>
+        <button className="opt" onClick={copy}>{tn(rows.length, 'Copy {n} word as CSV', 'Copy {n} words as CSV')} <Icon name="copy" /></button>
         {data.me && data.ai && (
-          <button className="opt" onClick={() => ui.openSheet({ kind: 'ai' })}>Add words with AI (photo or list) <Icon name="sparkle" /></button>
+          <button className="opt" onClick={() => ui.openSheet({ kind: 'ai' })}>{t('Add words with AI (photo or list)')} <Icon name="sparkle" /></button>
         )}
         {data.me && (
-          <button className="opt" onClick={() => ui.openSheet({ kind: 'import' })}>Import a pasted list <Icon name="paste" /></button>
+          <button className="opt" onClick={() => ui.openSheet({ kind: 'import' })}>{t('Import a pasted list')} <Icon name="paste" /></button>
         )}
       </div>
-      <p className="hint">CSV pastes straight into Excel, Google Sheets or Airtable.</p>
+      <p className="hint">{t('CSV pastes straight into Excel, Google Sheets or Airtable.')}</p>
     </BottomSheet>
   );
 }
@@ -178,9 +183,10 @@ export function CsvSheet({ text }: { text: string }) {
     });
     return () => cancelAnimationFrame(raf);
   }, []);
+  const { t } = useT();
   return (
-    <BottomSheet title="Copy as CSV">
-      <p className="lede">Select all and copy.</p>
+    <BottomSheet title={t('Copy as CSV')}>
+      <p className="lede">{t('Select all and copy.')}</p>
       <textarea className="csv-out" ref={ref} readOnly value={text} />
     </BottomSheet>
   );

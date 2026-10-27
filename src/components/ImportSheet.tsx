@@ -1,12 +1,12 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useT } from '@/lib/client/i18n';
 import { store, useStore } from '@/lib/client/store';
 import { parseList, suggestDeck } from '@/lib/import-parser';
 import { addsSharedWords, MY_WORDS_DECK } from '@/lib/ownership';
 import { deckNames, nextOrder } from '@/lib/queue';
 import { guessPos, newId, norm, parseTags } from '@/lib/text';
-import { plural } from '@/lib/time';
 import type { Word } from '@/lib/types';
 import { BottomSheet } from './BottomSheet';
 import { Term } from './ui';
@@ -16,6 +16,7 @@ import { useUI } from './ui-context';
 export function ImportSheet() {
   const data = useStore();
   const ui = useUI();
+  const { t, tn } = useT();
   const [text, setText] = useState('');
   const [deckInput, setDeckInput] = useState<string | null>(null); // null until the user types a deck
   const [tags, setTags] = useState('');
@@ -60,50 +61,50 @@ export function ImportSheet() {
     setBusy(false);
     if (ok) {
       ui.closeSheet();
-      ui.toast(`Imported ${plural(list.length, 'word', 'words')}${deck ? ` into ${deck}` : ''}`);
+      ui.toast(deck ? tn(list.length, 'Imported {n} word into {deck}', 'Imported {n} words into {deck}', { deck }) : tn(list.length, 'Imported {n} word', 'Imported {n} words'));
     }
   };
 
   return (
     <BottomSheet
-      title="Import a word list"
+      title={t('Import a word list')}
       footer={
         <>
-          <button className="btn" onClick={ui.closeSheet}>Cancel</button>
+          <button className="btn" onClick={ui.closeSheet}>{t('Cancel')}</button>
           <button className="btn btn-primary" disabled={!todo.length || busy} onClick={run}>
-            {busy ? 'Importing…' : todo.length ? `Import ${plural(todo.length, 'word', 'words')}` : 'Import'}
+            {busy ? t('Importing…') : todo.length ? tn(todo.length, 'Import {n} word', 'Import {n} words') : t('Import')}
           </button>
         </>
       }
     >
       <p className="lede">
-        Paste one word per line. Put a tab, a spaced dash ( – ), = or ; between the word and its meaning. A list with each meaning on the line under its word works too.
+        {t('Paste one word per line. Put a tab, a spaced dash ( – ), = or ; between the word and its meaning. A list with each meaning on the line under its word works too.')}
       </p>
-      <p className="hint">{shared ? 'These become lesson words for everyone in your class.' : 'These become your own words. Only you see them.'}</p>
+      <p className="hint">{t(shared ? 'These become lesson words for everyone in your class.' : 'These become your own words. Only you see them.')}</p>
       <div className="field">
-        <label htmlFor="imp-text">Word list</label>
+        <label htmlFor="imp-text">{t('Word list')}</label>
         <textarea id="imp-text" rows={7} spellCheck={false} autoCapitalize="off" data-autofocus value={text} onChange={(e) => setText(e.target.value)}
           placeholder={'die Familie – oila\nder Vater – ota\nsprechen – gapirmoq'} />
       </div>
       <div className="field-row">
         <div className="field">
-          <label htmlFor="imp-deck">Deck</label>
+          <label htmlFor="imp-deck">{t('Deck')}</label>
           <input id="imp-deck" list="deck-list-imp" value={deck} onChange={(e) => setDeckInput(e.target.value)} placeholder="Lektion 4" autoComplete="off" />
           <datalist id="deck-list-imp">
             {deckNames(data.words).map((d) => <option key={d} value={d} />)}
           </datalist>
         </div>
         <div className="field">
-          <label htmlFor="imp-tags">Tags for all</label>
+          <label htmlFor="imp-tags">{t('Tags for all')}</label>
           <input id="imp-tags" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="family" autoComplete="off" autoCapitalize="off" />
         </div>
       </div>
       {text.trim() && (
         <div aria-live="polite">
           <p className="small">
-            <b>{plural(todo.length, 'word', 'words')} ready</b>
-            {dupes > 0 && ` · ${dupes} already in this deck`}
-            {parsed.skipped.length > 0 && ` · ${plural(parsed.skipped.length, 'line', 'lines')} skipped`}
+            <b>{tn(todo.length, '{n} word ready', '{n} words ready')}</b>
+            {dupes > 0 && ` · ${t('{n} already in this deck', { n: dupes })}`}
+            {parsed.skipped.length > 0 && ` · ${tn(parsed.skipped.length, '{n} line skipped', '{n} lines skipped')}`}
           </p>
           {todo.length > 0 && (
             <table className="prev-table">
@@ -117,9 +118,9 @@ export function ImportSheet() {
               </tbody>
             </table>
           )}
-          {todo.length > 6 && <p className="hint">and {todo.length - 6} more</p>}
+          {todo.length > 6 && <p className="hint">{t('and {n} more', { n: todo.length - 6 })}</p>}
           {parsed.skipped.length > 0 && (
-            <p className="hint">Skipped: {parsed.skipped.slice(0, 3).join(' · ')}{parsed.skipped.length > 3 ? ' …' : ''}</p>
+            <p className="hint">{t('Skipped:')} {parsed.skipped.slice(0, 3).join(' · ')}{parsed.skipped.length > 3 ? ' …' : ''}</p>
           )}
         </div>
       )}

@@ -2,9 +2,10 @@
 
 A mobile-first vocabulary app for a learning center. Students study German words with spaced-repetition flashcards, each with their own private progress, and see how their classmates are doing. The teacher manages the words and sees who is active on an admin dashboard.
 
-- **Try it without an account**: anyone can open the app and practise the flashcards as a guest. Progress is kept in that browser, and moves into their profile when they sign up.
-- **Accounts**: sign up with the center's join code, log in, log out, change password. Signing up is optional and unlocks Words, Class and Progress.
-- **Study**: Anki-style flashcards (SM-2): tap to flip, swipe or tap Again / Hard / Good / Easy. Every student's progress is private.
+- **Try it without an account**: anyone can open the app, practise the flashcards and browse the word list as a guest. Progress is kept in that browser, and moves into their profile when they sign up.
+- **Accounts**: anyone can sign up (free, no email); log in, log out, change password. With the center's **class code** you join the class; without it you study on your own and can add the code later in the Class tab.
+- **Study**: Anki-style flashcards (SM-2): tap to flip, swipe or tap Again / Hard / Good / Easy (keys: Space, 1–4, Z to undo). For nouns, a **der / die / das quiz** comes first. A **daily goal** ring and your **streak** sit on the home screen; ending a session early shows what you did first. Every student's progress is private.
+- **Oʻzbekcha / English**: the whole student app speaks Uzbek or English (switch in Study settings, or on the login and sign-up pages). The admin pages stay in English.
 - **Class**: Snapchat-style daily streaks, each classmate's active-word count, a leaderboard, and cheers you can send each other.
 - **Words**: an Airtable-style table and card gallery: search, filter, sort. Teachers manage the shared lesson words; every student can also add **their own words**, which only they see and study.
 - **AI word helper** (optional): take a photo of a word list (textbook page, worksheet, whiteboard, notes) or type German words, and Claude turns them into finished flashcards: article, meaning, IPA, forms, an example sentence and a memory hook. You tick the ones to keep and pick the topic. In the word form, **Fill in the rest with AI** completes a single word.
@@ -29,12 +30,12 @@ The tables are created on the first start.
 The terminal prints a line like:
 
 ```
-Karteikasten: no profiles yet. Sign up with join code K7M2QX — the first profile becomes the admin.
+Karteikasten: no teacher yet. Sign up with join code K7M2QX: the first profile with the code becomes the admin.
 ```
 
 1. Open http://localhost:3000/signup and create your profile with that code. **The first profile is the admin (teacher).**
 2. Open http://localhost:3000/admin to see the dashboard and the join code.
-3. Give the join code to your students. They sign up at `/signup` on their phones.
+3. Give the join code (the class code) to your students. They sign up at `/signup` on their phones and type it in to join your class.
 
 ### Use it on phones in the classroom
 
@@ -96,16 +97,22 @@ Copy `.env.example` to `.env.local`. Only `DATABASE_URL` is required.
 
 ## Roles and privacy
 
-| | Guest (no profile) | Student | Admin (teacher) |
-| --- | --- | --- | --- |
-| Study the flashcards, settings | ✓ (saved in this browser) | ✓ | ✓ |
-| Words table, Progress, streaks | – | ✓ | ✓ |
-| Add, edit, import, delete **your own** words (only you see them) | – | ✓ | – |
-| See classmates' streaks, active words, answers | – | ✓ | ✓ |
-| See anyone else's cards | – | – | – |
-| Add, edit, import, delete the shared lesson words | – | – | ✓ |
-| `/admin`: stats, reset passwords, make admins, delete profiles, change join code | – | – | ✓ |
-| `/admin/analytics`: North Star, funnel, retention | – | – | ✓ |
+| | Guest (no profile) | Self-learner (no class code) | Student (in the class) | Admin (teacher) |
+| --- | --- | --- | --- | --- |
+| Study the flashcards, settings | ✓ (saved in this browser) | ✓ | ✓ | ✓ |
+| Browse the word list | ✓ (read-only) | ✓ | ✓ | ✓ |
+| Progress, streak, daily goal | goal and streak on this device | ✓ | ✓ | ✓ |
+| Add, edit, import, delete **your own** words (only you see them) | – | ✓ | ✓ | – |
+| See classmates' streaks, active words, answers; send cheers | – | – | ✓ | ✓ |
+| AI word helper (costs the center API credit) | – | – | ✓ | ✓ |
+| See anyone else's cards | – | – | – | – |
+| Add, edit, import, delete the shared lesson words | – | – | – | ✓ |
+| `/admin`: stats, reset passwords, make admins, move people in or out of the class, delete profiles, change the class code | – | – | – | ✓ |
+| `/admin/analytics`: North Star, funnel, retention | – | – | – | ✓ |
+
+**Self-learners and the class.** Signing up without the class code makes a self-learner: everything personal works, but they aren't in the Class tab, classmates can't see them, they can't send cheers, and the AI helper (which costs the center money) stays off. They can add the code later in the Class tab (a few tries an hour, so the code can't be guessed). The teacher sees them in `/admin` marked "on their own", and can add someone to the class or take them out without deleting anything. The first profile made **with** the class code becomes the admin, so a stranger signing up before the teacher can't take over.
+
+**Language.** Each person picks Oʻzbekcha or English in Study settings; it is saved with their settings, so it follows them to every device, and the browser remembers it for the login page. Before anyone chooses, Uzbek phones get Uzbek. The translations live in `src/lib/i18n-uz.ts`, keyed by the English text; `i18n.test.ts` fails if any text the app shows is missing there. The built-in memory hooks are content, not interface, and are still in English.
 
 **Guests.** `/` opens straight to the flashcards. Guest progress stays in the browser; guests never show up in the admin numbers or the Class tab. For the funnel on `/admin/analytics` the browser sends one anonymous count a day: a random id it made up (kept in `localStorage` as `kk.visitor`) and whether it has answered a card. No name, no cookie, no IP address is stored. If that browser later signs up, the id is linked to the new profile, so the funnel can tell who tried the app first. The word list itself is public, because guests need it to study. On sign-up, the guest's progress and settings move into the new profile. A guest who logs in to a profile that already has progress is asked first (*Add to my profile* / *No, discard it*), because on a shared classroom computer that guest may have been someone else. Words the profile already studied always keep the profile's progress.
 
@@ -181,7 +188,8 @@ Postgres/Supabase  users · sessions · words · cards · prefs · activity · c
 | `PUT/DELETE /api/words/:id`, `POST /api/words` | signed in | Add, edit, delete, import words: admins the shared lesson words, everyone else their own |
 | `PUT/DELETE /api/cards/:wordId`, `DELETE /api/cards` | signed in | Save or reset **your** progress |
 | `PUT /api/prefs` | signed in | Your settings |
-| `GET /api/class` | signed in | Classmates' streaks and counts |
+| `GET /api/class` | class members | Classmates' streaks and counts |
+| `POST /api/class/join` | signed in | A self-learner joins the class with its code `{ code }` |
 | `POST /api/cheers`, `POST /api/cheers/seen` | signed in | Send a cheer (1 per classmate per day), mark yours as read |
 
 ### Security
@@ -191,7 +199,7 @@ Postgres/Supabase  users · sessions · words · cards · prefs · activity · c
 - Every API route and Server Action checks the session and role on the server. Hiding a button is never the protection.
 - Mutating requests from other sites are rejected (Origin check, on top of SameSite cookies and Next.js's own Server Action origin check).
 - Login and sign-up are rate-limited per IP and username. This is in memory: with several server instances, use a shared store such as Redis.
-- Sign-up needs the center's join code, so strangers can't create profiles. Make a new code in `/admin` if it leaks.
+- Anyone can create a profile (rate limited per network), but only people with the class code join the class: see classmates, send cheers, use the AI helper. Joining with a code allows a few tries an hour. Make a new code in `/admin` if it leaks, and take anyone out of the class there.
 
 ## Analytics (`/admin/analytics`)
 

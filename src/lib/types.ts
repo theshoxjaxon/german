@@ -78,9 +78,16 @@ export interface Prefs {
   relearnSteps: number[]; // minutes
   autoplay: boolean;
   ttsLang: string;
+  slowSpeech: boolean; // read words aloud more slowly
+  genderQuiz: boolean; // nouns: pick der/die/das before the answer is shown
+  dailyGoal: number; // answers a day; 0 = no goal
+  uiLang?: UiLang; // unset until chosen: then the device's language is used
   studyDeck: string; // 'all' or a deck name
   bonusNew: { day: number; n: number } | null; // extra new cards for one study day
 }
+
+export type UiLang = 'en' | 'uz';
+export const UI_LANGS: UiLang[] = ['en', 'uz'];
 
 export const DEFAULT_PREFS: Prefs = {
   newPerDay: 20,
@@ -91,6 +98,9 @@ export const DEFAULT_PREFS: Prefs = {
   relearnSteps: [10],
   autoplay: false,
   ttsLang: 'de-DE',
+  slowSpeech: false,
+  genderQuiz: true,
+  dailyGoal: 20,
   studyDeck: 'all',
   bonusNew: null,
 };
@@ -105,7 +115,14 @@ export interface Me {
   username: string;
   displayName: string;
   role: Role;
+  inClass: boolean; // signed up (or later joined) with the class code; self-learners haven't
 }
+
+/**
+ * In the learning center's class: sees and appears in the Class tab, sends cheers, uses the AI
+ * helper. Admins (teachers) always are. Self-learners study on their own until they add the code.
+ */
+export const isClassMember = (me: Pick<Me, 'role' | 'inClass'> | null | undefined) => !!me && (me.role === 'admin' || me.inClass);
 
 export type CheerKind = 'keep-going' | 'great-streak' | 'study-together';
 export const CHEERS: Record<CheerKind, string> = {
@@ -150,6 +167,7 @@ export interface AppData {
   prefs: Prefs;
   cheers: Cheer[]; // cheers received and not yet seen
   ai: boolean; // the AI word helper is switched on for this server
+  streak: { days: number; studiedToday: boolean }; // from the server: right across all your devices
 }
 
 /** What GET /api/state returns to a guest (not signed in). Their progress stays in their browser. */

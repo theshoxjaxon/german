@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState, useTransition } from 'react';
-import { deleteUserAction, newJoinCodeAction, resetPasswordAction, setRoleAction } from '@/app/admin/actions';
+import { deleteUserAction, newJoinCodeAction, resetPasswordAction, setClassAction, setRoleAction } from '@/app/admin/actions';
 import { useNow } from '@/lib/client/hooks';
 import type { AdminStats } from '@/lib/server/repo';
 import { dayLabelLong as dayLong, dayLabelShortDe as dayLabel, dayLabelWithYear } from '@/lib/stats';
@@ -104,7 +104,7 @@ export function AdminDashboard({ stats, meId }: { stats: AdminStats; meId: strin
         </section>
 
         <section className="panel join-panel" aria-labelledby="code-h">
-          <div className="panel-h"><h2 id="code-h">Join code</h2><span className="muted">students need it to sign up</span></div>
+          <div className="panel-h"><h2 id="code-h">Join code</h2><span className="muted">to join your class</span></div>
           <p className="join-code" aria-label={`Join code ${joinCode.split('').join(' ')}`}>{joinCode}</p>
           <div className="btn-row">
             <button className="btn" onClick={() => copy(joinCode, 'Join code copied.')}><Icon name="copy" /> Copy code</button>
@@ -138,7 +138,11 @@ export function AdminDashboard({ stats, meId }: { stats: AdminStats; meId: strin
                       <span className="term-cell">
                         <Avatar id={p.id} name={p.displayName} size="sm" />
                         <span className="who">
-                          <span className="name"><span className="nm">{p.displayName}</span>{p.role === 'admin' && <span className="teacher">admin</span>}</span>
+                          <span className="name">
+                            <span className="nm">{p.displayName}</span>
+                            {p.role === 'admin' && <span className="teacher">admin</span>}
+                            {p.role !== 'admin' && !p.inClass && <span className="teacher self">on their own</span>}
+                          </span>
                           <span className="meta">@{p.username}</span>
                         </span>
                       </span>
@@ -182,7 +186,7 @@ function ManageSheet({ person, isMe, closing, onClose }: { person: Person; isMe:
         <div>
           <p className="me-name">{person.displayName}</p>
           <p className="muted small">@{person.username}</p>
-          <span className={`role-pill role-${person.role}`}>{person.role === 'admin' ? 'Admin · teacher' : 'Student'}</span>
+          <span className={`role-pill role-${person.role}`}>{person.role === 'admin' ? 'Admin · teacher' : person.inClass ? 'Student · in the class' : 'Self-learner · not in the class'}</span>
         </div>
       </div>
       <dl className="facts">
@@ -207,6 +211,11 @@ function ManageSheet({ person, isMe, closing, onClose }: { person: Person; isMe:
       )}
       {!isMe && (
         <>
+          {person.role !== 'admin' && (
+            <button className="btn" disabled={pending} onClick={() => run(() => setClassAction(person.id, !person.inClass), onClose)}>
+              <Icon name="people" /> {person.inClass ? 'Remove from the class' : 'Add to the class'}
+            </button>
+          )}
           <button className="btn" disabled={pending}
             onClick={() => run(() => setRoleAction(person.id, person.role === 'admin' ? 'student' : 'admin'), onClose)}>
             <Icon name="shield" /> {person.role === 'admin' ? 'Remove admin rights' : 'Make admin (teacher)'}

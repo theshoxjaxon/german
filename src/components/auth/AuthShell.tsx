@@ -1,21 +1,42 @@
+'use client';
+
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
+import { useT } from '@/lib/client/i18n';
+import { rememberLang } from '@/lib/client/lang-device';
+import type { UiLang } from '@/lib/types';
+import { Icon } from '../ui';
+
+/** Each language is named in itself, so you can find yours whatever the page shows now. */
+const LANGS: [UiLang, string][] = [['uz', 'Oʻzbekcha'], ['en', 'English']];
 
 /** The frame around the login and sign-up forms: an index card on the desk. */
 export function AuthShell({ title, lede, children }: { title: string; lede: string; children: ReactNode }) {
+  const { t, lang } = useT();
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
   return (
     <main className="auth">
+      <div className="auth-top">
+        <Link className="auth-back" href="/"><Icon name="back" />{t('Back to the flashcards')}</Link>
+        <span className="lang-switch" role="group" aria-label="Language · Til">
+          {LANGS.map(([code, name]) => (
+            <button key={code} type="button" lang={code} aria-pressed={lang === code} onClick={() => rememberLang(code)}>{name}</button>
+          ))}
+        </span>
+      </div>
       <div className="auth-card">
         <div className="auth-brand">
           <BrandMark />
           <span>Karteikasten</span>
         </div>
-        <h1>{title}</h1>
-        <p className="lede">{lede}</p>
+        <h1>{t(title)}</h1>
+        <p className="lede">{t(lede)}</p>
         {children}
       </div>
       <p className="auth-guest">
-        Just want to practise? <Link href="/">Study the flashcards as a guest</Link>
+        {t('Just want to practise?')} <Link href="/">{t('Study the flashcards as a guest')}</Link>
       </p>
     </main>
   );

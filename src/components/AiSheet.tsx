@@ -4,12 +4,12 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { AI_LANGUAGES, isAiLanguage, type AiLanguage, type AiResult } from '@/lib/ai-shared';
 import { prepareImage, requestAiWords } from '@/lib/client/ai';
 import { useLocalState } from '@/lib/client/hooks';
+import { useT } from '@/lib/client/i18n';
 import { store, useStore } from '@/lib/client/store';
 import { suggestDeck } from '@/lib/import-parser';
 import { addsSharedWords, MY_WORDS_DECK } from '@/lib/ownership';
 import { deckNames, nextOrder } from '@/lib/queue';
 import { newId, norm } from '@/lib/text';
-import { plural } from '@/lib/time';
 import { POS_LABEL, type Word } from '@/lib/types';
 import { BottomSheet } from './BottomSheet';
 import { Icon, Term } from './ui';
@@ -38,6 +38,7 @@ export function LanguageSelect({ id, value, onChange }: { id: string; value: AiL
 export function AiSheet() {
   const data = useStore();
   const ui = useUI();
+  const { t, tn } = useT();
   const shared = addsSharedWords(data.me);
   const [mode, setMode] = useLocalState<Mode>('kk.aiMode', 'photo', isMode);
   const [lang, setLang] = useAiLanguage();
@@ -84,7 +85,7 @@ export function AiSheet() {
       );
       setResult(r);
       setPicked(new Set(r.words.flatMap((w, i) => (known.has(norm(w.term)) ? [] : [i]))));
-      setDeck(r.topic || (shared ? suggestDeck(deckNames(data.words)) || 'New words' : MY_WORDS_DECK));
+      setDeck(r.topic || (shared ? suggestDeck(deckNames(data.words)) || t('New words') : MY_WORDS_DECK));
     } catch (err) {
       if ((err as Error).name !== 'AbortError') setError((err as Error).message);
     } finally {
@@ -115,7 +116,7 @@ export function AiSheet() {
     setAdding(false);
     if (ok) {
       ui.closeSheet();
-      ui.toast(`Added ${plural(list.length, 'word', 'words')}${topic ? ` to ${topic}` : ''}`);
+      ui.toast(topic ? tn(list.length, 'Added {n} word to {topic}', 'Added {n} words to {topic}', { topic }) : tn(list.length, 'Added {n} word', 'Added {n} words'));
     }
   };
 
@@ -130,36 +131,36 @@ export function AiSheet() {
     const all = picked.size === result.words.length;
     return (
       <BottomSheet
-        title="Check the words"
+        title={t('Check the words')}
         footer={
           <>
-            <button className="btn" onClick={() => setResult(null)}>Back</button>
+            <button className="btn" onClick={() => setResult(null)}>{t('Back')}</button>
             <button className="btn btn-primary" disabled={!picked.size || !deck.trim() || adding} onClick={add}>
-              {adding ? 'Adding…' : picked.size ? `Add ${plural(picked.size, 'word', 'words')}` : 'Add words'}
+              {adding ? t('Adding…') : picked.size ? tn(picked.size, 'Add {n} word', 'Add {n} words') : t('Add words')}
             </button>
           </>
         }
       >
         {result.words.length === 0 ? (
           <div className="ai-empty" role="status">
-            <p><b>No German words found.</b></p>
+            <p><b>{t('No German words found.')}</b></p>
             {result.note && <p className="muted">{result.note}</p>}
-            <p className="hint">Try a sharper photo with the word list filling the picture, or type the words instead.</p>
+            <p className="hint">{t('Try a sharper photo with the word list filling the picture, or type the words instead.')}</p>
           </div>
         ) : (
           <>
             <div className="field">
-              <label htmlFor="ai-deck">Topic (deck)</label>
+              <label htmlFor="ai-deck">{t('Topic (deck)')}</label>
               <input id="ai-deck" value={deck} onChange={(e) => setDeck(e.target.value)} list="ai-deck-list" autoComplete="off" />
               <datalist id="ai-deck-list">
                 {deckNames(data.words).map((d) => <option key={d} value={d} />)}
               </datalist>
-              <p className="hint">{shared ? 'These become lesson words for everyone in your class.' : 'These become your own words. Only you see them.'}</p>
+              <p className="hint">{t(shared ? 'These become lesson words for everyone in your class.' : 'These become your own words. Only you see them.')}</p>
             </div>
             <div className="ai-list-head">
-              <span className="small"><b>{picked.size}</b> of {plural(result.words.length, 'word', 'words')} selected</span>
+              <span className="small">{tn(result.words.length, '{k} of {n} word selected', '{k} of {n} words selected', { k: picked.size })}</span>
               <button className="btn btn-quiet btn-sm" onClick={() => setPicked(all ? new Set() : new Set(result.words.map((_, i) => i)))}>
-                {all ? 'Select none' : 'Select all'}
+                {t(all ? 'Select none' : 'Select all')}
               </button>
             </div>
             <ul className="ai-list">
@@ -174,14 +175,14 @@ export function AiSheet() {
                       {w.example && <span className="ai-example" lang="de">{w.example}</span>}
                     </span>
                     <span className="ai-side">
-                      <span className="tag">{POS_LABEL[w.pos]}</span>
-                      {known.has(norm(w.term)) && <span className="ai-dup">You have it</span>}
+                      <span className="tag">{t(POS_LABEL[w.pos])}</span>
+                      {known.has(norm(w.term)) && <span className="ai-dup">{t('You have it')}</span>}
                     </span>
                   </label>
                 </li>
               ))}
             </ul>
-            <p className="hint">The AI can make mistakes. You can edit any word later in Words.</p>
+            <p className="hint">{t('The AI can make mistakes. You can edit any word later in Words.')}</p>
           </>
         )}
       </BottomSheet>
@@ -191,39 +192,39 @@ export function AiSheet() {
   /* ---------- step 1: photo or list ---------- */
   return (
     <BottomSheet
-      title="Add words with AI"
+      title={t('Add words with AI')}
       footer={
         busy ? (
-          <button className="btn" onClick={cancel}>Cancel</button>
+          <button className="btn" onClick={cancel}>{t('Cancel')}</button>
         ) : (
           <>
-            <button className="btn" onClick={ui.closeSheet}>Close</button>
+            <button className="btn" onClick={ui.closeSheet}>{t('Close')}</button>
             <button className="btn btn-primary" disabled={!ready} onClick={run}>
-              <Icon name="sparkle" /> {mode === 'photo' ? 'Find the words' : 'Make flashcards'}
+              <Icon name="sparkle" /> {t(mode === 'photo' ? 'Find the words' : 'Make flashcards')}
             </button>
           </>
         )
       }
     >
       <div className="form" aria-busy={busy}>
-        <span className="seg ai-modes" role="group" aria-label="Add from">
-          <button type="button" className="seg-btn" aria-pressed={mode === 'photo'} onClick={() => setMode('photo')} disabled={busy}><Icon name="camera" />Photo</button>
-          <button type="button" className="seg-btn" aria-pressed={mode === 'text'} onClick={() => setMode('text')} disabled={busy}><Icon name="table" />Type words</button>
+        <span className="seg ai-modes" role="group" aria-label={t('Add from')}>
+          <button type="button" className="seg-btn" aria-pressed={mode === 'photo'} onClick={() => setMode('photo')} disabled={busy}><Icon name="camera" />{t('Photo')}</button>
+          <button type="button" className="seg-btn" aria-pressed={mode === 'text'} onClick={() => setMode('text')} disabled={busy}><Icon name="table" />{t('Type words')}</button>
         </span>
 
         {mode === 'photo' ? (
           <div className="ai-photo">
-            <p className="lede">Take a photo of a word list: a textbook page, a worksheet, the whiteboard or your notes. The AI finds the German words and fills in the rest.</p>
+            <p className="lede">{t('Take a photo of a word list: a textbook page, a worksheet, the whiteboard or your notes. The AI finds the German words and fills in the rest.')}</p>
             {photo ? (
               <figure className="ai-preview">
                 {/* eslint-disable-next-line @next/next/no-img-element -- a local data: URL preview */}
-                <img src={photo.preview} alt="The photo you chose" />
-                <button type="button" className="btn btn-sm" onClick={() => setPhoto(null)} disabled={busy}>Choose another</button>
+                <img src={photo.preview} alt={t('The photo you chose')} />
+                <button type="button" className="btn btn-sm" onClick={() => setPhoto(null)} disabled={busy}>{t('Choose another')}</button>
               </figure>
             ) : (
               <div className="btn-row">
-                <button type="button" className="btn btn-primary" onClick={() => cameraRef.current?.click()}><Icon name="camera" /> Take a photo</button>
-                <button type="button" className="btn" onClick={() => galleryRef.current?.click()}><Icon name="image" /> Choose a picture</button>
+                <button type="button" className="btn btn-primary" onClick={() => cameraRef.current?.click()}><Icon name="camera" /> {t('Take a photo')}</button>
+                <button type="button" className="btn" onClick={() => galleryRef.current?.click()}><Icon name="image" /> {t('Choose a picture')}</button>
               </div>
             )}
             <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden onChange={onFile} />
@@ -231,26 +232,26 @@ export function AiSheet() {
           </div>
         ) : (
           <div className="field">
-            <label htmlFor="ai-text">German words, one per line</label>
+            <label htmlFor="ai-text">{t('German words, one per line')}</label>
             <textarea id="ai-text" rows={7} value={text} onChange={(e) => setText(e.target.value)} disabled={busy} spellCheck={false} autoCapitalize="off" data-autofocus
               placeholder={'Bahnhof\nder Zug\nfahren\numsteigen – to change trains'} />
-            <p className="hint">Just the German is enough. The AI adds the article, meaning, pronunciation, forms, an example and a memory hook. Meanings you type are kept.</p>
+            <p className="hint">{t('Just the German is enough. The AI adds the article, meaning, pronunciation, forms, an example and a memory hook. Meanings you type are kept.')}</p>
           </div>
         )}
 
         <div className="field">
-          <label htmlFor="ai-lang">Meanings in</label>
+          <label htmlFor="ai-lang">{t('Meanings in')}</label>
           <LanguageSelect id="ai-lang" value={lang} onChange={setLang} />
         </div>
 
         {busy && (
           <p className="ai-status" role="status">
             <span className="spinner" aria-hidden="true" />
-            {mode === 'photo' ? 'Reading your photo… this can take up to a minute.' : 'Making your flashcards…'}
+            {t(mode === 'photo' ? 'Reading your photo… this can take up to a minute.' : 'Making your flashcards…')}
           </p>
         )}
-        {error && <p className="err" role="alert">{error}</p>}
-        <p className="hint">{mode === 'photo' ? 'The photo is sent to Claude, Anthropic’s AI, to read the words. The app doesn’t keep it.' : 'Your list is sent to Claude, Anthropic’s AI.'}</p>
+        {error && <p className="err" role="alert">{t(error)}</p>}
+        <p className="hint">{t(mode === 'photo' ? 'The photo is sent to Claude, Anthropic’s AI, to read the words. The app doesn’t keep it.' : 'Your list is sent to Claude, Anthropic’s AI.')}</p>
       </div>
     </BottomSheet>
   );

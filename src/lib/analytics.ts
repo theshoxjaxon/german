@@ -29,7 +29,7 @@ export const parsePeriod = (v: unknown): Period => (v === '30' || v === 'all' ? 
 
 export interface AnalyticsInput {
   today: string;
-  students: { id: string; joinedDay: string }[];
+  students: { id: string; joinedDay: string; inClass?: boolean }[];
   /** One row per student and day with at least one answer. */
   study: { userId: string; day: string; answers: number; newCards: number; reviews: number; recalled: number }[];
   /** The day each word was mastered (by a student). */
@@ -64,6 +64,7 @@ export interface Analytics {
   periodStart: string | null; // null: all time
   users: {
     students: number;
+    selfLearners: number; // signed up without the class code
     newThisWeek: number;
     activeToday: number;
     activeWeek: number;
@@ -133,6 +134,7 @@ export function computeAnalytics(input: AnalyticsInput, period: Period): Analyti
   const dailyActives = lastDays(today, 30).map((d) => input.students.filter((s) => studyDays.get(s.id)?.has(d)).length);
   const users = {
     students: input.students.length,
+    selfLearners: input.students.filter((s) => s.inClass === false).length,
     newThisWeek: input.students.filter((s) => s.joinedDay >= week0).length,
     activeToday,
     activeWeek: activeIn(week0, today),

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
+import { useT } from '@/lib/client/i18n';
 import { speak, useSpeechSupported } from '@/lib/client/speech';
 import { store, useStore } from '@/lib/client/store';
 import type { WordInfo } from '@/lib/queue';
@@ -11,6 +12,7 @@ import { useUI } from './ui-context';
 /* ---------- icons (stroke icons on a 24px grid) ---------- */
 const ICONS = {
   x: '<path d="M6 6l12 12M18 6 6 18"/>',
+  back: '<path d="M15 5 8 12l7 7"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   minus: '<path d="M5 12h14"/>',
   sliders: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
@@ -62,14 +64,15 @@ export function Term({ term }: { term: string }) {
 const STATUS_LABEL = { new: 'New', learning: 'Learning', review: 'Review', suspended: 'Paused' } as const;
 
 export function StatusPill({ info }: { info: Pick<WordInfo, 'status' | 'relearning' | 'leech'> }) {
-  const label = info.status === 'learning' && info.relearning ? 'Relearning' : STATUS_LABEL[info.status];
+  const { t } = useT();
+  const label = t(info.status === 'learning' && info.relearning ? 'Relearning' : STATUS_LABEL[info.status]);
   return (
     <>
       <span className={`pill st-${info.status}`}>
         <i />
         {label}
       </span>
-      {info.leech && <span className="leech">Leech</span>}
+      {info.leech && <span className="leech">{t('Leech')}</span>}
     </>
   );
 }
@@ -77,9 +80,10 @@ export function StatusPill({ info }: { info: Pick<WordInfo, 'status' | 'relearni
 export function SpeakButton({ text, small = false }: { text: string | undefined; small?: boolean }) {
   const supported = useSpeechSupported();
   const { prefs } = useStore();
+  const { t } = useT();
   if (!supported || !text) return null;
   return (
-    <button type="button" className={`speak ${small ? 'sm' : ''}`} aria-label="Play pronunciation" onClick={() => speak(text, prefs.ttsLang)}>
+    <button type="button" className={`speak ${small ? 'sm' : ''}`} aria-label={t('Play pronunciation')} onClick={() => speak(text, prefs.ttsLang, prefs.slowSpeech)}>
       <Icon name="volume" />
     </button>
   );
@@ -127,14 +131,15 @@ export function Avatar({ id, name, size = 'md' }: { id: string; name: string; si
 
 export function LoadError() {
   const { loadProblem } = useStore();
+  const { t } = useT();
   return (
     <div className="panel error-panel" role="alert">
       <p>
         {loadProblem === 'server'
-          ? 'The app’s server is having trouble right now. Your progress is safe; try again in a few minutes.'
-          : 'Could not load your words. Check your internet connection, then try again.'}
+          ? t('The app’s server is having trouble right now. Your progress is safe; try again in a few minutes.')
+          : t('Could not load your words. Check your internet connection, then try again.')}
       </p>
-      <button className="btn" onClick={() => store.load()}>Try again</button>
+      <button className="btn" onClick={() => store.load()}>{t('Try again')}</button>
     </div>
   );
 }
@@ -142,33 +147,34 @@ export function LoadError() {
 export function EmptyBox() {
   const ui = useUI();
   const { me } = useStore();
+  const { t } = useT();
   if (!me) {
     return (
       <section className="panel empty">
-        <h2>No words yet</h2>
-        <p>The teacher hasn’t added any words. Check back soon.</p>
+        <h2>{t('No words yet')}</h2>
+        <p>{t('The teacher hasn’t added any words. Check back soon.')}</p>
       </section>
     );
   }
   if (me.role !== 'admin') {
     return (
       <section className="panel empty">
-        <h2>No words yet</h2>
-        <p>Your teacher hasn’t added lesson words yet. You can add your own words now: only you see them.</p>
+        <h2>{t('No words yet')}</h2>
+        <p>{t('Your teacher hasn’t added lesson words yet. You can add your own words now: only you see them.')}</p>
         <div className="btn-row">
-          <button className="btn btn-primary" onClick={() => ui.openSheet({ kind: 'word', id: null })}>Add a word</button>
-          <button className="btn" onClick={() => ui.openSheet({ kind: 'import' })}>Paste a list</button>
+          <button className="btn btn-primary" onClick={() => ui.openSheet({ kind: 'word', id: null })}>{t('Add a word')}</button>
+          <button className="btn" onClick={() => ui.openSheet({ kind: 'import' })}>{t('Paste a list')}</button>
         </div>
       </section>
     );
   }
   return (
     <section className="panel empty">
-      <h2>Your card box is empty</h2>
-      <p>Add words one at a time, or paste a whole list from your lesson. Every word becomes a flashcard.</p>
+      <h2>{t('Your card box is empty')}</h2>
+      <p>{t('Add words one at a time, or paste a whole list from your lesson. Every word becomes a flashcard.')}</p>
       <div className="btn-row">
-        <button className="btn btn-primary" onClick={() => ui.openSheet({ kind: 'word', id: null })}>Add a word</button>
-        <button className="btn" onClick={() => ui.openSheet({ kind: 'import' })}>Paste a list</button>
+        <button className="btn btn-primary" onClick={() => ui.openSheet({ kind: 'word', id: null })}>{t('Add a word')}</button>
+        <button className="btn" onClick={() => ui.openSheet({ kind: 'import' })}>{t('Paste a list')}</button>
       </div>
     </section>
   );
@@ -176,10 +182,11 @@ export function EmptyBox() {
 
 export function SyncNote() {
   const { guest } = useStore();
+  const { t } = useT();
   return (
     <p className={`sync${guest ? ' is-local' : ''}`}>
       <span className="dot" />
-      {guest ? 'Progress saved on this device only' : 'Progress saved to your profile'}
+      {t(guest ? 'Progress saved on this device only' : 'Progress saved to your profile')}
     </p>
   );
 }

@@ -6,7 +6,7 @@
  * that the request comes from this site (Origin vs Host) before running an action.
  */
 import { redirect } from 'next/navigation';
-import { cleanDisplayName, displayNameError, normalizeUsername, passwordError, safeNext, usernameError } from '@/lib/account-rules';
+import { cleanDisplayName, displayNameError, normalizeJoinCode, normalizeUsername, passwordError, safeNext, usernameError } from '@/lib/account-rules';
 import { describeDbError } from '@/lib/server/db-health';
 import { burnPasswordCheck, hashPassword, verifyPassword } from '@/lib/server/password';
 import { clientIp, hit } from '@/lib/server/rate-limit';
@@ -62,7 +62,7 @@ export async function signup(_prev: FormState, form: FormData): Promise<FormStat
   const displayName = cleanDisplayName(form.get('displayName'));
   const username = normalizeUsername(form.get('username'));
   const password = String(form.get('password') ?? '');
-  const joinCode = String(form.get('joinCode') ?? '').toUpperCase().replace(/[\s-]/g, '');
+  const joinCode = normalizeJoinCode(form.get('joinCode'));
   const visitor = String(form.get('visitor') ?? '');
   const fields = { displayName, username, joinCode };
 
@@ -76,13 +76,17 @@ export async function signup(_prev: FormState, form: FormData): Promise<FormStat
   if (userErr) fieldErrors.username = userErr;
   if (passErr) fieldErrors.password = passErr;
   try {
-    if (!joinCode || joinCode !== (await repo.getJoinCode())) fieldErrors.joinCode = 'This join code doesn’t match. Ask your teacher for the current code.';
+    // The class code is optional: without it you study on your own (a self-learner) and can add it later.
+    if (joinCode && joinCode !== (await repo.getJoinCode())) {
+      fieldErrors.joinCode = 'This class code doesn’t match. Check it with your teacher, or leave it empty to study on your own.';
+    }
     if (Object.keys(fieldErrors).length) return { fieldErrors, fields };
 
     const user = await repo.createUser({
       username,
       displayName,
       passwordHash: await hashPassword(password),
+      inClass: !!joinCode,
       visitorId: VISITOR_RE.test(visitor) ? visitor : null,
     });
     if (user === 'taken') return { fieldErrors: { username: 'This username is taken. Try another one.' }, fields };

@@ -60,12 +60,16 @@ describe('database', () => {
     expect(await repo.getJoinCode()).toBe('TEST42');
   });
 
-  it('makes the first profile the admin and later ones students', async () => {
+  it('makes the first profile with the class code the admin and later ones students', async () => {
+    // A self-learner (no class code) who signs up before the teacher must not become admin
+    const solo = await repo.createUser({ username: 'solo', displayName: 'Solo', passwordHash: 'x', inClass: false });
+    expect(solo !== 'taken' && [solo.role, solo.inClass]).toEqual(['student', false]);
     const teacher = await repo.createUser({ username: 'teacher', displayName: 'Ustoz', passwordHash: 'x' });
     const student = await repo.createUser({ username: 'malika', displayName: 'Malika K', passwordHash: 'x' });
     expect(teacher !== 'taken' && teacher.role).toBe('admin');
     expect(student !== 'taken' && student.role).toBe('student');
     expect(await repo.createUser({ username: 'malika', displayName: 'Other', passwordHash: 'x' })).toBe('taken');
+    if (solo !== 'taken') await repo.deleteUser(solo.id);
   });
 
   it('stores only a hash of the session token and expires sessions', async () => {
@@ -93,6 +97,8 @@ describe('database', () => {
     const cls = await repo.classOverview(teacher.id);
     const m = cls.members.find((x) => x.username === 'malika')!;
     expect(m).toMatchObject({ activeWords: 2, answersToday: 3, studiedToday: true, streak: 1, isMe: false });
+    expect(await repo.myStreak(malika.id)).toEqual({ days: 1, studiedToday: true });
+    expect(await repo.myStreak(teacher.id)).toEqual({ days: 0, studiedToday: false });
 
     const stats = await repo.adminStats();
     expect(stats.totals).toMatchObject({ profiles: 2, admins: 1, studiedToday: 1, openedToday: 2, activeWeek: 1, answersToday: 3 });
@@ -112,6 +118,23 @@ describe('database', () => {
     await repo.markCheersSeen(malika.id);
     expect(await repo.unseenCheers(malika.id)).toHaveLength(0);
     expect((await repo.classOverview(teacher.id)).members.find((x) => x.username === 'malika')?.cheeredToday).toBe(true);
+  });
+
+  it('keeps self-learners out of the class until they add the class code', async () => {
+    const teacher = (await repo.findUserByUsername('teacher'))!;
+    const karim = await repo.createUser({ username: 'karim', displayName: 'Karim', passwordHash: 'x', inClass: false });
+    if (karim === 'taken') throw new Error('taken');
+    const names = async () => (await repo.classOverview(teacher.id)).members.map((m) => m.username);
+    expect(await names()).not.toContain('karim');
+    expect(await repo.sendCheer(teacher.id, karim.id, 'keep-going')).toBe('no-user');
+    expect(await repo.joinClass(karim.id, 'WRONG1')).toBe('wrong-code');
+    expect(await repo.joinClass(karim.id, await repo.getJoinCode())).toBe('ok');
+    expect((await repo.findUserById(karim.id))?.inClass).toBe(true);
+    expect(await names()).toContain('karim');
+    await repo.setInClass(karim.id, false); // the teacher can take someone out again
+    expect(await names()).not.toContain('karim');
+    expect((await repo.adminStats()).people.find((p) => p.username === 'karim')?.inClass).toBe(false);
+    await repo.deleteUser(karim.id);
   });
 
   it('adds guest progress to a profile without overwriting what is there', async () => {

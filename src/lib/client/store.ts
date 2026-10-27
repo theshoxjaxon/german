@@ -12,6 +12,9 @@
  * kept in this browser's localStorage; after they sign up it is moved into their profile.
  */
 import { useSyncExternalStore } from 'react';
+import type { ServerStreak } from '../goal';
+import { translateCount } from '../i18n';
+import { deviceLang, rememberLang } from './lang-device';
 import { noteTry, noteVisit } from './visitor';
 import { DEFAULT_PREFS, type AppData, type CardDoc, type Cheer, type CheerKind, type ClassData, type GuestData, type Me, type Prefs, type Word } from '../types';
 
@@ -21,7 +24,8 @@ export interface Snapshot {
   me: Me | null;
   guest: boolean; // studying without a profile; progress lives in this browser only
   guestWords: number; // signed in, with guest progress on this device waiting for a decision
-  ai: boolean; // the AI word helper is available
+  ai: boolean;
+  streak: ServerStreak | null; // signed in: from the server (guests count on the device) // the AI word helper is available
   words: Map<string, Word>;
   cards: Map<string, CardDoc>;
   prefs: Prefs;
@@ -33,7 +37,7 @@ type Kind = 'words' | 'cards';
 type Doc<K extends Kind> = K extends 'words' ? Word : CardDoc;
 
 const INITIAL: Snapshot = {
-  status: 'loading', loadProblem: null, me: null, guest: false, guestWords: 0, ai: false, words: new Map(), cards: new Map(), prefs: DEFAULT_PREFS,
+  status: 'loading', loadProblem: null, me: null, guest: false, guestWords: 0, ai: false, streak: null, words: new Map(), cards: new Map(), prefs: DEFAULT_PREFS,
   cheers: [], classData: null, classStatus: 'idle',
 };
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -170,7 +174,7 @@ class Store {
       }
       // A guest: progress and settings come from this browser.
       this.emit({
-        status: 'ready', me: null, guest: true, guestWords: 0, ai: false, words, cheers: [],
+        status: 'ready', me: null, guest: true, guestWords: 0, ai: false, streak: null, words, cheers: [],
         cards: new Map(Object.entries(readGuestCards())),
         prefs: { ...DEFAULT_PREFS, ...readGuest(GUEST_PREFS) } as Prefs,
       });
@@ -186,11 +190,13 @@ class Store {
       me: data.me,
       guest: false,
       ai: data.ai === true,
+      streak: data.streak ?? null,
       words,
       cards,
       cheers: data.cheers,
       prefs: this.prefsDirty ? this.snap.prefs : { ...DEFAULT_PREFS, ...data.prefs },
     });
+    if (data.prefs.uiLang) rememberLang(data.prefs.uiLang);
     return true;
   }
 
@@ -221,7 +227,10 @@ class Store {
       clearGuest();
       this.emit({ guestWords: 0 });
       await this.fetchState().catch(() => {}); // saved either way; the next refresh shows it
-      if (imported) this.report(`Your guest progress (${imported} ${imported === 1 ? 'word' : 'words'}) is now saved in your profile.`);
+      if (imported) {
+        const lang = this.snap.prefs.uiLang ?? deviceLang();
+        this.report(translateCount(lang, imported, 'Your guest progress ({n} word) is now saved in your profile.', 'Your guest progress ({n} words) is now saved in your profile.'));
+      }
       else if (asked) this.report('Your profile already had progress on those words, so it stays as it was.');
       return true;
     } catch (e) {
@@ -357,6 +366,7 @@ class Store {
   /** Settings change instantly and save after a short pause, so tapping + five times sends one request. */
   setPrefs(patch: Partial<Prefs>, immediate = false) {
     this.emit({ prefs: { ...this.snap.prefs, ...patch } });
+    if (patch.uiLang) rememberLang(patch.uiLang); // so the login page speaks it too
     if (this.snap.guest) {
       writeGuest(GUEST_PREFS, this.snap.prefs);
       return;
@@ -385,6 +395,19 @@ class Store {
     } catch {
       this.emit({ classStatus: this.snap.classData ? 'ready' : 'error' });
     }
+  }
+
+  /** A self-learner adds the class code. Resolves to an error message, or null when it worked. */
+  async joinClass(code: string): Promise<string | null> {
+    try {
+      await send('/api/class/join', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ code }) });
+    } catch (e) {
+      return saveError(e, 'Could not join. Check your internet connection and try again.') || 'Could not join.';
+    }
+    if (this.snap.me) this.emit({ me: { ...this.snap.me, inClass: true } });
+    void this.load(); // class members also get the AI helper
+    void this.loadClass();
+    return null;
   }
 
   /** Send a classmate a cheer. Shows as sent right away. */
