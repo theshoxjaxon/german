@@ -11,7 +11,7 @@ A mobile-first vocabulary app for a learning center. Students study German words
 - **AI word helper** (optional): take a photo of a word list (textbook page, worksheet, whiteboard, notes) or type German words, and Claude turns them into finished flashcards: article, meaning, IPA, forms, an example sentence and a memory hook. You tick the ones to keep and pick the topic. In the word form, **Fill in the rest with AI** completes a single word.
 - **Admin dashboard** at `/admin`: profiles created, new sign-ups, daily / weekly / monthly active students, 30-day charts, a student table, password resets and the join code.
 
-It comes with **Lektion 3** (34 words) and **Lektion 5** (59 words), German → Uzbek, with IPA, example sentences, plural/verb forms and memory hooks. New built-in lists are added to an existing database once, on the next start (`SEED_PACKS` in `src/lib/seed.ts`); words the teacher deleted don't come back, and words already typed in by hand aren't doubled.
+It comes with **Lektion 3** (34 words), **Lektion 5** (59 words) and **Lektion 7** of Momente A1.1 (46 words, hobbies, compliments and *können*), German → Uzbek, with IPA, example sentences, plural/verb forms and memory hooks. New built-in lists are added to an existing database once, on the next start (`SEED_PACKS` in `src/lib/seed.ts`); words the teacher deleted don't come back, and words already typed in by hand aren't doubled.
 
 Built with Next.js 16 (App Router), React 19, TypeScript and PostgreSQL (Supabase).
 
