@@ -2,7 +2,6 @@ import { aiEnabled } from '@/lib/server/ai';
 import { ok } from '@/lib/server/http';
 import * as repo from '@/lib/server/repo';
 import { requireUser } from '@/lib/server/session';
-import { isClassMember } from '@/lib/types';
 
 /**
  * GET /api/state → you, the shared words and your own words, your progress, your settings and new cheers for you.
@@ -23,6 +22,6 @@ export async function GET(req: Request) {
     repo.unseenCheers(user.id),
     repo.myStreak(user.id),
   ]);
-  // The AI helper costs the center money, so it's for class members.
-  return ok({ me: repo.publicUser(user), words, cards, prefs, cheers, ai: aiEnabled() && isClassMember(user), streak });
+  // Everyone signed in gets the AI helper (it has an hourly limit per person, since each use costs money).
+  return ok({ me: repo.publicUser(user), words, cards, prefs, cheers, ai: aiEnabled(), streak });
 }

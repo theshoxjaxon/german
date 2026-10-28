@@ -3,7 +3,6 @@ import { aiEnabled, AiError, makeWords } from '@/lib/server/ai';
 import { badRequest, ok, readJson } from '@/lib/server/http';
 import { hit } from '@/lib/server/rate-limit';
 import { requireUser } from '@/lib/server/session';
-import { isClassMember } from '@/lib/types';
 import { HOUR } from '@/lib/time';
 
 // Reading a full page of words can take a while.
@@ -20,7 +19,6 @@ export async function POST(req: Request) {
   const auth = await requireUser(req);
   if (auth.response) return auth.response;
   if (!aiEnabled()) return fail(503, 'The AI helper isn’t switched on for this app.');
-  if (!isClassMember(auth.user)) return fail(403, 'The AI helper is for class members. Add your class code first.');
 
   const body = (await readJson(req)) as Partial<AiRequest> | undefined;
   if (!body || (body.mode !== 'photo' && body.mode !== 'text') || !isAiLanguage(body.language)) {
@@ -44,7 +42,7 @@ export async function POST(req: Request) {
   }
 
   const { user } = auth;
-  if (!hit(`ai:${user.id}`, user.role === 'admin' ? 60 : 20, HOUR)) {
+  if (!(await hit(`ai:${user.id}`, user.role === 'admin' ? 60 : 20, HOUR))) {
     return fail(429, 'You’ve used the AI helper a lot this hour. Try again later, or add words by hand.');
   }
   try {

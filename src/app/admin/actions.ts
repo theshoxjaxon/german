@@ -10,7 +10,7 @@ import * as repo from '@/lib/server/repo';
 import { currentUser } from '@/lib/server/session';
 import type { Role } from '@/lib/types';
 
-type Result = { ok: true; password?: string; code?: string } | { ok: false; error: string };
+type Result = { ok: true; password?: string } | { ok: false; error: string };
 
 async function requireAdmin() {
   const user = await currentUser();
@@ -39,7 +39,7 @@ export async function setRoleAction(userId: string, role: Role): Promise<Result>
   return { ok: true };
 }
 
-/** Move someone into or out of the class. Out of it they keep studying, as a self-learner. */
+/** Take someone off the class leaderboard or put them back. Off it, they keep studying as usual. */
 export async function setClassAction(userId: string, inClass: boolean): Promise<Result> {
   if (!(await requireAdmin())) return denied;
   if (typeof inClass !== 'boolean') return { ok: false, error: 'Unknown choice.' };
@@ -56,11 +56,4 @@ export async function deleteUserAction(userId: string): Promise<Result> {
   await repo.deleteUser(String(userId));
   refresh();
   return { ok: true };
-}
-
-export async function newJoinCodeAction(): Promise<Result> {
-  if (!(await requireAdmin())) return denied;
-  const code = await repo.setJoinCode();
-  refresh();
-  return { ok: true, code };
 }

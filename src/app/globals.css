@@ -516,6 +516,8 @@ mark { background: linear-gradient(transparent 52%, var(--mark-soft) 52%); color
 .avatar-lg { width: 56px; height: 56px; font-size: 19px; }
 .av-0 { background: var(--av-0); } .av-1 { background: var(--av-1); } .av-2 { background: var(--av-2); } .av-3 { background: var(--av-3); }
 .av-4 { background: var(--av-4); } .av-5 { background: var(--av-5); } .av-6 { background: var(--av-6); } .av-7 { background: var(--av-7); }
+.avatar-photo { overflow: hidden; background: var(--surface-3); }
+.avatar-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
 /* ---------- login / sign-up ---------- */
 .auth {
@@ -528,6 +530,30 @@ mark { background: linear-gradient(transparent 52%, var(--mark-soft) 52%); color
 .auth-switch { text-align: center; font-size: 15px; color: var(--ink-2); }
 .auth-switch a, .auth-card a { color: var(--ink); font-weight: 700; text-decoration-color: var(--mark); text-decoration-thickness: 3px; text-underline-offset: 3px; }
 .auth-note { text-align: center; }
+.auth-forgot { margin-top: -6px; text-align: right; font-size: 14px; }
+/* Google's button (an iframe it draws itself), then a line with "or" before the email form */
+.gsi { display: grid; gap: 10px; margin-top: 8px; }
+.gsi-box { display: flex; justify-content: center; min-height: 44px; color-scheme: normal; }
+.gsi-status { text-align: center; font-size: 14px; color: var(--ink-2); }
+.gsi-status:empty { display: none; }
+.auth-or { display: flex; align-items: center; gap: 12px; margin-top: 4px; color: var(--ink-3); font-size: 13px; font-weight: 700; }
+.auth-or::before, .auth-or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.auth-done { display: grid; gap: 14px; justify-items: center; text-align: center; margin-top: 8px; }
+.auth-done > p { font-size: 15.5px; text-wrap: pretty; }
+.auth-done .btn { width: 100%; }
+.auth-done-ic { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; background: var(--good-soft); color: var(--good); }
+.auth .toast { bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+/* /account */
+.account-head { padding: 6px 0 4px; }
+.account-sec { display: grid; gap: 10px; padding-top: 16px; margin-top: 6px; border-top: 1px solid var(--line); }
+.account-sec h2 { font-family: var(--font-display); font-size: 19px; }
+.ways { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ways li { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 14px; border-radius: 12px; background: var(--surface-2); font-weight: 600; }
+.ways .grow { flex: 1; min-width: 0; }
+.way-state { font-size: 13px; font-weight: 700; color: var(--ink-3); }
+.way-state.is-on { color: var(--good); }
+.link-form { gap: 8px; justify-items: start; margin-top: 4px; }
+.account-logout { padding-top: 16px; margin-top: 6px; border-top: 1px solid var(--line); }
 .auth-guest { max-width: 420px; text-align: center; font-size: 15px; color: var(--ink-2); text-wrap: balance; }
 .auth-guest a { color: var(--ink); font-weight: 700; text-decoration-color: var(--mark); text-decoration-thickness: 3px; text-underline-offset: 3px; }
 .reveal {
@@ -622,7 +648,7 @@ mark { background: linear-gradient(transparent 52%, var(--mark-soft) 52%); color
 .cols-30 .col-x { font-size: 10px; overflow: visible; }
 .seg-open { background: var(--line-strong); }
 .seg-new { background: var(--easy); }
-.join-code { font-family: var(--font-mono); font-size: 34px; font-weight: 500; letter-spacing: .25em; padding: 6px 0 12px; }
+.invite-link { font-family: var(--font-mono); font-size: 15px; padding: 6px 0 10px; overflow-wrap: anywhere; }
 .notice { padding: 10px 14px; border-radius: 12px; background: var(--mark-soft); font-size: 14.5px; font-weight: 600; }
 .people-scroll { overflow-x: auto; margin-inline: -16px; border-top: 1px solid var(--line); }
 .tbl.people td, .tbl.people th { height: 58px; }

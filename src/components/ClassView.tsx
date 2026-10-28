@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect } from 'react';
 import { useLocalState } from '@/lib/client/hooks';
 import { useT } from '@/lib/client/i18n';
 import { store, useStore } from '@/lib/client/store';
@@ -51,38 +51,6 @@ export function CheersBanner() {
   );
 }
 
-/** Self-learners: what the class is, and a place to add the code. */
-function JoinClass() {
-  const [code, setCode] = useState('');
-  const [error, setError] = useState('');
-  const [pending, setPending] = useState(false);
-  const { t } = useT();
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!code.trim()) return setError('Enter the class code from your teacher.');
-    setPending(true);
-    setError((await store.joinClass(code)) ?? '');
-    setPending(false);
-  };
-  return (
-    <section className="locked" aria-labelledby="join-h">
-      <span className="locked-ic"><Icon name="people" /></span>
-      <h1 id="join-h">{t('Study together with a class')}</h1>
-      <p>{t('In a class you see your classmates’ streaks, cheer each other on, and get the AI word helper. Your teacher gives you a class code.')}</p>
-      <form className="form join-form" onSubmit={submit} noValidate>
-        <div className="field">
-          <label htmlFor="join-code">{t('Class code')}</label>
-          <input id="join-code" className="code-input" value={code} onChange={(e) => setCode(e.target.value)} autoCapitalize="characters"
-            autoCorrect="off" spellCheck={false} autoComplete="off" maxLength={12} aria-invalid={!!error} aria-describedby={error ? 'join-err' : undefined} />
-          {error && <p className="err" id="join-err" role="alert">{t(error)}</p>}
-        </div>
-        <button className="btn btn-primary btn-xl" disabled={pending}>{t(pending ? 'Joining…' : 'Join the class')}</button>
-      </form>
-      <p className="hint">{t('No class? No problem: your flashcards, own words, streak and progress all work on your own.')}</p>
-    </section>
-  );
-}
-
 export function ClassView({ active }: { active: boolean }) {
   const data = useStore();
   const ui = useUI();
@@ -92,8 +60,8 @@ export function ClassView({ active }: { active: boolean }) {
 
   // Refresh whenever the tab is opened.
   useEffect(() => {
-    if (active && member) void store.loadClass();
-  }, [active, member]);
+    if (active && data.me) void store.loadClass();
+  }, [active, data.me]);
 
   const head = (
     <header className="vhead">
@@ -103,7 +71,6 @@ export function ClassView({ active }: { active: boolean }) {
       </div>
     </header>
   );
-  if (data.me && !member) return <div className="page"><JoinClass /></div>;
   const cls = data.classData;
   if (!cls) {
     return (
@@ -131,6 +98,9 @@ export function ClassView({ active }: { active: boolean }) {
     <div className="page">
       {head}
       <CheersBanner />
+      {data.me && !member && (
+        <p className="notice" role="status">{t('Your teacher has taken you off the leaderboard. Your study works as usual.')}</p>
+      )}
 
       {me && (
         <section className="me-card" aria-label={t('You')}>
@@ -138,7 +108,6 @@ export function ClassView({ active }: { active: boolean }) {
             <Avatar id={me.id} name={me.displayName} size="lg" />
             <div className="grow">
               <p className="me-name">{me.displayName}</p>
-              <p className="muted small">@{me.username}</p>
             </div>
             <span className={`me-streak${me.streak ? '' : ' is-zero'}`}>
               <Icon name="flame" />
@@ -166,7 +135,7 @@ export function ClassView({ active }: { active: boolean }) {
         </div>
         <p>
           {others === 0
-            ? t('You’re the first one here. Share the class code with your classmates.')
+            ? t('You’re the first one here. Share the app with your classmates.')
             : <><b>{t('{a} of {b}', { a: studied.length, b: cls.members.length })}</b> {t('studied today')}</>}
         </p>
       </section>
@@ -202,7 +171,7 @@ export function ClassView({ active }: { active: boolean }) {
                   <b>{v}</b>
                   <span>{t(m.unit(v))}</span>
                 </span>
-                {!x.isMe && (
+                {!x.isMe && member && (
                   <button
                     className={`cheer-btn${x.cheeredToday ? ' is-done' : ''}`}
                     disabled={x.cheeredToday}

@@ -119,9 +119,20 @@ export function ConfirmButton({ className = 'btn', confirmLabel, onConfirm, chil
 }
 
 /** A round avatar with initials; the colour comes from the user id, so it never changes. */
-export function Avatar({ id, name, size = 'md' }: { id: string; name: string; size?: 'sm' | 'md' | 'lg' }) {
+/** A round photo (from Google) or, without one, initials on a colour picked from the id. */
+export function Avatar({ id, name, src, size = 'md' }: { id: string; name: string; src?: string | null; size?: 'sm' | 'md' | 'lg' }) {
+  const [broken, setBroken] = useState<string | null>(null);
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  if (src && broken !== src) {
+    return (
+      <span className={`avatar avatar-photo avatar-${size}`} aria-hidden="true">
+        {/* A plain <img>: a tiny, already-sized photo from Google; no-referrer, as Google's photo links expect */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt="" referrerPolicy="no-referrer" decoding="async" onError={() => setBroken(src)} />
+      </span>
+    );
+  }
   return (
     <span className={`avatar av-${h % 8} avatar-${size}`} aria-hidden="true">
       {initials(name)}

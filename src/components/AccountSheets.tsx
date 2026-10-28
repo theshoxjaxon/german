@@ -1,8 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState, useState } from 'react';
-import { changePassword, type FormState } from '@/app/actions/auth';
+import { useState } from 'react';
 import { useT } from '@/lib/client/i18n';
 import { store, useStore } from '@/lib/client/store';
 import { CHEERS, type CheerKind } from '@/lib/types';
@@ -11,6 +10,10 @@ import { CHEER_ICON } from './ClassView';
 import { Avatar, Icon } from './ui';
 import { useUI } from './ui-context';
 
+/**
+ * The menu behind your photo in the top bar: who you are, your account page, settings, log out.
+ * Only admins see an email address here (their own); students see their name and photo.
+ */
 export function AccountSheet() {
   const { me } = useStore();
   const ui = useUI();
@@ -19,11 +22,11 @@ export function AccountSheet() {
   return (
     <BottomSheet title={t('Your profile')}>
       <div className="profile-head">
-        <Avatar id={me.id} name={me.displayName} size="lg" />
+        <Avatar id={me.id} name={me.displayName} src={me.avatarUrl} size="lg" />
         <div>
           <p className="me-name">{me.displayName}</p>
-          <p className="muted small">@{me.username}</p>
-          <span className={`role-pill role-${me.role}`}>{t(me.role === 'admin' ? 'Admin · teacher' : me.inClass ? 'Student' : 'Studying on your own')}</span>
+          {me.email && <p className="muted small">{me.email}</p>}
+          <span className={`role-pill role-${me.role}`}>{t(me.role === 'admin' ? 'Admin · teacher' : me.inClass ? 'Student' : 'Off the leaderboard')}</span>
         </div>
       </div>
       <div className="optlist show-icons">
@@ -32,42 +35,13 @@ export function AccountSheet() {
             {t('Admin dashboard')} <Icon name="shield" />
           </Link>
         )}
+        <Link className="opt" href="/account">{t('Account and password')} <Icon name="key" /></Link>
         <button className="opt" onClick={() => ui.openSheet({ kind: 'settings' })}>{t('Study settings')} <Icon name="sliders" /></button>
-        <button className="opt" onClick={() => ui.openSheet({ kind: 'password' })}>{t('Change password')} <Icon name="key" /></button>
       </div>
       <form method="post" action="/api/logout">
         <button className="btn btn-xl" type="submit">
           <Icon name="logout" /> {t('Log out')}
         </button>
-      </form>
-    </BottomSheet>
-  );
-}
-
-export function PasswordSheet() {
-  const ui = useUI();
-  const [state, action, pending] = useActionState<FormState, FormData>(changePassword, {});
-  const { t } = useT();
-  const e = state.fieldErrors ?? {};
-  return (
-    <BottomSheet title={t('Change password')}>
-      <form action={action} className="form" noValidate>
-        <div className="field">
-          <label htmlFor="pw-current">{t('Current password')}</label>
-          <input id="pw-current" name="current" type="password" autoComplete="current-password" required data-autofocus aria-invalid={!!e.current} />
-          {e.current && <p className="err">{t(e.current)}</p>}
-        </div>
-        <div className="field">
-          <label htmlFor="pw-new">{t('New password')}</label>
-          <input id="pw-new" name="newPassword" type="password" autoComplete="new-password" required minLength={8} aria-invalid={!!e.newPassword} />
-          {e.newPassword ? <p className="err">{t(e.newPassword)}</p> : <p className="hint">{t('At least 8 characters')}</p>}
-        </div>
-        {state.error && <p className="err" role="alert">{t(state.error)}</p>}
-        {state.success && <p className="ok-msg" role="status">{t(state.success)}</p>}
-        <div className="btn-row">
-          <button type="button" className="btn" onClick={ui.closeSheet}>{t(state.success ? 'Done' : 'Cancel')}</button>
-          <button className="btn btn-primary" disabled={pending}>{t(pending ? 'Saving…' : 'Change password')}</button>
-        </div>
       </form>
     </BottomSheet>
   );

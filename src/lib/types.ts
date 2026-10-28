@@ -109,18 +109,22 @@ export const DEFAULT_PREFS: Prefs = {
 
 export type Role = 'student' | 'admin';
 
-/** The signed-in person, as the client sees them. */
+/** The signed-in person, as the client sees them (GET /api/me, /api/state). */
 export interface Me {
   id: string;
-  username: string;
   displayName: string;
   role: Role;
-  inClass: boolean; // signed up (or later joined) with the class code; self-learners haven't
+  inClass: boolean; // on the class leaderboard: everyone, unless a teacher took them off it
+  avatarUrl: string | null; // the Google profile photo
+  /** Only admins see an email address, their own included: students never see one, not even theirs. */
+  email?: string;
+  hasPassword: boolean;
+  hasGoogle: boolean;
 }
 
 /**
- * In the learning center's class: sees and appears in the Class tab, sends cheers, uses the AI
- * helper. Admins (teachers) always are. Self-learners study on their own until they add the code.
+ * On the class leaderboard: listed in the Class tab and can send cheers. Everyone who signs up
+ * is (there's one class for now); a teacher can take someone off it. Admins always are.
  */
 export const isClassMember = (me: Pick<Me, 'role' | 'inClass'> | null | undefined) => !!me && (me.role === 'admin' || me.inClass);
 
@@ -135,13 +139,12 @@ export interface Cheer {
   id: string;
   kind: CheerKind;
   createdAt: number;
-  from: { id: string; displayName: string; username: string };
+  from: { id: string; displayName: string };
 }
 
 /** One row on the Class tab. */
 export interface ClassMember {
   id: string;
-  username: string;
   displayName: string;
   role: Role;
   activeWords: number; // words started (learning or reviewing), not paused
@@ -166,7 +169,7 @@ export interface AppData {
   cards: Record<string, CardDoc>;
   prefs: Prefs;
   cheers: Cheer[]; // cheers received and not yet seen
-  ai: boolean; // the AI word helper is switched on for this server
+  ai: boolean; // the AI word helper is switched on for this server (for everyone signed in)
   streak: { days: number; studiedToday: boolean }; // from the server: right across all your devices
 }
 

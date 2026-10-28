@@ -10,8 +10,8 @@ import { Icon } from '../ui';
 /** Each language is named in itself, so you can find yours whatever the page shows now. */
 const LANGS: [UiLang, string][] = [['uz', 'Oʻzbekcha'], ['en', 'English']];
 
-/** The frame around the login and sign-up forms: an index card on the desk. */
-export function AuthShell({ title, lede, children }: { title: string; lede: string; children: ReactNode }) {
+/** The frame around the login, sign-up, password and account pages: an index card on the desk. */
+export function AuthShell({ title, lede, children, guest = true }: { title: string; lede: string; children?: ReactNode; guest?: boolean }) {
   const { t, lang } = useT();
   useEffect(() => {
     document.documentElement.lang = lang;
@@ -35,9 +35,11 @@ export function AuthShell({ title, lede, children }: { title: string; lede: stri
         <p className="lede">{t(lede)}</p>
         {children}
       </div>
-      <p className="auth-guest">
-        {t('Just want to practise?')} <Link href="/">{t('Study the flashcards as a guest')}</Link>
-      </p>
+      {guest && (
+        <p className="auth-guest">
+          {t('Just want to practise?')} <Link href="/">{t('Study the flashcards as a guest')}</Link>
+        </p>
+      )}
     </main>
   );
 }
