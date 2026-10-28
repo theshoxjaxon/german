@@ -3,7 +3,7 @@ import { connection } from 'next/server';
 import { Suspense } from 'react';
 import { AdminDashboard } from '@/components/admin/AdminDashboard';
 import * as repo from '@/lib/server/repo';
-import { adminData, DatabaseDown } from './guard';
+import { adminData, DatabaseDown, NotAdmin } from './guard';
 
 export const metadata: Metadata = { title: 'Admin · Karteikasten' };
 
@@ -20,5 +20,6 @@ async function AdminData() {
   await connection(); // everything below depends on the request and the current time
   const r = await adminData('/admin', () => repo.adminStats());
   if ('down' in r) return <DatabaseDown message={r.down} />;
+  if ('student' in r) return <NotAdmin name={r.student} />;
   return <AdminDashboard stats={r.data} meId={r.user.id} />;
 }

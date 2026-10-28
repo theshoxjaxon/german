@@ -9,5 +9,6 @@ import { normalizeEmail } from '../account-rules';
 export function isAdminEmail(email: string | null | undefined): boolean {
   const e = normalizeEmail(email);
   if (!e) return false;
-  return (process.env.ADMIN_EMAILS ?? '').split(/[,;\s]+/).map(normalizeEmail).includes(e);
+  // Forgiving about how the list is pasted: commas, semicolons or spaces between addresses, and quotes around them
+  return (process.env.ADMIN_EMAILS ?? '').replace(/["'<>]/g, ' ').split(/[,;\s]+/).map(normalizeEmail).includes(e);
 }

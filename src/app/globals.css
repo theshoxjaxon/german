@@ -648,6 +648,8 @@ mark { background: linear-gradient(transparent 52%, var(--mark-soft) 52%); color
 .cols-30 .col-x { font-size: 10px; overflow: visible; }
 .seg-open { background: var(--line-strong); }
 .seg-new { background: var(--easy); }
+.not-admin { display: grid; gap: 12px; margin-top: 16px; }
+.not-admin .btn { justify-self: start; }
 .invite-link { font-family: var(--font-mono); font-size: 15px; padding: 6px 0 10px; overflow-wrap: anywhere; }
 .notice { padding: 10px 14px; border-radius: 12px; background: var(--mark-soft); font-size: 14.5px; font-weight: 600; }
 .people-scroll { overflow-x: auto; margin-inline: -16px; border-top: 1px solid var(--line); }

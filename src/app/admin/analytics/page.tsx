@@ -4,7 +4,7 @@ import { Suspense } from 'react';
 import { AnalyticsView } from '@/components/admin/AnalyticsView';
 import { parsePeriod } from '@/lib/analytics';
 import * as repo from '@/lib/server/repo';
-import { adminData, DatabaseDown } from '../guard';
+import { adminData, DatabaseDown, NotAdmin } from '../guard';
 
 export const metadata: Metadata = { title: 'Analytics · Karteikasten' };
 
@@ -21,5 +21,6 @@ async function AnalyticsData({ searchParams }: Pick<PageProps<'/admin/analytics'
   const period = parsePeriod((await searchParams).period);
   const r = await adminData('/admin/analytics', () => repo.analytics(period));
   if ('down' in r) return <DatabaseDown message={r.down} />;
+  if ('student' in r) return <NotAdmin name={r.student} />;
   return <AnalyticsView data={r.data} />;
 }
