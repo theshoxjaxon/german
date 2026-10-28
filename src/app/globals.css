@@ -528,6 +528,7 @@ mark { background: linear-gradient(transparent 52%, var(--mark-soft) 52%); color
 .auth-switch { text-align: center; font-size: 15px; color: var(--ink-2); }
 .auth-switch a, .auth-card a { color: var(--ink); font-weight: 700; text-decoration-color: var(--mark); text-decoration-thickness: 3px; text-underline-offset: 3px; }
 .auth-note { text-align: center; }
+.auth-forgot { margin-top: -6px; text-align: right; font-size: 14px; }
 .auth-guest { max-width: 420px; text-align: center; font-size: 15px; color: var(--ink-2); text-wrap: balance; }
 .auth-guest a { color: var(--ink); font-weight: 700; text-decoration-color: var(--mark); text-decoration-thickness: 3px; text-underline-offset: 3px; }
 .reveal {
@@ -622,7 +623,7 @@ mark { background: linear-gradient(transparent 52%, var(--mark-soft) 52%); color
 .cols-30 .col-x { font-size: 10px; overflow: visible; }
 .seg-open { background: var(--line-strong); }
 .seg-new { background: var(--easy); }
-.join-code { font-family: var(--font-mono); font-size: 34px; font-weight: 500; letter-spacing: .25em; padding: 6px 0 12px; }
+.invite-link { font-family: var(--font-mono); font-size: 15px; padding: 6px 0 10px; overflow-wrap: anywhere; }
 .notice { padding: 10px 14px; border-radius: 12px; background: var(--mark-soft); font-size: 14.5px; font-weight: 600; }
 .people-scroll { overflow-x: auto; margin-inline: -16px; border-top: 1px solid var(--line); }
 .tbl.people td, .tbl.people th { height: 58px; }

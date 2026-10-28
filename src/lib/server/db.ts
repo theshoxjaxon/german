@@ -10,7 +10,6 @@
  * - Every query the app runs is served by a primary key or an index below.
  * - A cold start costs one small query: the schema is only (re)built when its version changes.
  */
-import { randomBytes } from 'node:crypto';
 import pg from 'pg';
 import { packWords, SEED_PACKS } from '../seed';
 import { safeTimeZone } from '../stats';
@@ -23,7 +22,7 @@ export interface Db {
 }
 
 /** Bump when the schema or the built-in word lists change: every database then runs migrate() once more. */
-const SCHEMA_VERSION = '5';
+const SCHEMA_VERSION = '6';
 
 /*
  * Times are milliseconds since 1970 (JavaScript's Date.now()) in BIGINT columns; days are
@@ -41,9 +40,9 @@ CREATE TABLE IF NOT EXISTS settings (
 
 CREATE TABLE IF NOT EXISTS users (
   id            text PRIMARY KEY,
-  username      text NOT NULL UNIQUE,
+  username      text UNIQUE,            -- profiles made before schema 6 only: sign-in is by email now
   display_name  text NOT NULL,
-  password_hash text NOT NULL,          -- scrypt$…: a one-way hash. The password itself is never stored.
+  password_hash text,                   -- bcrypt: a one-way hash, never the password. NULL: Google only.
   role          text NOT NULL DEFAULT 'student' CHECK (role IN ('student', 'admin')),
   created_at    bigint NOT NULL,
   last_seen_at  bigint
@@ -127,6 +126,40 @@ CREATE INDEX IF NOT EXISTS visitors_first_idx ON visitors (first_day);
 -- from before needed the code, so they are in the class.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS in_class boolean NOT NULL DEFAULT true;
 
+-- Schema 6: you sign in with your email address, and a password, Google, or both.
+ALTER TABLE users ALTER COLUMN username DROP NOT NULL;
+ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email          text;    -- always lowercase
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified boolean NOT NULL DEFAULT false; -- proven via Google or a reset link
+ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id      text;    -- Google's account id ("sub")
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url     text;    -- the Google profile photo
+ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at     bigint;
+CREATE UNIQUE INDEX IF NOT EXISTS users_email_key ON users (email);
+CREATE UNIQUE INDEX IF NOT EXISTS users_google_id_key ON users (google_id);
+
+-- Links for "Forgot password": only a SHA-256 of the token is stored, like session tokens.
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  token_hash text PRIMARY KEY,
+  user_id    text NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  created_at bigint NOT NULL,
+  expires_at bigint NOT NULL,
+  used_at    bigint                     -- set when the link is used: each link works once
+);
+CREATE INDEX IF NOT EXISTS password_reset_tokens_user_idx ON password_reset_tokens (user_id);
+
+-- Attempts per IP address or email (hashed) for login, sign-up and password links; see rate-limit.ts.
+CREATE TABLE IF NOT EXISTS rate_limits (
+  key      text PRIMARY KEY,
+  hits     integer NOT NULL,
+  reset_at bigint NOT NULL
+);
+CREATE INDEX IF NOT EXISTS rate_limits_reset_idx ON rate_limits (reset_at);
+
+-- No class code for now: everyone who signs up is in the one class. Run once, so a teacher
+-- taking someone off the leaderboard later isn't undone by the next schema change.
+WITH once AS (INSERT INTO settings (key, value) VALUES ('open_class', '1') ON CONFLICT (key) DO NOTHING RETURNING 1)
+UPDATE users SET in_class = true WHERE NOT in_class AND EXISTS (SELECT 1 FROM once);
+
 -- Supabase also publishes the public schema through its REST API. Row Level Security with no
 -- policies closes that door: only this server (connecting as the table owner) reads the data.
 ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
@@ -138,6 +171,8 @@ ALTER TABLE prefs    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cheers   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE visitors ENABLE ROW LEVEL SECURITY;
+ALTER TABLE password_reset_tokens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rate_limits ENABLE ROW LEVEL SECURITY;
 
 INSERT INTO settings (key, value) VALUES ('schema_version', '${SCHEMA_VERSION}')
   ON CONFLICT (key) DO UPDATE SET value = excluded.value;
@@ -177,14 +212,7 @@ async function backfillAnalytics(db: Db): Promise<void> {
   }
 }
 
-/** Six characters without look-alikes (no 0/O, 1/I/L), e.g. "K7M2QX". */
-export function newJoinCode(): string {
-  const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-  return Array.from(randomBytes(6), (b) => alphabet[b % alphabet.length]).join('');
-}
-
 const STATUS = `SELECT (SELECT value FROM settings WHERE key = 'schema_version') AS version,
-                       (SELECT value FROM settings WHERE key = 'join_code') AS join_code,
                        (SELECT count(*) FROM users WHERE role = 'admin')::int AS admins`;
 
 async function migrate(db: Db): Promise<void> {
@@ -209,14 +237,14 @@ async function migrate(db: Db): Promise<void> {
       );
     }
     await backfillAnalytics(db);
-    // The code students need to create a profile. JOIN_CODE sets the first one; the admin can change it later.
-    const initialCode = process.env.JOIN_CODE?.trim().toUpperCase() || newJoinCode();
-    await db.query(`INSERT INTO settings (key, value) VALUES ('join_code', $1) ON CONFLICT (key) DO NOTHING`, [initialCode]);
     status = await db.query(STATUS);
   }
-  const s = status.rows[0];
-  if (Number(s.admins) === 0) {
-    console.log(`\n  Karteikasten: no teacher yet. Sign up with join code ${s.join_code}: the first profile with the code becomes the admin.\n`);
+  if (Number(status.rows[0].admins) === 0) {
+    console.log(
+      process.env.ADMIN_EMAILS?.trim()
+        ? '\n  Karteikasten: no teacher yet. Sign in with Google as an ADMIN_EMAILS address (or sign up, then confirm the address once with “Forgot password”) to become the admin.\n'
+        : '\n  Karteikasten: no teacher yet. Set ADMIN_EMAILS to your email address (see .env.example), then sign in with it.\n',
+    );
   }
 }
 

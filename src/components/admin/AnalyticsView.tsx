@@ -104,7 +104,7 @@ export function AnalyticsView({ data }: { data: Analytics }) {
         <section aria-labelledby="users-h">
           <h2 id="users-h" className="sec-h">Users</h2>
           <div className="tiles tiles-6">
-            <div className="tile"><p className="tile-l">Students</p><p className="tile-v">{users.students}</p><p className="tile-s">{users.selfLearners ? `${users.selfLearners} of them on their own, not in the class` : 'profiles, teachers not counted'}</p></div>
+            <div className="tile"><p className="tile-l">Students</p><p className="tile-v">{users.students}</p><p className="tile-s">{users.selfLearners ? `${users.selfLearners} of them off the leaderboard` : 'profiles, teachers not counted'}</p></div>
             <div className="tile"><p className="tile-l">New this week</p><p className="tile-v">{users.newThisWeek}</p><p className="tile-s">joined in the last 7 days</p></div>
             <div className="tile"><p className="tile-l">Active today</p><p className="tile-v">{users.activeToday}</p><p className="tile-s">answered 1+ card today</p></div>
             <div className="tile"><p className="tile-l">Active this week</p><p className="tile-v">{users.activeWeek}</p><p className="tile-s">of {users.students} studied in 7 days</p></div>

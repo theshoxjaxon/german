@@ -22,8 +22,8 @@ export function AccountSheet() {
         <Avatar id={me.id} name={me.displayName} size="lg" />
         <div>
           <p className="me-name">{me.displayName}</p>
-          <p className="muted small">@{me.username}</p>
-          <span className={`role-pill role-${me.role}`}>{t(me.role === 'admin' ? 'Admin · teacher' : me.inClass ? 'Student' : 'Studying on your own')}</span>
+          {me.email && <p className="muted small">{me.email}</p>}
+          <span className={`role-pill role-${me.role}`}>{t(me.role === 'admin' ? 'Admin · teacher' : me.inClass ? 'Student' : 'Off the leaderboard')}</span>
         </div>
       </div>
       <div className="optlist show-icons">

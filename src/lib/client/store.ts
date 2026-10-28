@@ -397,19 +397,6 @@ class Store {
     }
   }
 
-  /** A self-learner adds the class code. Resolves to an error message, or null when it worked. */
-  async joinClass(code: string): Promise<string | null> {
-    try {
-      await send('/api/class/join', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ code }) });
-    } catch (e) {
-      return saveError(e, 'Could not join. Check your internet connection and try again.') || 'Could not join.';
-    }
-    if (this.snap.me) this.emit({ me: { ...this.snap.me, inClass: true } });
-    void this.load(); // class members also get the AI helper
-    void this.loadClass();
-    return null;
-  }
-
   /** Send a classmate a cheer. Shows as sent right away. */
   async sendCheer(to: string, kind: CheerKind): Promise<boolean> {
     const before = this.snap.classData;

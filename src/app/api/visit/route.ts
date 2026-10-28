@@ -11,7 +11,7 @@ export async function POST(req: Request) {
   const body = (await readJson(req)) as { id?: unknown; tried?: unknown } | undefined;
   const id = typeof body?.id === 'string' ? body.id : '';
   if (!VISITOR_RE.test(id)) return badRequest('Send { id }.');
-  if (!hit(`visit:${await clientIp()}`, 30, 60 * 60_000)) return new Response(null, { status: 429 });
+  if (!(await hit(`visit:${await clientIp()}`, 30, 60 * 60_000))) return new Response(null, { status: 429 });
   await repo.recordVisitor(id, body?.tried === true);
   return new Response(null, { status: 204 });
 }

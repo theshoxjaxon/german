@@ -25,9 +25,12 @@ const walk = (dir: string): string[] =>
  */
 function literals(code: string): string[] {
   const out: string[] = [];
-  const re = /'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)"|`([^`$]*)`/g;
+  // Whole template literals are matched too (and skipped when they hold a ${…}), so the quotes
+  // after one are still paired correctly.
+  const re = /'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)"|`((?:[^`\\]|\\.)*)`/g;
   for (let m; (m = re.exec(code)); ) {
     if (/(===|!==|\[)\s*$/.test(code.slice(0, m.index))) continue;
+    if (m[3]?.includes('${')) continue;
     out.push(m[1] ?? m[2] ?? m[3]);
   }
   return out;
@@ -67,6 +70,9 @@ function calls(source: string, name: string): string[][] {
   return out;
 }
 
+/** Drop comment lines: an apostrophe in a comment ("don't") would otherwise read as a quote. */
+const withoutComments = (src: string) => src.replace(/^\s*(\/\*\*|\*|\/\/).*$/gm, '');
+
 const studentFiles = [
   ...walk('components').filter((f) => /\.tsx?$/.test(f) && !f.includes('admin')),
   ...walk('lib/client').filter((f) => f.endsWith('.ts')),
@@ -76,7 +82,7 @@ function wanted(): Set<string> {
   const keys = new Set<string>();
   const add = (s: string | undefined) => s && /[A-Za-z]/.test(s) && keys.add(s);
   for (const f of studentFiles) {
-    const src = read(f).replace(/^\s*(\/\*\*|\*|\/\/).*$/gm, ''); // not comments
+    const src = withoutComments(read(f));
     for (const args of calls(src, 't')) literals(args[0]).forEach(add);
     for (const args of calls(src, 'tn')) [args[1], args[2]].forEach((a) => a && literals(a).forEach(add));
     for (const args of calls(src, 'toast')) literals(args[0]).filter((s) => /^[A-Z]/.test(s)).forEach(add);
@@ -99,12 +105,12 @@ function wanted(): Set<string> {
   for (const m of read('components/ui.tsx').match(/STATUS_LABEL = \{([^}]*)\}/)![1].matchAll(/'([^']+)'/g)) add(m[1]);
   // Messages that come from the server or shared rules and are shown through t()
   const messageFiles = [
-    'app/actions/auth.ts', 'lib/account-rules.ts', 'lib/server/ai.ts', 'lib/client/ai.ts',
-    'app/api/class/join/route.ts', 'app/api/ai/words/route.ts', 'app/api/class/route.ts', 'app/api/cheers/route.ts',
+    'app/actions/auth.ts', 'lib/account-rules.ts', 'lib/auth-schemas.ts', 'lib/server/ai.ts', 'lib/client/ai.ts',
+    'app/api/ai/words/route.ts', 'app/api/class/route.ts', 'app/api/cheers/route.ts',
     'app/api/words/[id]/route.ts', 'app/api/cards/[id]/route.ts',
   ];
   for (const f of messageFiles) {
-    for (const s of literals(read(f))) if (/^[A-Z][^{}]*[a-z][^{}]*[.!?]$/.test(s) && s.includes(' ')) add(s);
+    for (const s of literals(withoutComments(read(f)))) if (/^[A-Z][^{}]*[a-z][^{}]*[.!?]$/.test(s) && s.includes(' ')) add(s);
   }
   add(`You can have up to ${MAX_OWN_WORDS} of your own words.`);
   return keys;
@@ -112,7 +118,7 @@ function wanted(): Set<string> {
 
 const placeholders = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 // Technical texts nobody sees in the student app (they mean a broken request, not a person's mistake)
-const IGNORE = /^(Send \{|Expected \{|Invalid |Too many cards|Cross-site|Sign in to continue|Only admins|The AI answer had|Karteikasten AI:)/;
+const IGNORE = /^(Send \{|Expected \{|Invalid |Too many cards|Cross-site|Sign in to continue|Only admins|The AI answer had|Karteikasten AI:|This is a photo of a German vocabulary list)/;
 
 describe('Uzbek interface', () => {
   const keys = [...wanted()].filter((k) => !IGNORE.test(k));
@@ -121,10 +127,11 @@ describe('Uzbek interface', () => {
     expect(keys.length).toBeGreaterThan(400);
     expect(keys).toContain('Study now');
     expect(keys).toContain('{n} card is still waiting for today.');
-    expect(keys).toContain('Wrong username or password.');
+    expect(keys).toContain('Wrong email or password.');
   });
 
   it('has an Uzbek entry for every text the app shows', () => {
+    if (process.env.SHOW_MISSING) console.log('MISSING ' + JSON.stringify(keys.filter((k) => !(k in UZ)), null, 1));
     expect(keys.filter((k) => !(k in UZ))).toEqual([]);
   });
 

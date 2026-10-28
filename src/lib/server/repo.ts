@@ -15,7 +15,8 @@ import {
   isClassMember, type CardDoc, type Cheer, type CheerKind, type ClassData, type ClassMember, type Me, type Prefs, type Role, type Word, type WordData,
 } from '../types';
 import { DAY } from '../time';
-import { getDb, newJoinCode, type Row } from './db';
+import { isAdminEmail } from './admins';
+import { getDb, type Row } from './db';
 import { sanitizeCard, sanitizePrefs, sanitizeWord } from './validate';
 
 export const TIMEZONE = safeTimeZone(process.env.APP_TIMEZONE);
@@ -38,29 +39,50 @@ const FOREIGN_KEY_VIOLATION = '23503';
 /* ============================== users ============================== */
 
 export interface UserRow extends Me {
+  email: string; // '' for profiles made before sign-in by email
+  emailVerified: boolean;
+  googleId: string | null;
+  passwordHash: string | null; // null: signs in with Google only
   createdAt: number;
   lastSeenAt: number | null;
-  passwordHash: string;
 }
 
-const USER_COLS = 'id, username, display_name, role, in_class, created_at, last_seen_at, password_hash';
+const USER_COLS = 'id, email, email_verified, google_id, avatar_url, display_name, role, in_class, created_at, last_seen_at, password_hash';
 function toUser(r: Row): UserRow {
   return {
     id: str(r.id),
-    username: str(r.username),
+    email: str(r.email),
+    emailVerified: r.email_verified === true,
+    googleId: r.google_id == null ? null : str(r.google_id),
+    avatarUrl: r.avatar_url == null ? null : str(r.avatar_url),
     displayName: str(r.display_name),
     role: r.role === 'admin' ? 'admin' : 'student',
     inClass: r.in_class !== false,
+    hasPassword: r.password_hash != null,
+    hasGoogle: r.google_id != null,
     createdAt: num(r.created_at),
     lastSeenAt: r.last_seen_at == null ? null : num(r.last_seen_at),
-    passwordHash: str(r.password_hash),
+    passwordHash: r.password_hash == null ? null : str(r.password_hash),
   };
 }
-export const publicUser = (u: UserRow): Me => ({ id: u.id, username: u.username, displayName: u.displayName, role: u.role, inClass: u.inClass });
 
-export async function findUserByUsername(username: string): Promise<UserRow | null> {
+/** What the browser gets about you. Email addresses are for admins only, their own included. */
+export const publicUser = (u: UserRow): Me => ({
+  id: u.id,
+  displayName: u.displayName,
+  role: u.role,
+  inClass: u.inClass,
+  avatarUrl: u.avatarUrl,
+  hasPassword: u.hasPassword,
+  hasGoogle: u.hasGoogle,
+  ...(u.role === 'admin' && u.email ? { email: u.email } : {}),
+});
+
+/** `email` must already be normalized (lowercase, trimmed): see normalizeEmail(). */
+export async function findUserByEmail(email: string): Promise<UserRow | null> {
+  if (!email) return null;
   const db = await getDb();
-  const r = await db.query(`SELECT ${USER_COLS} FROM users WHERE username = $1`, [username]);
+  const r = await db.query(`SELECT ${USER_COLS} FROM users WHERE email = $1`, [email]);
   return r.rows[0] ? toUser(r.rows[0]) : null;
 }
 
@@ -70,60 +92,127 @@ export async function findUserById(id: string): Promise<UserRow | null> {
   return r.rows[0] ? toUser(r.rows[0]) : null;
 }
 
+const isUniqueViolation = (e: unknown) => (e as { code?: string }).code === '23505' || /unique/i.test(String((e as Error).message));
+
 /**
- * Create a profile. The first profile made with the class code becomes the admin (a self-learner
- * who signs up before the teacher does not). Who is first is settled by the unique 'first_admin'
- * settings row inside the same statement, so two people signing up at the same moment can't both
- * become admin. `inClass`: signed up with the class code. `visitorId` (the browser's anonymous id)
- * records that this browser joined, for the Visit → Try → Join funnel.
+ * Create a profile. Everyone is in the class (no class code for now). An ADMIN_EMAILS address
+ * becomes admin right away only when it is already verified (signing up with Google).
+ * `visitorId` (the browser's anonymous id) records that this browser joined, for the
+ * Visit → Try → Join funnel. 'taken': the email (or Google account) already has a profile.
  */
 export async function createUser(
-  input: { username: string; displayName: string; passwordHash: string; inClass?: boolean; visitorId?: string | null },
+  input: {
+    email: string;
+    displayName: string;
+    passwordHash?: string | null;
+    googleId?: string | null;
+    avatarUrl?: string | null;
+    emailVerified?: boolean;
+    visitorId?: string | null;
+  },
   now = Date.now(),
 ): Promise<UserRow | 'taken'> {
   const db = await getDb();
   const id = `u_${randomBytes(12).toString('base64url')}`;
+  const verified = input.emailVerified ?? false;
   try {
     await db.query(
-      `WITH claim AS (
-         INSERT INTO settings (key, value) SELECT 'first_admin', $1 WHERE $8::boolean AND NOT EXISTS (SELECT 1 FROM users WHERE role = 'admin')
-         ON CONFLICT (key) DO NOTHING RETURNING 1
-       ), u AS (
-         INSERT INTO users (id, username, display_name, password_hash, role, in_class, created_at, last_seen_at)
-         SELECT $1, $2, $3, $4, CASE WHEN EXISTS (SELECT 1 FROM claim) THEN 'admin' ELSE 'student' END, $8, $5, $5
+      `WITH u AS (
+         INSERT INTO users (id, email, display_name, password_hash, google_id, avatar_url, email_verified, role, in_class, created_at, updated_at, last_seen_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9, $9, $9)
          RETURNING id
        ), visitor AS (
          INSERT INTO visitors (id, first_day, last_day, user_id, joined_day)
-         SELECT $7, $6, $6, id, $6 FROM u WHERE $7::text IS NOT NULL
+         SELECT $11, $10, $10, id, $10 FROM u WHERE $11::text IS NOT NULL
          ON CONFLICT (id) DO UPDATE SET last_day = excluded.last_day, user_id = excluded.user_id, joined_day = excluded.joined_day
            WHERE visitors.user_id IS NULL
        )
-       INSERT INTO activity (user_id, day, visits) SELECT id, $6, 1 FROM u`,
-      [id, input.username, input.displayName, input.passwordHash, now, todayKey(now), input.visitorId ?? null, input.inClass ?? true],
+       INSERT INTO activity (user_id, day, visits) SELECT id, $10, 1 FROM u`,
+      [
+        id, input.email, input.displayName, input.passwordHash ?? null, input.googleId ?? null, input.avatarUrl ?? null,
+        verified, verified && isAdminEmail(input.email) ? 'admin' : 'student', now, todayKey(now), input.visitorId ?? null,
+      ],
     );
   } catch (e) {
-    if ((e as { code?: string }).code === '23505' || /unique/i.test(String((e as Error).message))) return 'taken';
+    if (isUniqueViolation(e)) return 'taken';
     throw e;
   }
   return (await findUserById(id))!;
 }
 
-export async function setPasswordHash(userId: string, passwordHash: string): Promise<void> {
-  const db = await getDb();
-  await db.query('UPDATE users SET password_hash = $2 WHERE id = $1', [userId, passwordHash]);
+/** After a sign-in: an ADMIN_EMAILS address whose owner is proven becomes admin. Returns the user as they are now. */
+export async function ensureAdminRole(user: UserRow): Promise<UserRow> {
+  if (user.role === 'admin' || !user.emailVerified || !isAdminEmail(user.email)) return user;
+  await setRole(user.id, 'admin');
+  return { ...user, role: 'admin' };
 }
 
-/** A self-learner adds the class code later. 'wrong-code' when it doesn't match the current one. */
-export async function joinClass(userId: string, code: string): Promise<'ok' | 'wrong-code'> {
-  const db = await getDb();
-  const r = await db.query(
-    `UPDATE users SET in_class = true WHERE id = $1 AND $2 = (SELECT value FROM settings WHERE key = 'join_code') RETURNING id`,
-    [userId, code],
-  );
-  return r.rowCount ? 'ok' : 'wrong-code';
+export interface GoogleProfile {
+  sub: string; // Google's id for the account: stable, unlike the email
+  email: string; // normalized
+  emailVerified: boolean;
+  name: string;
+  picture: string | null;
 }
 
-/** Admins move someone into or out of the class (out: they keep studying, as a self-learner). */
+/**
+ * Sign in with Google: find the profile by its Google id, else link the profile with the same
+ * email, else create one. Only a verified Google email links or creates, so nobody can claim an
+ * address with a Google account that doesn't own it.
+ *
+ * Linking a profile whose email was never verified also removes its password and signs it out
+ * everywhere: whoever set that password never proved the address was theirs, and must not keep
+ * a way into the real owner's profile ("pre-account hijacking"). The owner can set a password
+ * later with "Forgot password".
+ *
+ * 'unverified': Google hasn't verified the email. 'other-google': the profile with this email
+ * is already linked to a different Google account.
+ */
+export async function googleSignIn(
+  g: GoogleProfile,
+  opts: { visitorId?: string | null } = {},
+  now = Date.now(),
+): Promise<{ user: UserRow; created: boolean } | 'unverified' | 'other-google'> {
+  const db = await getDb();
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const known = await db.query(
+      `UPDATE users SET avatar_url = COALESCE($2, avatar_url), updated_at = $3 WHERE google_id = $1 RETURNING ${USER_COLS}`,
+      [g.sub, g.picture, now],
+    );
+    if (known.rows[0]) return { user: toUser(known.rows[0]), created: false };
+    if (!g.emailVerified) return 'unverified';
+
+    const linked = await db.query(
+      `WITH link AS (
+         UPDATE users SET google_id = $2, avatar_url = COALESCE(avatar_url, $3), email_verified = true, updated_at = $4,
+           password_hash = CASE WHEN email_verified THEN password_hash END
+         WHERE email = $1 AND google_id IS NULL
+         RETURNING ${USER_COLS}, (SELECT NOT email_verified FROM users WHERE email = $1) AS was_unverified
+       ), signout AS (
+         DELETE FROM sessions WHERE user_id IN (SELECT id FROM link WHERE was_unverified)
+       )
+       SELECT * FROM link`,
+      [g.email, g.sub, g.picture, now],
+    );
+    if (linked.rows[0]) return { user: toUser(linked.rows[0]), created: false };
+    if (await findUserByEmail(g.email)) return 'other-google';
+
+    const created = await createUser(
+      { email: g.email, displayName: g.name, googleId: g.sub, avatarUrl: g.picture, emailVerified: true, visitorId: opts.visitorId },
+      now,
+    );
+    if (created !== 'taken') return { user: created, created: true };
+    // Someone else (or another tab) created it a moment ago: look again
+  }
+  throw new Error('Google sign-in: the profile changed while signing in. Try again.');
+}
+
+export async function setPasswordHash(userId: string, passwordHash: string, now = Date.now()): Promise<void> {
+  const db = await getDb();
+  await db.query('UPDATE users SET password_hash = $2, updated_at = $3 WHERE id = $1', [userId, passwordHash, now]);
+}
+
+/** Admins take someone off the leaderboard or put them back (off it, they keep studying as usual). */
 export async function setInClass(userId: string, inClass: boolean): Promise<void> {
   const db = await getDb();
   await db.query('UPDATE users SET in_class = $2 WHERE id = $1', [userId, inClass]);
@@ -207,6 +296,49 @@ export async function deleteSession(token: string): Promise<void> {
 export async function deleteUserSessions(userId: string, keepToken?: string): Promise<void> {
   const db = await getDb();
   await db.query('DELETE FROM sessions WHERE user_id = $1 AND id <> $2', [userId, keepToken ? hashToken(keepToken) : '']);
+}
+
+/* ============================== password links ============================== */
+
+/**
+ * A "Forgot password" link: a random 256-bit token, of which only the SHA-256 is stored. A new
+ * link replaces this person's older ones, so only the latest email works.
+ */
+export async function createResetToken(userId: string, ttlMs: number, now = Date.now()): Promise<string> {
+  const db = await getDb();
+  const token = randomBytes(32).toString('base64url');
+  await db.query(
+    `WITH old AS (DELETE FROM password_reset_tokens WHERE user_id = $2 OR expires_at < $3)
+     INSERT INTO password_reset_tokens (token_hash, user_id, created_at, expires_at) VALUES ($1, $2, $3, $4)`,
+    [hashToken(token), userId, now, now + ttlMs],
+  );
+  return token;
+}
+
+/**
+ * Use a link to set a new password: once, before it expires. In the same statement the address
+ * counts as verified (the email reached its owner) and every session ends, so a stolen session
+ * or an old password stops working. Null when the link is unknown, used or expired.
+ */
+export async function useResetToken(token: string, passwordHash: string, now = Date.now()): Promise<UserRow | null> {
+  const db = await getDb();
+  const r = await db.query(
+    `WITH t AS (
+       UPDATE password_reset_tokens SET used_at = $3
+       WHERE token_hash = $1 AND used_at IS NULL AND expires_at > $3
+       RETURNING user_id
+     ), u AS (
+       UPDATE users SET password_hash = $2, email_verified = true, updated_at = $3
+       FROM t WHERE users.id = t.user_id
+       RETURNING users.id
+     ), signout AS (
+       DELETE FROM sessions WHERE user_id IN (SELECT id FROM u)
+     )
+     SELECT id FROM u`,
+    [hashToken(token), passwordHash, now],
+  );
+  const id = r.rows[0]?.id;
+  return id ? findUserById(str(id)) : null;
 }
 
 /* ============================== words ============================== */
@@ -446,7 +578,7 @@ export async function sendCheer(fromId: string, toId: string, kind: CheerKind, n
 export async function unseenCheers(userId: string): Promise<Cheer[]> {
   const db = await getDb();
   const r = await db.query(
-    `SELECT c.id, c.kind, c.created_at, u.id AS from_id, u.display_name, u.username
+    `SELECT c.id, c.kind, c.created_at, u.id AS from_id, u.display_name
      FROM cheers c JOIN users u ON u.id = c.from_user
      WHERE c.to_user = $1 AND c.seen_at IS NULL ORDER BY c.created_at DESC LIMIT 20`,
     [userId],
@@ -455,7 +587,7 @@ export async function unseenCheers(userId: string): Promise<Cheer[]> {
     id: str(row.id),
     kind: str(row.kind) as CheerKind,
     createdAt: num(row.created_at),
-    from: { id: str(row.from_id), displayName: str(row.display_name), username: str(row.username) },
+    from: { id: str(row.from_id), displayName: str(row.display_name) },
   }));
 }
 
@@ -477,7 +609,11 @@ async function loadEveryone(now: number) {
   const db = await getDb();
   const since = shiftDay(todayKey(now), -400);
   const [users, cards, acts] = await Promise.all([
-    db.query('SELECT id, username, display_name, role, in_class, created_at, last_seen_at FROM users ORDER BY created_at'),
+    db.query(
+      `SELECT id, email, display_name, avatar_url, role, in_class, created_at, last_seen_at,
+              google_id IS NOT NULL AS has_google, password_hash IS NOT NULL AS has_password
+       FROM users ORDER BY created_at`,
+    ),
     db.query('SELECT user_id, sum(started)::int AS active, sum(mature)::int AS mature FROM cards GROUP BY user_id'),
     db.query('SELECT user_id, day, answers, visits FROM activity WHERE day >= $1', [since]),
   ]);
@@ -498,8 +634,11 @@ async function loadEveryone(now: number) {
   return {
     users: users.rows.map((r) => ({
       id: str(r.id),
-      username: str(r.username),
+      email: str(r.email),
       displayName: str(r.display_name),
+      avatarUrl: r.avatar_url == null ? null : str(r.avatar_url),
+      hasGoogle: r.has_google === true,
+      hasPassword: r.has_password === true,
       role: (r.role === 'admin' ? 'admin' : 'student') as Role,
       inClass: r.in_class !== false,
       createdAt: num(r.created_at),
@@ -512,7 +651,7 @@ async function loadEveryone(now: number) {
 
 const sumDays = (a: PersonActivity, days: string[]) => days.reduce((n, d) => n + (a.answersByDay.get(d) ?? 0), 0);
 
-/** Everyone in the class, with the numbers the Class tab shows. Self-learners aren't listed. */
+/** Everyone on the leaderboard, with the numbers the Class tab shows. No email addresses: classmates never see them. */
 export async function classOverview(viewerId: string, now = Date.now()): Promise<ClassData> {
   const today = todayKey(now);
   const week = lastDays(today, 7);
@@ -524,7 +663,6 @@ export async function classOverview(viewerId: string, now = Date.now()): Promise
   const cheered = new Set(cheers.rows.map((r) => str(r.to_user)));
   const members: ClassMember[] = users.filter(isClassMember).map((u) => ({
     id: u.id,
-    username: u.username,
     displayName: u.displayName,
     role: u.role,
     activeWords: u.active,
@@ -558,10 +696,13 @@ export interface AdminStats {
   signupsByDay: number[];
   people: {
     id: string;
-    username: string;
+    email: string; // '' for profiles from before sign-in by email
     displayName: string;
+    avatarUrl: string | null;
+    hasGoogle: boolean;
+    hasPassword: boolean;
     role: Role;
-    inClass: boolean;
+    inClass: boolean; // on the leaderboard
     createdAt: number;
     joinedDay: string; // 'YYYY-MM-DD' in the center's time zone
     lastSeenAt: number | null;
@@ -571,14 +712,13 @@ export interface AdminStats {
     answersWeek: number;
     studiedToday: boolean;
   }[];
-  joinCode: string;
 }
 
 export async function adminStats(now = Date.now()): Promise<AdminStats> {
   const today = todayKey(now);
   const days = lastDays(today, 30);
   const week = lastDays(today, 7);
-  const [{ users }, joinCode] = await Promise.all([loadEveryone(now), getJoinCode()]);
+  const { users } = await loadEveryone(now);
   const studiedOn = (day: string) => users.filter((u) => u.act.studyDays.has(day)).length;
   const studiedIn = (range: string[]) => users.filter((u) => range.some((d) => u.act.studyDays.has(d))).length;
   const createdDay = (u: (typeof users)[number]) => dayKey(u.createdAt, TIMEZONE);
@@ -602,8 +742,11 @@ export async function adminStats(now = Date.now()): Promise<AdminStats> {
     people: users
       .map((u) => ({
         id: u.id,
-        username: u.username,
+        email: u.email,
         displayName: u.displayName,
+        avatarUrl: u.avatarUrl,
+        hasGoogle: u.hasGoogle,
+        hasPassword: u.hasPassword,
         role: u.role,
         inClass: u.inClass,
         createdAt: u.createdAt,
@@ -616,7 +759,6 @@ export async function adminStats(now = Date.now()): Promise<AdminStats> {
         studiedToday: u.act.studyDays.has(today),
       }))
       .sort((a, b) => (b.lastSeenAt ?? 0) - (a.lastSeenAt ?? 0)),
-    joinCode,
   };
 }
 
@@ -681,22 +823,4 @@ export async function analytics(period: Period, now = Date.now()): Promise<Analy
     },
     period,
   );
-}
-
-/* ============================== settings ============================== */
-
-export async function getJoinCode(): Promise<string> {
-  const db = await getDb();
-  const r = await db.query(`SELECT value FROM settings WHERE key = 'join_code'`);
-  return str(r.rows[0]?.value);
-}
-
-export async function setJoinCode(code?: string): Promise<string> {
-  const value = (code || newJoinCode()).toUpperCase();
-  const db = await getDb();
-  await db.query(
-    `INSERT INTO settings (key, value) VALUES ('join_code', $1) ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
-    [value],
-  );
-  return value;
 }

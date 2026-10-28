@@ -14,7 +14,7 @@ let repo: typeof import('./repo');
 let close = async () => {};
 
 beforeAll(async () => {
-  process.env.JOIN_CODE = 'TEST42';
+  process.env.ADMIN_EMAILS = 'ustoz@markaz.uz, second@markaz.uz';
   const db = await import('./db');
   if (process.env.TEST_DATABASE_URL) {
     process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
@@ -34,15 +34,24 @@ beforeAll(async () => {
 }, 60_000); // PGlite (Postgres in WebAssembly) can take a while to boot on a busy machine
 afterAll(() => close());
 
+/** A profile by email, as the sign-up form makes it (or with Google, when `emailVerified`). */
+const profile = async (email: string, displayName: string, extra: { emailVerified?: boolean; visitorId?: string; googleId?: string } = {}) => {
+  const u = await repo.createUser({ email, displayName, passwordHash: '$2b$11$not-a-real-hash', ...extra });
+  if (u === 'taken') throw new Error(`${email} is taken`);
+  return u;
+};
+const byEmail = async (email: string) => (await repo.findUserByEmail(email))!;
+
 describe('passwords', () => {
-  it('hashes with a salt and verifies', async () => {
+  it('hashes with bcrypt and a salt, and verifies', async () => {
     const a = await hashPassword('Guten Tag 123');
     const b = await hashPassword('Guten Tag 123');
     expect(a).not.toBe(b); // different salts
-    expect(a.startsWith('scrypt$')).toBe(true);
+    expect(a).toMatch(/^\$2[aby]\$11\$/);
     expect(await verifyPassword('Guten Tag 123', a)).toBe(true);
     expect(await verifyPassword('guten tag 123', a)).toBe(false);
     expect(await verifyPassword('x', 'not-a-hash')).toBe(false);
+    expect(await verifyPassword('x', null)).toBe(false); // a Google-only profile has no password
   });
   it('makes readable temporary passwords', () => {
     expect(temporaryPassword()).toMatch(/^[a-z]+-[a-z]+-\d{4}$/);
@@ -52,39 +61,52 @@ describe('passwords', () => {
 describe('database', () => {
   const doc = (f: CardDoc['f']): CardDoc => ({ f, r: null, suspended: false, updatedAt: Date.now() });
 
-  it('seeds the built-in lists (Lektion 3, 5 and 7) and the join code', async () => {
+  it('seeds the built-in lists (Lektion 3, 5 and 7)', async () => {
     const words = Object.values(await repo.listWords(null));
     expect(words.filter((w) => w.deck === 'Lektion 3')).toHaveLength(34);
     expect(words.filter((w) => w.deck === 'Lektion 5')).toHaveLength(59);
     expect(words.filter((w) => w.deck === 'Lektion 7')).toHaveLength(46);
     expect(words).toHaveLength(139);
-    expect(await repo.getJoinCode()).toBe('TEST42');
   });
 
-  it('makes the first profile with the class code the admin and later ones students', async () => {
-    // A self-learner (no class code) who signs up before the teacher must not become admin
-    const solo = await repo.createUser({ username: 'solo', displayName: 'Solo', passwordHash: 'x', inClass: false });
-    expect(solo !== 'taken' && [solo.role, solo.inClass]).toEqual(['student', false]);
-    const teacher = await repo.createUser({ username: 'teacher', displayName: 'Ustoz', passwordHash: 'x' });
-    const student = await repo.createUser({ username: 'malika', displayName: 'Malika K', passwordHash: 'x' });
-    expect(teacher !== 'taken' && teacher.role).toBe('admin');
-    expect(student !== 'taken' && student.role).toBe('student');
-    expect(await repo.createUser({ username: 'malika', displayName: 'Other', passwordHash: 'x' })).toBe('taken');
-    if (solo !== 'taken') await repo.deleteUser(solo.id);
+  it('makes everyone a student in the one class, and an ADMIN_EMAILS address admin once it is verified', async () => {
+    // Signing up first with the teacher's address, unverified, doesn't make anyone admin
+    const early = await profile('ustoz@markaz.uz', 'Not the teacher');
+    expect([early.role, early.inClass, early.emailVerified]).toEqual(['student', true, false]);
+    expect(await repo.ensureAdminRole(early)).toMatchObject({ role: 'student' });
+    await repo.deleteUser(early.id);
+
+    const teacher = await profile('ustoz@markaz.uz', 'Ustoz', { emailVerified: true }); // e.g. with Google
+    const student = await profile('malika@example.com', 'Malika K');
+    expect(teacher.role).toBe('admin');
+    expect([student.role, student.inClass]).toEqual(['student', true]);
+    expect(await repo.createUser({ email: 'malika@example.com', displayName: 'Other', passwordHash: 'x' })).toBe('taken');
+    expect((await byEmail('malika@example.com')).displayName).toBe('Malika K');
+  });
+
+  it('shows email addresses to admins only', async () => {
+    const student = repo.publicUser(await byEmail('malika@example.com'));
+    const teacher = repo.publicUser(await byEmail('ustoz@markaz.uz'));
+    expect(student).not.toHaveProperty('email'); // not even their own
+    expect(teacher.email).toBe('ustoz@markaz.uz');
+    expect(student).toMatchObject({ displayName: 'Malika K', hasPassword: true, hasGoogle: false, avatarUrl: null });
+    expect(JSON.stringify(await repo.classOverview(teacher.id))).not.toContain('@');
+    expect(JSON.stringify(await repo.unseenCheers(student.id))).not.toContain('@');
+    expect((await repo.adminStats()).people.map((p) => p.email).sort()).toEqual(['malika@example.com', 'ustoz@markaz.uz']);
   });
 
   it('stores only a hash of the session token and expires sessions', async () => {
-    const user = (await repo.findUserByUsername('malika'))!;
+    const user = await byEmail('malika@example.com');
     const { token } = await repo.createSession(user.id, 60_000);
-    expect((await repo.findSession(token))?.user.username).toBe('malika');
+    expect((await repo.findSession(token))?.user.displayName).toBe('Malika K');
     expect(await repo.findSession(token, Date.now() + 120_000)).toBeNull(); // expired
     await repo.deleteSession(token);
     expect(await repo.findSession(token)).toBeNull();
   });
 
   it('keeps progress per person and feeds the class and admin numbers', async () => {
-    const malika = (await repo.findUserByUsername('malika'))!;
-    const teacher = (await repo.findUserByUsername('teacher'))!;
+    const malika = await byEmail('malika@example.com');
+    const teacher = await byEmail('ustoz@markaz.uz');
     const t = Date.now();
     const s1 = answer(null, 'good', t);
     await repo.putCard(malika.id, 'l3-familie', doc(s1));
@@ -96,7 +118,7 @@ describe('database', () => {
     expect(await repo.listCards(teacher.id)).toEqual({}); // private per person
 
     const cls = await repo.classOverview(teacher.id);
-    const m = cls.members.find((x) => x.username === 'malika')!;
+    const m = cls.members.find((x) => x.id === malika.id)!;
     expect(m).toMatchObject({ activeWords: 2, answersToday: 3, studiedToday: true, streak: 1, isMe: false });
     expect(await repo.myStreak(malika.id)).toEqual({ days: 1, studiedToday: true });
     expect(await repo.myStreak(teacher.id)).toEqual({ days: 0, studiedToday: false });
@@ -108,39 +130,35 @@ describe('database', () => {
   });
 
   it('limits cheers to one per classmate per day', async () => {
-    const malika = (await repo.findUserByUsername('malika'))!;
-    const teacher = (await repo.findUserByUsername('teacher'))!;
+    const malika = await byEmail('malika@example.com');
+    const teacher = await byEmail('ustoz@markaz.uz');
     expect(await repo.sendCheer(teacher.id, malika.id, 'keep-going')).toBe('ok');
     expect(await repo.sendCheer(teacher.id, malika.id, 'great-streak')).toBe('already');
     expect(await repo.sendCheer(malika.id, malika.id, 'keep-going')).toBe('self');
     const inbox = await repo.unseenCheers(malika.id);
     expect(inbox).toHaveLength(1);
-    expect(inbox[0]).toMatchObject({ kind: 'keep-going', from: { username: 'teacher' } });
+    expect(inbox[0]).toMatchObject({ kind: 'keep-going', from: { id: teacher.id, displayName: 'Ustoz' } });
     await repo.markCheersSeen(malika.id);
     expect(await repo.unseenCheers(malika.id)).toHaveLength(0);
-    expect((await repo.classOverview(teacher.id)).members.find((x) => x.username === 'malika')?.cheeredToday).toBe(true);
+    expect((await repo.classOverview(teacher.id)).members.find((x) => x.id === malika.id)?.cheeredToday).toBe(true);
   });
 
-  it('keeps self-learners out of the class until they add the class code', async () => {
-    const teacher = (await repo.findUserByUsername('teacher'))!;
-    const karim = await repo.createUser({ username: 'karim', displayName: 'Karim', passwordHash: 'x', inClass: false });
-    if (karim === 'taken') throw new Error('taken');
-    const names = async () => (await repo.classOverview(teacher.id)).members.map((m) => m.username);
-    expect(await names()).not.toContain('karim');
+  it('puts everyone on the leaderboard until a teacher takes them off it', async () => {
+    const teacher = await byEmail('ustoz@markaz.uz');
+    const karim = await profile('karim@example.com', 'Karim');
+    const names = async () => (await repo.classOverview(teacher.id)).members.map((m) => m.displayName);
+    expect(await names()).toContain('Karim');
+    await repo.setInClass(karim.id, false);
+    expect(await names()).not.toContain('Karim');
     expect(await repo.sendCheer(teacher.id, karim.id, 'keep-going')).toBe('no-user');
-    expect(await repo.joinClass(karim.id, 'WRONG1')).toBe('wrong-code');
-    expect(await repo.joinClass(karim.id, await repo.getJoinCode())).toBe('ok');
-    expect((await repo.findUserById(karim.id))?.inClass).toBe(true);
-    expect(await names()).toContain('karim');
-    await repo.setInClass(karim.id, false); // the teacher can take someone out again
-    expect(await names()).not.toContain('karim');
-    expect((await repo.adminStats()).people.find((p) => p.username === 'karim')?.inClass).toBe(false);
+    expect((await repo.adminStats()).people.find((p) => p.id === karim.id)?.inClass).toBe(false);
+    await repo.setInClass(karim.id, true);
+    expect(await names()).toContain('Karim');
     await repo.deleteUser(karim.id);
   });
 
   it('adds guest progress to a profile without overwriting what is there', async () => {
-    const created = await repo.createUser({ username: 'guest_now', displayName: 'Dilnoza', passwordHash: 'x' });
-    if (created === 'taken') throw new Error('taken');
+    const created = await profile('dilnoza@example.com', 'Dilnoza');
     const t = Date.now();
     const mine = doc(answer(null, 'easy', t));
     await repo.putCard(created.id, 'l3-mutter', mine);
@@ -162,10 +180,9 @@ describe('database', () => {
   });
 
   it('keeps each person’s own words private and only lets the owner change them', async () => {
-    const aziz = await repo.createUser({ username: 'aziz', displayName: 'Aziz', passwordHash: 'x' });
-    const malika = (await repo.findUserByUsername('malika'))!;
-    const teacher = (await repo.findUserByUsername('teacher'))!;
-    if (aziz === 'taken') throw new Error('taken');
+    const aziz = await profile('aziz@example.com', 'Aziz');
+    const malika = await byEmail('malika@example.com');
+    const teacher = await byEmail('ustoz@markaz.uz');
     const word = (term: string): WordData => ({
       term, meaning: 'vokzal', pos: 'noun', pronunciation: '', forms: '', example: '', exampleTr: '', mnemonic: '', notes: '',
       tags: [], deck: 'My words', order: 0, createdAt: 1, updatedAt: 1,
@@ -198,7 +215,7 @@ describe('database', () => {
   });
 
   it('deletes a profile with everything that belongs to it', async () => {
-    const malika = (await repo.findUserByUsername('malika'))!;
+    const malika = await byEmail('malika@example.com');
     await repo.deleteUser(malika.id);
     expect(await repo.findUserById(malika.id)).toBeNull();
     expect(await repo.listCards(malika.id)).toEqual({});
@@ -256,8 +273,7 @@ describe('analytics', () => {
   };
 
   it('counts reviews, recall and the moment a word is mastered, and keeps it after an undo', async () => {
-    const nodira = await repo.createUser({ username: 'nodira', displayName: 'Nodira', passwordHash: 'x', visitorId: V0 });
-    if (nodira === 'taken') throw new Error('taken');
+    const nodira = await profile('nodira@example.com', 'Nodira', { visitorId: V0 });
     await repo.putCard(nodira.id, 'l3-familie', state([e1, e2], 6));
     expect(await masteredAt(nodira.id)).toBeNull();
     await repo.putCard(nodira.id, 'l3-familie', state([e1, e2, e3], 22));
@@ -276,8 +292,7 @@ describe('analytics', () => {
     await repo.recordVisitor(V1, false);
     await repo.recordVisitor(V1, true); // answered a card as a guest
     await repo.recordVisitor(V2, false); // only looked
-    const jasur = await repo.createUser({ username: 'jasur', displayName: 'Jasur', passwordHash: 'x', visitorId: V1 });
-    expect(jasur).not.toBe('taken');
+    await profile('jasur@example.com', 'Jasur', { visitorId: V1 });
 
     const { funnel, users } = await repo.analytics('30');
     expect(funnel.guests.map((s) => s.count)).toEqual([3, 1, 1]); // V0, V1, V2 → V1 tried → V1 joined
@@ -290,7 +305,7 @@ describe('analytics', () => {
   it('fills in mastery and recall from the review history of an older database', async () => {
     const dbm = await import('./db');
     const conn = await dbm.getDb();
-    const nodira = (await repo.findUserByUsername('nodira'))!;
+    const nodira = await byEmail('nodira@example.com');
     await repo.putCard(nodira.id, 'l3-familie', state([e1, e2, e3], 22));
     // Make it look like a database from before analytics existed
     await conn.query('UPDATE cards SET mastered_at = NULL');

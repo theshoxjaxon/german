@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { useState, useTransition } from 'react';
-import { deleteUserAction, newJoinCodeAction, resetPasswordAction, setClassAction, setRoleAction } from '@/app/admin/actions';
-import { useNow } from '@/lib/client/hooks';
+import { deleteUserAction, resetPasswordAction, setClassAction, setRoleAction } from '@/app/admin/actions';
+import { useClientValue, useNow } from '@/lib/client/hooks';
 import type { AdminStats } from '@/lib/server/repo';
 import { dayLabelLong as dayLong, dayLabelShortDe as dayLabel, dayLabelWithYear } from '@/lib/stats';
 import { DAY, plural } from '@/lib/time';
@@ -35,11 +35,9 @@ export function AdminDashboard({ stats, meId }: { stats: AdminStats; meId: strin
   const now = useNow();
   const [managing, setManaging] = useState<Person | null>(null);
   const [closing, setClosing] = useState(false);
-  const [code, setCode] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
-  const [pending, startTransition] = useTransition();
+  const signupLink = useClientValue(() => `${window.location.origin}/signup`, '/signup');
   const t = stats.totals;
-  const joinCode = code ?? stats.joinCode;
 
   const close = () => {
     setClosing(true);
@@ -51,14 +49,6 @@ export function AdminDashboard({ stats, meId }: { stats: AdminStats; meId: strin
   const copy = (text: string, done: string) => {
     navigator.clipboard?.writeText(text).then(() => setNotice(done), () => setNotice('Select the text and copy it.'));
   };
-  const newCode = () =>
-    startTransition(async () => {
-      const r = await newJoinCodeAction();
-      if (r.ok && r.code) {
-        setCode(r.code);
-        setNotice('New join code ready. The old one no longer works.');
-      } else if (!r.ok) setNotice(r.error);
-    });
 
   return (
     <main className="admin-main">
@@ -103,16 +93,13 @@ export function AdminDashboard({ stats, meId }: { stats: AdminStats; meId: strin
           />
         </section>
 
-        <section className="panel join-panel" aria-labelledby="code-h">
-          <div className="panel-h"><h2 id="code-h">Join code</h2><span className="muted">to join your class</span></div>
-          <p className="join-code" aria-label={`Join code ${joinCode.split('').join(' ')}`}>{joinCode}</p>
+        <section className="panel join-panel" aria-labelledby="invite-h">
+          <div className="panel-h"><h2 id="invite-h">Invite students</h2><span className="muted">one class for everyone</span></div>
+          <p className="invite-link">{signupLink}</p>
           <div className="btn-row">
-            <button className="btn" onClick={() => copy(joinCode, 'Join code copied.')}><Icon name="copy" /> Copy code</button>
-            <ConfirmButton className="btn" confirmLabel="Tap again: old code stops working" onConfirm={newCode}>
-              {pending ? 'Creating…' : 'New code'}
-            </ConfirmButton>
+            <button className="btn" onClick={() => copy(signupLink, 'Sign-up link copied.')}><Icon name="copy" /> Copy link</button>
           </div>
-          <p className="hint">Share it in class or your group chat. Students sign up at /signup. Make a new code if it leaks.</p>
+          <p className="hint">Anyone who signs up joins the class leaderboard; no code needed. Take someone off it under Manage.</p>
         </section>
 
         <section className="panel people-panel" aria-labelledby="people-h">
@@ -141,9 +128,9 @@ export function AdminDashboard({ stats, meId }: { stats: AdminStats; meId: strin
                           <span className="name">
                             <span className="nm">{p.displayName}</span>
                             {p.role === 'admin' && <span className="teacher">admin</span>}
-                            {p.role !== 'admin' && !p.inClass && <span className="teacher self">on their own</span>}
+                            {p.role !== 'admin' && !p.inClass && <span className="teacher self">off the board</span>}
                           </span>
-                          <span className="meta">@{p.username}</span>
+                          <span className="meta">{p.email || 'no email (old profile)'}</span>
                         </span>
                       </span>
                     </th>
@@ -185,8 +172,9 @@ function ManageSheet({ person, isMe, closing, onClose }: { person: Person; isMe:
         <Avatar id={person.id} name={person.displayName} size="lg" />
         <div>
           <p className="me-name">{person.displayName}</p>
-          <p className="muted small">@{person.username}</p>
-          <span className={`role-pill role-${person.role}`}>{person.role === 'admin' ? 'Admin · teacher' : person.inClass ? 'Student · in the class' : 'Self-learner · not in the class'}</span>
+          <p className="muted small">{person.email || 'No email: an old profile that can’t log in any more'}</p>
+          <p className="muted small">{[person.hasGoogle && 'Google', person.hasPassword && 'password'].filter(Boolean).join(' + ') || 'no way to log in'}</p>
+          <span className={`role-pill role-${person.role}`}>{person.role === 'admin' ? 'Admin · teacher' : person.inClass ? 'Student · on the leaderboard' : 'Student · off the leaderboard'}</span>
         </div>
       </div>
       <dl className="facts">
@@ -213,7 +201,7 @@ function ManageSheet({ person, isMe, closing, onClose }: { person: Person; isMe:
         <>
           {person.role !== 'admin' && (
             <button className="btn" disabled={pending} onClick={() => run(() => setClassAction(person.id, !person.inClass), onClose)}>
-              <Icon name="people" /> {person.inClass ? 'Remove from the class' : 'Add to the class'}
+              <Icon name="people" /> {person.inClass ? 'Take off the leaderboard' : 'Put back on the leaderboard'}
             </button>
           )}
           <button className="btn" disabled={pending}

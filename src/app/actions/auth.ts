@@ -1,12 +1,14 @@
 'use server';
 
 /**
- * Sign up, log in and change password, as Server Actions. (Log out is POST /api/logout.)
- * Forms post here directly (they even work before JavaScript loads). Next.js also checks
- * that the request comes from this site (Origin vs Host) before running an action.
+ * Sign up, log in and change password, as Server Actions. (Log out is POST /api/logout; Google
+ * is POST /api/auth/google.) Forms post here directly, so they work even before JavaScript
+ * loads. Next.js checks that the request comes from this site (Origin vs Host) before running
+ * an action. Every input is validated here with the zod schemas, whatever the browser checked.
  */
 import { redirect } from 'next/navigation';
-import { cleanDisplayName, displayNameError, normalizeJoinCode, normalizeUsername, passwordError, safeNext, usernameError } from '@/lib/account-rules';
+import { cleanDisplayName, normalizeEmail, safeNext } from '@/lib/account-rules';
+import { changePasswordSchema, formValues, loginSchema, parseForm, signupSchema } from '@/lib/auth-schemas';
 import { describeDbError } from '@/lib/server/db-health';
 import { burnPasswordCheck, hashPassword, verifyPassword } from '@/lib/server/password';
 import { clientIp, hit } from '@/lib/server/rate-limit';
@@ -22,7 +24,9 @@ export interface FormState {
   fieldErrors?: Record<string, string>;
 }
 
-const WRONG = 'Wrong username or password.';
+/** The same answer whether the email is unknown, has no password (Google only) or the password is wrong. */
+const WRONG = 'Wrong email or password.';
+const TOO_MANY = 'Too many attempts. Wait 15 minutes, then try again.';
 
 /**
  * The database is down or misconfigured: say so on the form instead of crashing the page.
@@ -35,22 +39,23 @@ function unavailable(e: unknown, fields?: Record<string, string>): FormState {
 }
 
 export async function login(_prev: FormState, form: FormData): Promise<FormState> {
-  const username = normalizeUsername(form.get('username'));
-  const password = String(form.get('password') ?? '');
-  const fields = { username };
-  const ip = await clientIp();
-  if (!hit(`login:ip:${ip}`, 30, 15 * MIN) || !hit(`login:user:${username}`, 10, 15 * MIN)) {
-    return { error: 'Too many attempts. Wait 15 minutes, then try again.', fields };
-  }
-  if (!username || !password) return { error: 'Enter your username and password.', fields };
-
+  const input = formValues(form, ['email', 'password']);
+  const email = normalizeEmail(input.email);
+  const fields = { email };
   try {
-    const user = await repo.findUserByUsername(username);
-    if (!user) {
-      await burnPasswordCheck(password); // same timing whether or not the username exists
+    const ip = await clientIp();
+    if (!(await hit(`login:ip:${ip}`, 30, 15 * MIN)) || !(await hit(`login:email:${email}`, 10, 15 * MIN))) {
+      return { error: TOO_MANY, fields };
+    }
+    const parsed = parseForm(loginSchema, input);
+    if (!parsed.ok) return { fieldErrors: parsed.fieldErrors, fields };
+    const user = await repo.findUserByEmail(parsed.data.email);
+    if (!user?.passwordHash) {
+      await burnPasswordCheck(parsed.data.password); // same timing whether or not there is a password to check
       return { error: WRONG, fields };
     }
-    if (!(await verifyPassword(password, user.passwordHash))) return { error: WRONG, fields };
+    if (!(await verifyPassword(parsed.data.password, user.passwordHash))) return { error: WRONG, fields };
+    await repo.ensureAdminRole(user);
     await startSession(user.id);
   } catch (e) {
     return unavailable(e, fields);
@@ -59,37 +64,21 @@ export async function login(_prev: FormState, form: FormData): Promise<FormState
 }
 
 export async function signup(_prev: FormState, form: FormData): Promise<FormState> {
-  const displayName = cleanDisplayName(form.get('displayName'));
-  const username = normalizeUsername(form.get('username'));
-  const password = String(form.get('password') ?? '');
-  const joinCode = normalizeJoinCode(form.get('joinCode'));
+  const input = formValues(form, ['name', 'email', 'password', 'confirm']);
   const visitor = String(form.get('visitor') ?? '');
-  const fields = { displayName, username, joinCode };
-
-  if (!hit(`signup:${await clientIp()}`, 20, HOUR)) return { error: 'Too many new profiles from this network. Try again in an hour.', fields };
-
-  const fieldErrors: Record<string, string> = {};
-  const nameErr = displayNameError(displayName);
-  const userErr = usernameError(username);
-  const passErr = passwordError(password);
-  if (nameErr) fieldErrors.displayName = nameErr;
-  if (userErr) fieldErrors.username = userErr;
-  if (passErr) fieldErrors.password = passErr;
+  const fields = { name: cleanDisplayName(input.name), email: normalizeEmail(input.email) };
   try {
-    // The class code is optional: without it you study on your own (a self-learner) and can add it later.
-    if (joinCode && joinCode !== (await repo.getJoinCode())) {
-      fieldErrors.joinCode = 'This class code doesn’t match. Check it with your teacher, or leave it empty to study on your own.';
-    }
-    if (Object.keys(fieldErrors).length) return { fieldErrors, fields };
-
+    if (!(await hit(`signup:${await clientIp()}`, 20, HOUR))) return { error: 'Too many new profiles from this network. Try again in an hour.', fields };
+    const parsed = parseForm(signupSchema, input);
+    if (!parsed.ok) return { fieldErrors: parsed.fieldErrors, fields };
+    const { name, email, password } = parsed.data;
     const user = await repo.createUser({
-      username,
-      displayName,
+      email,
+      displayName: name,
       passwordHash: await hashPassword(password),
-      inClass: !!joinCode,
       visitorId: VISITOR_RE.test(visitor) ? visitor : null,
     });
-    if (user === 'taken') return { fieldErrors: { username: 'This username is taken. Try another one.' }, fields };
+    if (user === 'taken') return { fieldErrors: { email: 'Email already registered.' }, fields };
     await startSession(user.id);
   } catch (e) {
     return unavailable(e, fields);
@@ -104,15 +93,13 @@ export async function changePassword(_prev: FormState, form: FormData): Promise<
   } catch (e) {
     return unavailable(e);
   }
-  if (!user) redirect('/login');
-  const current = String(form.get('current') ?? '');
-  const newPassword = String(form.get('newPassword') ?? '');
-  if (!hit(`password:${user.id}`, 10, 15 * MIN)) return { error: 'Too many attempts. Wait 15 minutes, then try again.' };
-  if (!(await verifyPassword(current, user.passwordHash))) return { fieldErrors: { current: 'That’s not your current password.' } };
-  const err = passwordError(newPassword);
-  if (err) return { fieldErrors: { newPassword: err } };
+  if (!user) redirect('/login?next=/account');
+  const parsed = parseForm(changePasswordSchema, formValues(form, ['current', 'password', 'confirm']));
+  if (!parsed.ok) return { fieldErrors: parsed.fieldErrors };
   try {
-    await repo.setPasswordHash(user.id, await hashPassword(newPassword));
+    if (!(await hit(`password:${user.id}`, 10, 15 * MIN))) return { error: TOO_MANY };
+    if (!(await verifyPassword(parsed.data.current, user.passwordHash))) return { fieldErrors: { current: 'That’s not your current password.' } };
+    await repo.setPasswordHash(user.id, await hashPassword(parsed.data.password));
     await repo.deleteUserSessions(user.id, await sessionToken()); // sign out your other devices
   } catch (e) {
     return unavailable(e);

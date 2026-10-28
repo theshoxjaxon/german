@@ -7,7 +7,8 @@ import { CHEERS, isClassMember, type CheerKind } from '@/lib/types';
 export async function POST(req: Request) {
   const auth = await requireUser(req);
   if (auth.response) return auth.response;
-  if (!isClassMember(auth.user)) return Response.json({ error: 'Join your class to send cheers.' }, { status: 403 });
+  // Someone a teacher took off the leaderboard can't send cheers either
+  if (!isClassMember(auth.user)) return Response.json({ error: 'Cheers are switched off for your profile.' }, { status: 403 });
   const body = (await readJson(req)) as { to?: unknown; kind?: unknown } | undefined;
   const to = typeof body?.to === 'string' ? body.to : '';
   const kind = body?.kind as CheerKind;

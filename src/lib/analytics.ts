@@ -64,7 +64,7 @@ export interface Analytics {
   periodStart: string | null; // null: all time
   users: {
     students: number;
-    selfLearners: number; // signed up without the class code
+    selfLearners: number; // taken off the class leaderboard by a teacher
     newThisWeek: number;
     activeToday: number;
     activeWeek: number;
