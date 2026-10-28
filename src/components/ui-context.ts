@@ -18,7 +18,6 @@ export type SheetSpec =
   | { kind: 'settings' }
   | { kind: 'csv'; text: string }
   | { kind: 'account' }
-  | { kind: 'password' }
   | { kind: 'cheer'; to: string };
 
 export interface WordsQuery {

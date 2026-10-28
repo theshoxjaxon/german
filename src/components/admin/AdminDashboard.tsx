@@ -123,7 +123,7 @@ export function AdminDashboard({ stats, meId }: { stats: AdminStats; meId: strin
                   <tr key={p.id}>
                     <th scope="row" className="c-term">
                       <span className="term-cell">
-                        <Avatar id={p.id} name={p.displayName} size="sm" />
+                        <Avatar id={p.id} name={p.displayName} src={p.avatarUrl} size="sm" />
                         <span className="who">
                           <span className="name">
                             <span className="nm">{p.displayName}</span>
@@ -169,7 +169,7 @@ function ManageSheet({ person, isMe, closing, onClose }: { person: Person; isMe:
   return (
     <BottomSheet title={person.displayName} onClose={onClose} closing={closing}>
       <div className="profile-head">
-        <Avatar id={person.id} name={person.displayName} size="lg" />
+        <Avatar id={person.id} name={person.displayName} src={person.avatarUrl} size="lg" />
         <div>
           <p className="me-name">{person.displayName}</p>
           <p className="muted small">{person.email || 'No email: an old profile that can’t log in any more'}</p>

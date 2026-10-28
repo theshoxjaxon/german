@@ -6,7 +6,7 @@ import { useT } from '@/lib/client/i18n';
 import { store, useStore } from '@/lib/client/store';
 import { buildQueue, pickNext, type QueueItem } from '@/lib/queue';
 import { EMPTY_FILTERS, SORTS, type Sort } from '@/lib/words-view';
-import { AccountSheet, CheerSheet, PasswordSheet } from './AccountSheets';
+import { AccountSheet, CheerSheet } from './AccountSheets';
 import { AiSheet } from './AiSheet';
 import { BrandMark } from './auth/AuthShell';
 import { ClassView } from './ClassView';
@@ -144,7 +144,7 @@ export default function KarteikastenApp() {
           {me && (
             <button className="appbar-user" onClick={() => openSheet({ kind: 'account' })} aria-label={t('Your profile, {name}', { name: me.displayName })}>
               <span className="appbar-name">{me.displayName.split(' ')[0]}</span>
-              <Avatar id={me.id} name={me.displayName} size="sm" />
+              <Avatar id={me.id} name={me.displayName} src={me.avatarUrl} size="sm" />
             </button>
           )}
           {guest && <GuestActions />}
@@ -212,8 +212,6 @@ function SheetHost({ spec }: { spec: SheetSpec }) {
       return <CsvSheet text={spec.text} />;
     case 'account':
       return <AccountSheet />;
-    case 'password':
-      return <PasswordSheet />;
     case 'cheer':
       return <CheerSheet to={spec.to} />;
   }
