@@ -15,7 +15,7 @@ let repo: typeof import('./repo');
 let close = async () => {};
 
 beforeAll(async () => {
-  process.env.ADMIN_EMAILS = 'ustoz@markaz.uz, second@markaz.uz';
+  process.env.ADMIN_EMAILS = 'ustoz@markaz.uz, second@markaz.uz,THIRD@markaz.uz';
   const db = await import('./db');
   if (process.env.TEST_DATABASE_URL) {
     process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
@@ -394,5 +394,51 @@ describe('rate limits', () => {
     const keys = (await conn.query<{ key: string }>('SELECT key FROM rate_limits')).rows.map((r) => r.key);
     expect(keys.length).toBeGreaterThan(0);
     expect(keys.every((k) => /^[0-9a-f]{64}$/.test(k))).toBe(true);
+  });
+});
+
+describe('password links (forgot / reset)', () => {
+  const MIN45 = 45 * 60_000;
+
+  it('work once, before they expire, and only the newest one works', async () => {
+    const lola = await profile('lola@example.com', 'Lola');
+    const { token: session } = await repo.createSession(lola.id, 60_000);
+    const older = await repo.createResetToken(lola.id, MIN45);
+    const link = await repo.createResetToken(lola.id, MIN45);
+    expect(await repo.useResetToken(older, '$2b$new-1')).toBeNull(); // replaced by the newer email
+    expect(await repo.useResetToken(link, '$2b$new-2')).toMatchObject({ id: lola.id, emailVerified: true, passwordHash: '$2b$new-2' });
+    expect(await repo.findSession(session)).toBeNull(); // signed out everywhere
+    expect(await repo.useResetToken(link, '$2b$new-3')).toBeNull(); // used once already
+    const late = await repo.createResetToken(lola.id, MIN45, Date.now() - MIN45 - 60_000);
+    expect(await repo.useResetToken(late, '$2b$new-4')).toBeNull(); // expired a minute ago
+    expect(await repo.useResetToken('made-up-token-that-was-never-sent', '$2b$new-5')).toBeNull();
+    expect((await byEmail('lola@example.com')).passwordHash).toBe('$2b$new-2');
+  });
+
+  it('store only a hash of the token', async () => {
+    const lola = await byEmail('lola@example.com');
+    const link = await repo.createResetToken(lola.id, MIN45);
+    const conn = await (await import('./db')).getDb();
+    const rows = (await conn.query<{ token_hash: string }>('SELECT token_hash FROM password_reset_tokens WHERE user_id = $1', [lola.id])).rows;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].token_hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(rows[0].token_hash).not.toContain(link);
+  });
+
+  it('let a Google-only profile set a password', async () => {
+    const r = await repo.googleSignIn({ sub: 'g-700', email: 'gulnoza@gmail.com', emailVerified: true, name: 'Gulnoza', picture: null });
+    if (typeof r === 'string') throw new Error(r);
+    expect(r.user.hasPassword).toBe(false);
+    const done = await repo.useResetToken(await repo.createResetToken(r.user.id, MIN45), await hashPassword('ein-neues-passwort'));
+    expect(done).toMatchObject({ hasPassword: true, hasGoogle: true });
+    expect(await verifyPassword('ein-neues-passwort', done!.passwordHash)).toBe(true);
+  });
+
+  it('prove an ADMIN_EMAILS address, which then becomes admin', async () => {
+    const t = await profile('third@markaz.uz', 'Third teacher');
+    expect(t.role).toBe('student'); // signed up with a password: not proven yet
+    const done = await repo.useResetToken(await repo.createResetToken(t.id, MIN45), '$2b$x');
+    expect((await repo.ensureAdminRole(done!)).role).toBe('admin');
+    expect((await byEmail('third@markaz.uz')).role).toBe('admin');
   });
 });

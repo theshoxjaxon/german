@@ -536,6 +536,11 @@ mark { background: linear-gradient(transparent 52%, var(--mark-soft) 52%); color
 .gsi-status:empty { display: none; }
 .auth-or { display: flex; align-items: center; gap: 12px; margin-top: 4px; color: var(--ink-3); font-size: 13px; font-weight: 700; }
 .auth-or::before, .auth-or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.auth-done { display: grid; gap: 14px; justify-items: center; text-align: center; margin-top: 8px; }
+.auth-done > p { font-size: 15.5px; text-wrap: pretty; }
+.auth-done .btn { width: 100%; }
+.auth-done-ic { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; background: var(--good-soft); color: var(--good); }
+.auth .toast { bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
 .auth-guest { max-width: 420px; text-align: center; font-size: 15px; color: var(--ink-2); text-wrap: balance; }
 .auth-guest a { color: var(--ink); font-weight: 700; text-decoration-color: var(--mark); text-decoration-thickness: 3px; text-underline-offset: 3px; }
 .reveal {
