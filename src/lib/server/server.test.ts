@@ -8,6 +8,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { answer } from '../srs';
 import type { CardDoc, WordData } from '../types';
+import type { GoogleProfile } from './repo';
 import { hashPassword, temporaryPassword, verifyPassword } from './password';
 
 let repo: typeof import('./repo');
@@ -325,5 +326,73 @@ describe('analytics', () => {
       [repo.todayKey(e2.t), 1, 0],
       [repo.todayKey(), 1, 1],
     ]);
+  });
+});
+
+describe('Google sign-in', () => {
+  const google = (over: Partial<GoogleProfile> = {}): GoogleProfile => ({
+    sub: 'g-100', email: 'zarina@gmail.com', emailVerified: true, name: 'Zarina', picture: 'https://lh3.googleusercontent.com/a/z', ...over,
+  });
+  const signIn = async (g: GoogleProfile) => {
+    const r = await repo.googleSignIn(g);
+    if (typeof r === 'string') throw new Error(r);
+    return r;
+  };
+
+  it('creates a profile the first time, then finds it by the Google account id', async () => {
+    const first = await signIn(google());
+    expect(first.created).toBe(true);
+    expect(first.user).toMatchObject({ email: 'zarina@gmail.com', emailVerified: true, hasGoogle: true, hasPassword: false, role: 'student', inClass: true });
+    expect(first.user.avatarUrl).toBe('https://lh3.googleusercontent.com/a/z');
+    // Same Google account with a changed address and photo: still the same profile
+    const again = await signIn(google({ email: 'zarina.new@gmail.com', picture: 'https://lh3.googleusercontent.com/a/new' }));
+    expect(again).toMatchObject({ created: false, user: { id: first.user.id, avatarUrl: 'https://lh3.googleusercontent.com/a/new' } });
+  });
+
+  it('links the profile that already has the email instead of making a second one', async () => {
+    const mine = await profile('bobur@example.com', 'Bobur'); // signed up with a password, address never proven
+    const { token } = await repo.createSession(mine.id, 60_000);
+    const r = await signIn(google({ sub: 'g-200', email: 'bobur@example.com', name: 'Bobur from Google' }));
+    expect(r).toMatchObject({ created: false, user: { id: mine.id, displayName: 'Bobur', hasGoogle: true, emailVerified: true } });
+    // Whoever set that password never proved the address was theirs: it goes, and so do their sessions
+    expect(r.user.passwordHash).toBeNull();
+    expect(await repo.findSession(token)).toBeNull();
+  });
+
+  it('keeps the password and sessions of a profile whose address was already proven', async () => {
+    const v = await profile('dono@example.com', 'Dono', { emailVerified: true });
+    const { token } = await repo.createSession(v.id, 60_000);
+    const r = await signIn(google({ sub: 'g-300', email: 'dono@example.com' }));
+    expect(r.user).toMatchObject({ id: v.id, hasPassword: true, hasGoogle: true });
+    expect(await repo.findSession(token)).not.toBeNull();
+  });
+
+  it('refuses an unverified Google email, and a second Google account for one address', async () => {
+    expect(await repo.googleSignIn(google({ sub: 'g-400', email: 'new@example.com', emailVerified: false }))).toBe('unverified');
+    expect(await repo.findUserByEmail('new@example.com')).toBeNull();
+    expect(await repo.googleSignIn(google({ sub: 'g-401', email: 'zarina@gmail.com' }))).toBe('other-google');
+  });
+
+  it('makes an ADMIN_EMAILS address admin, since Google verified it', async () => {
+    expect((await signIn(google({ sub: 'g-500', email: 'second@markaz.uz', name: 'Second teacher' }))).user.role).toBe('admin');
+  });
+});
+
+describe('rate limits', () => {
+  it('allows `max` attempts per window, then refuses until the window ends', async () => {
+    const { hit } = await import('./rate-limit');
+    const t = 1_000_000;
+    expect(await hit('test:login', 2, 1000, t)).toBe(true);
+    expect(await hit('test:login', 2, 1000, t + 1)).toBe(true);
+    expect(await hit('test:login', 2, 1000, t + 2)).toBe(false);
+    expect(await hit('test:other', 2, 1000, t + 2)).toBe(true); // each key counts on its own
+    expect(await hit('test:login', 2, 1000, t + 1000)).toBe(true); // a new window
+  });
+
+  it('stores keys (emails, IP addresses) only as hashes', async () => {
+    const conn = await (await import('./db')).getDb();
+    const keys = (await conn.query<{ key: string }>('SELECT key FROM rate_limits')).rows.map((r) => r.key);
+    expect(keys.length).toBeGreaterThan(0);
+    expect(keys.every((k) => /^[0-9a-f]{64}$/.test(k))).toBe(true);
   });
 });

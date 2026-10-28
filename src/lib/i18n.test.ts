@@ -106,7 +106,7 @@ function wanted(): Set<string> {
   // Messages that come from the server or shared rules and are shown through t()
   const messageFiles = [
     'app/actions/auth.ts', 'lib/account-rules.ts', 'lib/auth-schemas.ts', 'lib/server/ai.ts', 'lib/client/ai.ts',
-    'app/api/ai/words/route.ts', 'app/api/class/route.ts', 'app/api/cheers/route.ts',
+    'app/api/ai/words/route.ts', 'app/api/auth/google/route.ts', 'app/api/class/route.ts', 'app/api/cheers/route.ts',
     'app/api/words/[id]/route.ts', 'app/api/cards/[id]/route.ts',
   ];
   for (const f of messageFiles) {
@@ -118,7 +118,7 @@ function wanted(): Set<string> {
 
 const placeholders = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 // Technical texts nobody sees in the student app (they mean a broken request, not a person's mistake)
-const IGNORE = /^(Send \{|Expected \{|Invalid |Too many cards|Cross-site|Sign in to continue|Only admins|The AI answer had|Karteikasten AI:|This is a photo of a German vocabulary list)/;
+const IGNORE = /^(Send \{|Expected \{|Invalid |Too many cards|Cross-site|Sign in to continue|Only admins|The AI answer had|Karteikasten:|Karteikasten AI:|This is a photo of a German vocabulary list|Send JSON|continue_with$)/;
 
 describe('Uzbek interface', () => {
   const keys = [...wanted()].filter((k) => !IGNORE.test(k));
@@ -131,6 +131,7 @@ describe('Uzbek interface', () => {
   });
 
   it('has an Uzbek entry for every text the app shows', () => {
+    // SHOW_MISSING=1 npx vitest run src/lib/i18n.test.ts lists them in full
     if (process.env.SHOW_MISSING) console.log('MISSING ' + JSON.stringify(keys.filter((k) => !(k in UZ)), null, 1));
     expect(keys.filter((k) => !(k in UZ))).toEqual([]);
   });

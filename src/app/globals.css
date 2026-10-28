@@ -529,6 +529,13 @@ mark { background: linear-gradient(transparent 52%, var(--mark-soft) 52%); color
 .auth-switch a, .auth-card a { color: var(--ink); font-weight: 700; text-decoration-color: var(--mark); text-decoration-thickness: 3px; text-underline-offset: 3px; }
 .auth-note { text-align: center; }
 .auth-forgot { margin-top: -6px; text-align: right; font-size: 14px; }
+/* Google's button (an iframe it draws itself), then a line with "or" before the email form */
+.gsi { display: grid; gap: 10px; margin-top: 8px; }
+.gsi-box { display: flex; justify-content: center; min-height: 44px; color-scheme: normal; }
+.gsi-status { text-align: center; font-size: 14px; color: var(--ink-2); }
+.gsi-status:empty { display: none; }
+.auth-or { display: flex; align-items: center; gap: 12px; margin-top: 4px; color: var(--ink-3); font-size: 13px; font-weight: 700; }
+.auth-or::before, .auth-or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 .auth-guest { max-width: 420px; text-align: center; font-size: 15px; color: var(--ink-2); text-wrap: balance; }
 .auth-guest a { color: var(--ink); font-weight: 700; text-decoration-color: var(--mark); text-decoration-thickness: 3px; text-underline-offset: 3px; }
 .reveal {
