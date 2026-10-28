@@ -3,13 +3,13 @@
 A mobile-first vocabulary app for a learning center. Students study German words with spaced-repetition flashcards, each with their own private progress, and see how their classmates are doing. The teacher manages the words and sees who is active on an admin dashboard.
 
 - **Try it without an account**: anyone can open the app, practise the flashcards and browse the word list as a guest. Progress is kept in that browser, and moves into their profile when they sign up.
-- **Accounts**: anyone can sign up (free, no email); log in, log out, change password. With the center's **class code** you join the class; without it you study on your own and can add the code later in the Class tab.
+- **Accounts**: sign up free with **Continue with Google** or with name, email and password. Forgot your password? An emailed link (via Resend) lets you choose a new one. Everyone who signs up is in the one class and on its leaderboard (no class code for now). Email addresses are private: students never see one, not even their own; only the admin does.
 - **Study**: Anki-style flashcards (SM-2): tap to flip, swipe or tap Again / Hard / Good / Easy (keys: Space, 1–4, Z to undo). For nouns, a **der / die / das quiz** comes first. A **daily goal** ring and your **streak** sit on the home screen; ending a session early shows what you did first. Every student's progress is private.
 - **Oʻzbekcha / English**: the whole student app speaks Uzbek or English (switch in Study settings, or on the login and sign-up pages). The admin pages stay in English.
 - **Class**: Snapchat-style daily streaks, each classmate's active-word count, a leaderboard, and cheers you can send each other.
 - **Words**: an Airtable-style table and card gallery: search, filter, sort. Teachers manage the shared lesson words; every student can also add **their own words**, which only they see and study.
 - **AI word helper** (optional): take a photo of a word list (textbook page, worksheet, whiteboard, notes) or type German words, and Claude turns them into finished flashcards: article, meaning, IPA, forms, an example sentence and a memory hook. You tick the ones to keep and pick the topic. In the word form, **Fill in the rest with AI** completes a single word.
-- **Admin dashboard** at `/admin`: profiles created, new sign-ups, daily / weekly / monthly active students, 30-day charts, a student table, password resets and the join code.
+- **Admin dashboard** at `/admin`: profiles created, new sign-ups, daily / weekly / monthly active students, 30-day charts, a student table with emails, password resets and the sign-up link to share.
 
 It comes with **Lektion 3** (34 words), **Lektion 5** (59 words) and **Lektion 7** of Momente A1.1 (46 words, hobbies, compliments and *können*), German → Uzbek, with IPA, example sentences, plural/verb forms and memory hooks. New built-in lists are added to an existing database once, on the next start (`SEED_PACKS` in `src/lib/seed.ts`); words the teacher deleted don't come back, and words already typed in by hand aren't doubled.
 
@@ -27,15 +27,12 @@ npm run dev
 
 The tables are created on the first start.
 
-The terminal prints a line like:
+**Become the admin (teacher).** Put your email in `ADMIN_EMAILS` in `.env.local`, then either:
 
-```
-Karteikasten: no teacher yet. Sign up with join code K7M2QX: the first profile with the code becomes the admin.
-```
+- **Continue with Google** on http://localhost:3000/login with that address (needs `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, see [Sign in with Google](#sign-in-with-google)), or
+- sign up at http://localhost:3000/signup with that email and a password, then prove the address once: **Forgot password?** → your email → open the link (without `RESEND_API_KEY` it is printed in the terminal) → choose a password → log in.
 
-1. Open http://localhost:3000/signup and create your profile with that code. **The first profile is the admin (teacher).**
-2. Open http://localhost:3000/admin to see the dashboard and the join code.
-3. Give the join code (the class code) to your students. They sign up at `/signup` on their phones and type it in to join your class.
+Then open http://localhost:3000/admin. Share the sign-up link with your students; everyone who signs up joins the class leaderboard.
 
 ### Use it on phones in the classroom
 
@@ -54,9 +51,9 @@ Find your computer's local IP (macOS: `ipconfig getifaddr en0`, Windows: `ipconf
    - **Transaction pooler** (port 6543) when the app runs on Vercel or other serverless hosting.
    - **Session pooler** (port 5432) works for `npm run dev` and for a normal server.
 3. Put it in `.env.local` as `DATABASE_URL`, with your password in place of `[YOUR-PASSWORD]` (brackets included). Passwords with special characters (`@ # / ? % +`) work as they are; the app encodes them. Keep the password only in `.env.local` (ignored by git), never in `.env.example`.
-4. `npm run dev`. On the first start the app creates its tables, loads the Lektion 3 words and prints the join code.
+4. `npm run dev`. On the first start the app creates its tables and loads the built-in word lists.
 
-Open **Table Editor** in Supabase to see the data: `users` (profiles; `password_hash` is a one-way scrypt hash, never the password), `words`, `cards` (each person's progress), and so on. The app talks to Postgres directly from the server, so you don't need Supabase's API keys or `supabase-js`. Row Level Security is switched on for every table with no policies, which keeps them closed to Supabase's public REST API.
+Open **Table Editor** in Supabase to see the data: `users` (profiles; `password_hash` is a one-way bcrypt hash, never the password), `words`, `cards` (each person's progress), `password_reset_tokens` and `rate_limits` (only hashes), and so on. The app talks to Postgres directly from the server, so you don't need Supabase's API keys or `supabase-js`. Row Level Security is switched on for every table with no policies, which keeps them closed to Supabase's public REST API.
 
 **Why it stays fast**
 
@@ -79,6 +76,22 @@ Set `ANTHROPIC_API_KEY` in `.env.local` (create a key at [console.anthropic.com]
 
 How it works: `src/lib/server/ai.ts` makes one streamed request with the image (or list), a system prompt describing a good flashcard, and a JSON schema the answer must follow (`output_config.format`). If Claude's safety checks decline a request, `fallbacks: "default"` lets the API retry it on its recommended fallback model. The answer is validated like any user input before the client sees it.
 
+## Sign in with Google
+
+1. [Google Cloud Console](https://console.cloud.google.com) → pick or create a project → **APIs & Services → OAuth consent screen**: app name *Karteikasten*, your support email; audience **External**; publish it (*In production*) so anyone can sign in. The app only asks for the basic scopes (`openid`, `email`, `profile`), which need no Google review.
+2. **APIs & Services → Credentials → Create credentials → OAuth client ID → Web application.** Under **Authorized JavaScript origins** add `http://localhost:3000`, `http://localhost` and `https://german-roan.vercel.app` (plus your own domain if you add one). **Authorized redirect URIs** can stay empty: the button uses Google's popup and hands the app an ID token directly.
+3. Copy the **Client ID** (`….apps.googleusercontent.com`) into `NEXT_PUBLIC_GOOGLE_CLIENT_ID`. There is no client secret to set.
+
+The server checks every Google ID token with `google-auth-library` (signature, audience = your client ID, issuer, expiry) before using it. The first Google sign-in creates the profile, or links the profile that already has that email (only when Google says the address is verified). Changes in Google Cloud can take a few minutes to apply.
+
+## Password emails (Resend)
+
+1. Create a free account at [resend.com](https://resend.com) → **API Keys** → create one → `RESEND_API_KEY`.
+2. **Domains** → add your domain and set the DNS records it shows, then use an address on it as `EMAIL_FROM` (e.g. `Karteikasten <noreply@your-domain.uz>`). Until then, Resend's test sender `onboarding@resend.dev` only delivers to your own Resend account's email.
+3. Set `APP_URL` if the app runs on your own domain (on Vercel it defaults to the production domain).
+
+Without `RESEND_API_KEY`, `npm run dev` prints the reset link in the terminal so you can test the whole flow. Links work once, for 45 minutes; a new request replaces older links, and using one signs the profile out on every device.
+
 ## Settings (environment variables)
 
 Copy `.env.example` to `.env.local`. Only `DATABASE_URL` is required.
@@ -91,26 +104,35 @@ Copy `.env.example` to `.env.local`. Only `DATABASE_URL` is required.
 | `ANTHROPIC_API_KEY` | – | Turns on the AI word helper. Without it the AI buttons don't appear. |
 | `AI_MODEL` | `claude-opus-5-5` | The Claude model the AI helper uses. |
 | `AI_ENABLED` | auto | `false` hides the AI helper even with a key; `true` turns it on with other Anthropic credentials (e.g. `ant auth login`). |
-| `JOIN_CODE` | random | The first join code. You can change it later in `/admin`. |
+| `ADMIN_EMAILS` | – | Your email (comma-separated for several). It becomes admin once proven: via Google, or a password reset link. |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | – | Google OAuth Web client ID. Turns on **Continue with Google**. Public; needs a rebuild to change. |
+| `RESEND_API_KEY` | – | Sends the password emails. Secret. Without it, development prints the link in the terminal. |
+| `EMAIL_FROM` | `Karteikasten <onboarding@resend.dev>` | The sender of password emails; its domain must be verified in Resend. |
+| `APP_URL` | Vercel's production domain | The site's address for links in emails. |
 | `APP_TIMEZONE` | `Asia/Tashkent` | When a "day" starts for streaks and daily active users. |
 | `COOKIE_SECURE` | auto | Force `true`/`false`. By default the session cookie is Secure whenever the site is on HTTPS. |
 
 ## Roles and privacy
 
-| | Guest (no profile) | Self-learner (no class code) | Student (in the class) | Admin (teacher) |
-| --- | --- | --- | --- | --- |
-| Study the flashcards, settings | ✓ (saved in this browser) | ✓ | ✓ | ✓ |
-| Browse the word list | ✓ (read-only) | ✓ | ✓ | ✓ |
-| Progress, streak, daily goal | goal and streak on this device | ✓ | ✓ | ✓ |
-| Add, edit, import, delete **your own** words (only you see them) | – | ✓ | ✓ | – |
-| See classmates' streaks, active words, answers; send cheers | – | – | ✓ | ✓ |
-| AI word helper (costs the center API credit) | – | – | ✓ | ✓ |
-| See anyone else's cards | – | – | – | – |
-| Add, edit, import, delete the shared lesson words | – | – | – | ✓ |
-| `/admin`: stats, reset passwords, make admins, move people in or out of the class, delete profiles, change the class code | – | – | – | ✓ |
-| `/admin/analytics`: North Star, funnel, retention | – | – | – | ✓ |
+| | Guest (no profile) | Student | Admin (teacher) |
+| --- | --- | --- | --- |
+| Study the flashcards, settings | ✓ (saved in this browser) | ✓ | ✓ |
+| Browse the word list | ✓ (read-only) | ✓ | ✓ |
+| Progress, streak, daily goal | goal and streak on this device | ✓ | ✓ |
+| Add, edit, import, delete **your own** words (only you see them) | – | ✓ | – |
+| Class leaderboard: classmates' streaks, active words, answers; send cheers | – | ✓ | ✓ |
+| AI word helper (costs the center API credit; hourly limit) | – | ✓ | ✓ |
+| See email addresses (anyone's, or your own) | – | – | ✓ |
+| See anyone else's cards | – | – | – |
+| Add, edit, import, delete the shared lesson words | – | – | ✓ |
+| `/admin`: stats, emails, reset passwords, make admins, take people off the leaderboard, delete profiles | – | – | ✓ |
+| `/admin/analytics`: North Star, funnel, retention | – | – | ✓ |
 
-**Self-learners and the class.** Signing up without the class code makes a self-learner: everything personal works, but they aren't in the Class tab, classmates can't see them, they can't send cheers, and the AI helper (which costs the center money) stays off. They can add the code later in the Class tab (a few tries an hour, so the code can't be guessed). The teacher sees them in `/admin` marked "on their own", and can add someone to the class or take them out without deleting anything. The first profile made **with** the class code becomes the admin, so a stranger signing up before the teacher can't take over.
+**One class, no code (for now).** Everyone who signs up is in the class and on its leaderboard, and can use the AI helper. A teacher can take someone off the leaderboard in `/admin` (they keep studying, but aren't listed and can't send cheers). A class code can come back later if the center grows to several classes.
+
+**Admins.** Nobody becomes admin by signing up first. An address in `ADMIN_EMAILS` becomes admin once it's proven to be theirs: a Google sign-in (Google verified the address) or a password reset link sent to it. An admin can make others admin in `/admin`.
+
+**Email privacy.** Students see names and photos, never email addresses: not classmates', and not their own (the menu and `/account` show only name and photo). The server leaves emails out of everything it sends a student; only admins get them.
 
 **Language.** Each person picks Oʻzbekcha or English in Study settings; it is saved with their settings, so it follows them to every device, and the browser remembers it for the login page. Before anyone chooses, Uzbek phones get Uzbek. The translations live in `src/lib/i18n-uz.ts`, keyed by the English text; `i18n.test.ts` fails if any text the app shows is missing there. The built-in memory hooks are content, not interface, and are still in English.
 
@@ -120,7 +142,7 @@ Only counts are shared on the Class tab. Nobody, the admin included, sees anothe
 
 **Words.** One `words` table holds both kinds: `owner_id` is empty for a shared lesson word and holds the student's id for their own word. The server only ever returns the shared words plus your own, and only lets the owner (or, for lesson words, an admin) change or delete a word. Each person can have up to 2,000 own words. Deleting a profile deletes their own words and progress with it.
 
-**Forgotten password?** In `/admin`, open the student → **Reset password**. You get a temporary password like `tante-fest-4821` to give them; they change it under *Your profile → Change password*.
+**Forgotten password?** *Forgot password?* on the login page emails a link (it always answers "If that email exists, we've sent a link", so nobody can test which addresses have profiles). Google-only profiles use the same link to set a password. A teacher can also open the student in `/admin` → **Reset password** for a temporary password like `tante-fest-4821`; they change it under *Your profile → Account and password*.
 
 ## What the admin numbers mean
 
@@ -167,19 +189,25 @@ Pressing Good every time gives intervals of 1 → 4 → 10 → 24 → 60 → 144
 
 ```
 Browser
-  /login, /signup ── Server Actions (src/app/actions/auth.ts) ── scrypt hash, session cookie
+  /login, /signup, /forgot-password, /reset-password, /account
+                  ── Server Actions (src/app/actions/auth.ts): zod, bcrypt, session cookie, Resend
+                  ── Google button → POST /api/auth/google (google-auth-library checks the ID token)
   /               ── client app ── useStore() ── fetch /api/*  (guests: localStorage for progress)
   /admin          ── Server Component behind <Suspense> ── Server Actions (src/app/admin/actions.ts)
 
-src/proxy.ts       /admin without a session cookie → redirect to /login (fast first check only)
+src/proxy.ts       /admin, /account without a session cookie → /login?next=… (fast first check only)
 src/app/api/*      requireUser() on every route: valid session, role, same-origin
 src/lib/server/    repo.ts (all SQL) · db.ts (pool, schema, seed) · session.ts · password.ts · rate-limit.ts
-Postgres/Supabase  users · sessions · words · cards · prefs · activity · cheers · settings
+                   google.ts · mail.ts · admins.ts
+src/lib/           auth-schemas.ts (zod: the same rules in the browser and on the server)
+Postgres/Supabase  users · sessions · password_reset_tokens · rate_limits · words · cards · prefs · activity · cheers · settings
 ```
 
 | Endpoint | Who | Purpose |
 | --- | --- | --- |
 | `GET /api/state` | anyone | Signed in: you, the words, your progress, settings, new cheers. Guest: `{ me: null, words }` |
+| `GET /api/me` | signed in | Who you are: name, photo, role, how you log in (email for admins only); 401 when signed out |
+| `POST /api/auth/google` | anyone | `{ credential }` from the Google button → verifies it, signs in (creates or links the profile) |
 | `POST /api/cards/import` | signed in | Add progress made as a guest (never overwrites existing progress) |
 | `GET /api/health` | anyone | Is the database reachable, and if not, why (no secrets shown) |
 | `POST /api/visit` | anyone | Anonymous guest count for the funnel: `{ id, tried }`, at most once a day per browser (rate limited) |
@@ -188,18 +216,20 @@ Postgres/Supabase  users · sessions · words · cards · prefs · activity · c
 | `PUT/DELETE /api/words/:id`, `POST /api/words` | signed in | Add, edit, delete, import words: admins the shared lesson words, everyone else their own |
 | `PUT/DELETE /api/cards/:wordId`, `DELETE /api/cards` | signed in | Save or reset **your** progress |
 | `PUT /api/prefs` | signed in | Your settings |
-| `GET /api/class` | class members | Classmates' streaks and counts |
-| `POST /api/class/join` | signed in | A self-learner joins the class with its code `{ code }` |
+| `GET /api/class` | signed in | The leaderboard: classmates' streaks and counts (no emails) |
 | `POST /api/cheers`, `POST /api/cheers/seen` | signed in | Send a cheer (1 per classmate per day), mark yours as read |
 
 ### Security
 
-- Passwords: scrypt (N=2¹⁵) with a random salt; comparison in constant time; unknown usernames take the same time as wrong passwords.
-- Sessions: a random 256-bit token in an **HttpOnly, SameSite=Lax** cookie (Secure on HTTPS). The database stores only its SHA-256, so a leaked database can't be used to log in. 30-day sliding expiry; a password change or reset signs out other devices.
+- Passwords: bcrypt (bcryptjs, cost 11) with a random salt, never stored or logged in plain text. At least 8 characters, at most 72 bytes (what bcrypt reads). Unknown emails take the same time as wrong passwords, and both get "Wrong email or password."
+- Validation: every form is checked with zod on the server (`src/lib/auth-schemas.ts`); the browser runs the same schemas for instant feedback.
+- Sessions: a random 256-bit token in an **HttpOnly, SameSite=Lax** cookie (Secure on HTTPS), never in `localStorage`. The database stores only its SHA-256, so a leaked database can't be used to log in. 30-day sliding expiry; a password change signs out other devices, a reset signs out all.
+- Google: the ID token is verified on the server (signature, audience, issuer, expiry). An existing profile is linked only for a Google-verified email; if that profile's email was never proven, its password is removed and its sessions end, so whoever registered someone else's address first can't keep a way in.
+- Password links: 256-bit random, only the SHA-256 stored, 45 minutes, single use, newest link only. The reset page sends no Referer.
 - Every API route and Server Action checks the session and role on the server. Hiding a button is never the protection.
 - Mutating requests from other sites are rejected (Origin check, on top of SameSite cookies and Next.js's own Server Action origin check).
-- Login and sign-up are rate-limited per IP and username. This is in memory: with several server instances, use a shared store such as Redis.
-- Anyone can create a profile (rate limited per network), but only people with the class code join the class: see classmates, send cheers, use the AI helper. Joining with a code allows a few tries an hour. Make a new code in `/admin` if it leaks, and take anyone out of the class there.
+- Rate limits live in Postgres (`rate_limits`, keys hashed), so they hold across all Vercel instances: login 30 per IP and 10 per email per 15 minutes; sign-up 20 per network per hour; password links 10 per IP and 3 emails per address per hour; Google sign-in 30 per IP per 15 minutes.
+- Anyone can create a profile (rate limited per network). A teacher can take anyone off the leaderboard, or delete the profile, in `/admin`.
 
 ## Analytics (`/admin/analytics`)
 
@@ -224,9 +254,9 @@ Nothing extra is tracked for students: mastery and recall come from the review h
 
 1. Create the Supabase project (see [Supabase](#supabase)) and copy the **Transaction pooler** connection string (port 6543). Not the "Direct connection": that one is IPv6-only and Vercel can't reach it.
 2. Import this GitHub repo on [vercel.com](https://vercel.com). Set the function region to the one closest to your Supabase project (Project Settings → Functions).
-3. In Vercel → Project → **Settings → Environment Variables**, add `DATABASE_URL` (the pooler string with your password, no quotes, for the **Production** environment), plus `JOIN_CODE`, `APP_TIMEZONE` and, for the AI helper, `ANTHROPIC_API_KEY`. `.env.local` is never uploaded, so this step is required.
-4. **Redeploy** (Deployments → ⋯ → Redeploy): environment variables only reach new deployments.
-5. Open `https://<your-app>/api/health`. It should say `"ok": true`. Then open `/signup` and create the first (admin) profile with your `JOIN_CODE`.
+3. In Vercel → Project → **Settings → Environment Variables**, add `DATABASE_URL` (the pooler string with your password, no quotes, for the **Production** environment), `ADMIN_EMAILS`, `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, `RESEND_API_KEY`, `EMAIL_FROM`, `APP_TIMEZONE` and, for the AI helper, `ANTHROPIC_API_KEY` (and `APP_URL` if you use your own domain). `.env.local` is never uploaded, so this step is required.
+4. **Redeploy** (Deployments → ⋯ → Redeploy): environment variables only reach new deployments, and `NEXT_PUBLIC_GOOGLE_CLIENT_ID` is built into the page.
+5. Open `https://<your-app>/api/health`. It should say `"ok": true`. Then **Continue with Google** with your `ADMIN_EMAILS` address, and `/admin` opens.
 
 **"This page couldn’t load … A server error occurred"** when logging in or signing up means the server can't use the database. Open `https://<your-app>/api/health`: it names the problem (missing `DATABASE_URL`, wrong password, host not found, paused Supabase project, …) and what to do, without showing any secrets. Supabase pauses free projects after about a week without activity; restore it from the Supabase dashboard.
 
@@ -240,6 +270,8 @@ Nothing extra is tracked for students: mastery and recall come from the review h
 - The anonymous visit id lives in `localStorage` (`kk.visitor`). Clearing site data makes the browser count as a new visitor.
 
 ## Notes
+
+- **Profiles from before email sign-in** (username only) can't log in any more: they have no email. `/admin` lists them as "no email (old profile)"; delete them there, and have those people sign up again.
 
 - `npm run build` prints "Failed to find font override values for Atkinson Hyperlegible …". That is harmless: Next.js has no fallback metrics for these newer fonts yet.
 - Pronunciation uses the voices installed on the device. On iPhone, German voices are under Settings → Accessibility → Spoken Content → Voices.
