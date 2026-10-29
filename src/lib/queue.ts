@@ -39,6 +39,33 @@ export function deckCounts(words: Map<string, Word>): [string, number][] {
 }
 export const deckNames = (words: Map<string, Word>) => deckCounts(words).map(([d]) => d).filter(Boolean);
 
+/** "Lektion 10" → 10. Null for a deck that isn't a numbered lesson (your own words, say). */
+export function lessonNumber(deck: string | null | undefined): number | null {
+  const m = /^lektion\s+(\d+)$/i.exec((deck ?? '').trim());
+  return m ? Number(m[1]) : null;
+}
+
+/**
+ * New words for "All decks" once the teacher has set the class's lesson: that lesson first, then
+ * the ones before it, newest first (10, 9, 8 …), so a class on Lektion 10 isn't sent back to
+ * Lektion 2 first. Lessons after it wait until the class gets there (pick the deck to study one
+ * early). Other decks, like your own words, come after, as before. Without a class lesson, new
+ * words come in book order. Within a lesson, the order is kept: recognition before production.
+ */
+export function orderNewWords<T extends { word: Word }>(fresh: T[], classLesson: string | null | undefined): T[] {
+  const current = lessonNumber(classLesson);
+  if (current === null) return fresh;
+  const rank = (w: Word) => {
+    const n = lessonNumber(w.deck);
+    return n === null ? current + 1 : n <= current ? current - n : -1; // -1: later lesson, held back
+  };
+  return fresh
+    .map((x, i) => ({ x, i, r: rank(x.word) }))
+    .filter((e) => e.r >= 0)
+    .sort((a, b) => a.r - b.r || a.i - b.i)
+    .map((e) => e.x);
+}
+
 export function currentDeck(data: StudyData): string {
   const d = data.prefs.studyDeck || 'all';
   return d === 'all' || deckNames(data.words).includes(d) ? d : 'all';
@@ -84,7 +111,7 @@ export function buildQueue(data: StudyData, now: number): Queue {
   const words = sortedWords(data.words).filter((w) => deck === 'all' || (w.deck || '') === deck);
   const learning: QueueItem[] = [];
   const review: QueueItem[] = [];
-  const fresh: QueueItem[] = [];
+  let fresh: QueueItem[] = [];
   let newToday = 0;
   let reviewsToday = 0;
 
@@ -105,6 +132,7 @@ export function buildQueue(data: StudyData, now: number): Queue {
   }
   learning.sort((a, b) => a.s!.due - b.s!.due);
   review.sort((a, b) => a.s!.due - b.s!.due);
+  if (deck === 'all') fresh = orderNewWords(fresh, data.classLesson);
 
   const { prefs } = data;
   const bonus = prefs.bonusNew?.day === today ? prefs.bonusNew.n : 0;

@@ -12,16 +12,18 @@ export async function GET(req: Request) {
   const auth = await requireUser(req);
   if (auth.response) {
     if (auth.response.status !== 401) return auth.response;
-    return ok({ me: null, words: await repo.listWords(null) });
+    const [words, classLesson] = await Promise.all([repo.listWords(null), repo.getClassLesson()]);
+    return ok({ me: null, words, classLesson });
   }
   const { user } = auth;
-  const [words, cards, prefs, cheers, streak] = await Promise.all([
+  const [words, cards, prefs, cheers, streak, classLesson] = await Promise.all([
     repo.listWords(user.id),
     repo.listCards(user.id),
     repo.getPrefs(user.id),
     repo.unseenCheers(user.id),
     repo.myStreak(user.id),
+    repo.getClassLesson(),
   ]);
   // Everyone signed in gets the AI helper (it has an hourly limit per person, since each use costs money).
-  return ok({ me: repo.publicUser(user), words, cards, prefs, cheers, ai: aiEnabled(), streak });
+  return ok({ me: repo.publicUser(user), words, cards, prefs, cheers, ai: aiEnabled(), streak, classLesson });
 }

@@ -129,9 +129,12 @@ export function StudyView() {
           <button className="chip" role="radio" aria-checked={deck === 'all'} onClick={() => store.setPrefs({ studyDeck: 'all' })}>
             {t('All decks')} <span className="n">{data.words.size}</span>
           </button>
-          {decks.filter(([d]) => d).map(([d, n]) => (
-            <button key={d} className="chip" role="radio" aria-checked={deck === d} onClick={() => store.setPrefs({ studyDeck: d })}>
+          {/* The class's lesson comes right after "All decks", so it's in view without scrolling */}
+          {decks.filter(([d]) => d).sort(([a], [b]) => Number(b === data.classLesson) - Number(a === data.classLesson)).map(([d, n]) => (
+            <button key={d} className="chip" role="radio" aria-checked={deck === d} onClick={() => store.setPrefs({ studyDeck: d })}
+              title={d === data.classLesson ? t('Your class is on this lesson') : undefined}>
               {d} <span className="n">{n}</span>
+              {d === data.classLesson && <span className="chip-now">{t('class')}</span>}
             </button>
           ))}
         </div>

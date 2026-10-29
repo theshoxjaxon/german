@@ -49,6 +49,15 @@ export async function setClassAction(userId: string, inClass: boolean): Promise<
   return { ok: true };
 }
 
+/** The lesson the class is on: "All decks" brings in new words from it first. '' clears it. */
+export async function setClassLessonAction(deck: string): Promise<Result> {
+  if (!(await requireAdmin())) return denied;
+  if (typeof deck !== 'string' || deck.length > 100) return { ok: false, error: 'Unknown lesson.' };
+  if (!(await repo.setClassLesson(deck.trim() || null))) return { ok: false, error: 'No shared words in that deck.' };
+  refresh();
+  return { ok: true };
+}
+
 export async function deleteUserAction(userId: string): Promise<Result> {
   const admin = await requireAdmin();
   if (!admin) return denied;

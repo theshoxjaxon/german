@@ -32,13 +32,14 @@ export interface Snapshot {
   cheers: Cheer[]; // received, not yet seen
   classData: ClassData | null;
   classStatus: 'idle' | 'loading' | 'ready' | 'error';
+  classLesson: string | null; // the lesson the class is on (set by the teacher)
 }
 type Kind = 'words' | 'cards';
 type Doc<K extends Kind> = K extends 'words' ? Word : CardDoc;
 
 const INITIAL: Snapshot = {
   status: 'loading', loadProblem: null, me: null, guest: false, guestWords: 0, ai: false, streak: null, words: new Map(), cards: new Map(), prefs: DEFAULT_PREFS,
-  cheers: [], classData: null, classStatus: 'idle',
+  cheers: [], classData: null, classStatus: 'idle', classLesson: null,
 };
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
@@ -174,7 +175,7 @@ class Store {
       }
       // A guest: progress and settings come from this browser.
       this.emit({
-        status: 'ready', me: null, guest: true, guestWords: 0, ai: false, streak: null, words, cheers: [],
+        status: 'ready', me: null, guest: true, guestWords: 0, ai: false, streak: null, words, cheers: [], classLesson: data.classLesson ?? null,
         cards: new Map(Object.entries(readGuestCards())),
         prefs: { ...DEFAULT_PREFS, ...readGuest(GUEST_PREFS) } as Prefs,
       });
@@ -194,6 +195,7 @@ class Store {
       words,
       cards,
       cheers: data.cheers,
+      classLesson: data.classLesson ?? null,
       prefs: this.prefsDirty ? this.snap.prefs : { ...DEFAULT_PREFS, ...data.prefs },
     });
     if (data.prefs.uiLang) rememberLang(data.prefs.uiLang);

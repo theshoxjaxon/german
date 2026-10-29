@@ -9,9 +9,22 @@ A mobile-first vocabulary app for a learning center. Students study German words
 - **Class**: Snapchat-style daily streaks, each classmate's active-word count, a leaderboard, and cheers you can send each other.
 - **Words**: an Airtable-style table and card gallery: search, filter, sort. Teachers manage the shared lesson words; every student can also add **their own words**, which only they see and study.
 - **AI word helper** (optional): take a photo of a word list (textbook page, worksheet, whiteboard, notes) or type German words, and Claude turns them into finished flashcards: article, meaning, IPA, forms, an example sentence and a memory hook. You tick the ones to keep and pick the topic. In the word form, **Fill in the rest with AI** completes a single word.
-- **Admin dashboard** at `/admin`: profiles created, new sign-ups, daily / weekly / monthly active students, 30-day charts, a student table with emails, password resets and the sign-up link to share.
+- **Admin dashboard** at `/admin`: profiles created, new sign-ups, daily / weekly / monthly active students, 30-day charts, a student table with emails, password resets, the sign-up link to share, and **which lesson the class is on**.
 
-It comes with **Lektion 3** (34 words), **Lektion 5** (59 words) and **Lektion 7** of Momente A1.1 (46 words, hobbies, compliments and *können*), German → Uzbek, with IPA, example sentences, plural/verb forms and memory hooks. New built-in lists are added to an existing database once, on the next start (`SEED_PACKS` in `src/lib/seed.ts`); words the teacher deleted don't come back, and words already typed in by hand aren't doubled.
+It comes with eight lessons of Momente, German → Uzbek, 442 words in all, each with IPA, an example sentence, plural or verb forms and a memory hook:
+
+| Lektion | Words | Topics |
+| --- | --- | --- |
+| 2 | 61 | age, family status, jobs |
+| 3 | 34 | family, languages |
+| 4 | 48 | home, furniture, shopping and prices |
+| 5 | 59 | things, colours, asking how to say and spell words |
+| 7 | 46 | hobbies, compliments, *können* |
+| 8 | 47 | free time, making plans, weekdays, telling the time |
+| 9 | 85 | food, café and restaurant, the working day |
+| 10 | 62 | travel: airport, station, phoning |
+
+Lektion 2, 4, 8, 9 and 10 follow the class's own word lists, with their Uzbek meanings checked and corrected. Words tagged `extra` aren't in those lists: useful words for the topic (the weekdays, furniture, bread and tea, the bus stop …). Austrian and Swiss variants (*Hendl*, *Schlagobers*, *Perron* …) are in the notes of the standard word rather than cards of their own. A word is never in two lessons. New built-in lists are added to an existing database once, on the next start (`SEED_PACKS` in `src/lib/seed.ts`); words the teacher deleted don't come back, and words already typed in by hand aren't doubled.
 
 Built with Next.js 16 (App Router), React 19, TypeScript and PostgreSQL (Supabase).
 
@@ -129,6 +142,8 @@ Copy `.env.example` to `.env.local`. Only `DATABASE_URL` is required.
 | `/admin/analytics`: North Star, funnel, retention | – | – | ✓ |
 
 **One class, no code (for now).** Everyone who signs up is in the class and on its leaderboard, and can use the AI helper. A teacher can take someone off the leaderboard in `/admin` (they keep studying, but aren't listed and can't send cheers). A class code can come back later if the center grows to several classes.
+
+**The class lesson.** In `/admin`, set *The class is on* to the lesson the class has reached. Studying “All decks”, everyone (guests too) then gets new words from that lesson first, then the lessons before it, newest first (10, 9, 8 …), so nobody starting today is sent back to Lektion 2 first. Later lessons wait until you move the setting on; anyone can still tap a lesson to study it early, and words already started keep their reviews. The lesson is marked *class* on the Study screen. Not set: new words come in book order.
 
 **Admins.** Nobody becomes admin by signing up first. An address in `ADMIN_EMAILS` becomes admin once it's proven to be theirs: a Google sign-in (Google verified the address) or a password reset link sent to it. An admin can make others admin in `/admin`.
 

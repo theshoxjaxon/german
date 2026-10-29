@@ -712,13 +712,15 @@ export interface AdminStats {
     answersWeek: number;
     studiedToday: boolean;
   }[];
+  classLesson: string | null; // the lesson the class is on
+  decks: { deck: string; words: number }[]; // the shared decks, for picking it
 }
 
 export async function adminStats(now = Date.now()): Promise<AdminStats> {
   const today = todayKey(now);
   const days = lastDays(today, 30);
   const week = lastDays(today, 7);
-  const { users } = await loadEveryone(now);
+  const [{ users }, classLesson, decks] = await Promise.all([loadEveryone(now), getClassLesson(), sharedDecks()]);
   const studiedOn = (day: string) => users.filter((u) => u.act.studyDays.has(day)).length;
   const studiedIn = (range: string[]) => users.filter((u) => range.some((d) => u.act.studyDays.has(d))).length;
   const createdDay = (u: (typeof users)[number]) => dayKey(u.createdAt, TIMEZONE);
@@ -759,6 +761,8 @@ export async function adminStats(now = Date.now()): Promise<AdminStats> {
         studiedToday: u.act.studyDays.has(today),
       }))
       .sort((a, b) => (b.lastSeenAt ?? 0) - (a.lastSeenAt ?? 0)),
+    classLesson,
+    decks,
   };
 }
 
@@ -823,4 +827,38 @@ export async function analytics(period: Period, now = Date.now()): Promise<Analy
     },
     period,
   );
+}
+
+/* ============================== the class's lesson ============================== */
+
+/** The lesson the class is on ("Lektion 10"), set by a teacher in /admin. Null: not set (book order). */
+export async function getClassLesson(): Promise<string | null> {
+  const db = await getDb();
+  const r = await db.query(`SELECT value FROM settings WHERE key = 'class_lesson'`);
+  return r.rows[0]?.value ? str(r.rows[0].value) : null;
+}
+
+/** Set it to one of the shared decks, or clear it (null). False when no shared word has that deck. */
+export async function setClassLesson(deck: string | null): Promise<boolean> {
+  const db = await getDb();
+  if (!deck) {
+    await db.query(`DELETE FROM settings WHERE key = 'class_lesson'`);
+    return true;
+  }
+  const r = await db.query(
+    `INSERT INTO settings (key, value)
+     SELECT 'class_lesson', $1 WHERE EXISTS (SELECT 1 FROM words WHERE owner_id IS NULL AND data->>'deck' = $1)
+     ON CONFLICT (key) DO UPDATE SET value = excluded.value
+     RETURNING value`,
+    [deck],
+  );
+  return r.rowCount > 0;
+}
+
+/** The shared decks with their word counts, for the admin's lesson picker. */
+export async function sharedDecks(): Promise<{ deck: string; words: number }[]> {
+  const db = await getDb();
+  const r = await db.query(`SELECT data->>'deck' AS deck, count(*)::int AS n FROM words WHERE owner_id IS NULL AND coalesce(data->>'deck', '') <> '' GROUP BY 1`);
+  const collator = new Intl.Collator('de', { numeric: true });
+  return r.rows.map((row) => ({ deck: str(row.deck), words: num(row.n) })).sort((a, b) => collator.compare(a.deck, b.deck));
 }

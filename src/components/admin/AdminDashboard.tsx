@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState, useTransition } from 'react';
-import { deleteUserAction, resetPasswordAction, setClassAction, setRoleAction } from '@/app/admin/actions';
+import { deleteUserAction, resetPasswordAction, setClassAction, setClassLessonAction, setRoleAction } from '@/app/admin/actions';
 import { useClientValue, useNow } from '@/lib/client/hooks';
 import type { AdminStats } from '@/lib/server/repo';
 import { dayLabelLong as dayLong, dayLabelShortDe as dayLabel, dayLabelWithYear } from '@/lib/stats';
@@ -93,6 +93,8 @@ export function AdminDashboard({ stats, meId }: { stats: AdminStats; meId: strin
           />
         </section>
 
+        <ClassLessonPanel current={stats.classLesson} decks={stats.decks} onDone={setNotice} />
+
         <section className="panel join-panel" aria-labelledby="invite-h">
           <div className="panel-h"><h2 id="invite-h">Invite students</h2><span className="muted">one class for everyone</span></div>
           <p className="invite-link">{signupLink}</p>
@@ -152,6 +154,32 @@ export function AdminDashboard({ stats, meId }: { stats: AdminStats; meId: strin
 
       {managing && <ManageSheet key={managing.id} person={managing} isMe={managing.id === meId} closing={closing} onClose={close} />}
     </main>
+  );
+}
+
+/** Which lesson the class is on. "All decks" brings in new words from it first, then the lessons before it. */
+function ClassLessonPanel({ current, decks, onDone }: { current: string | null; decks: AdminStats['decks']; onDone: (message: string) => void }) {
+  const [pending, startTransition] = useTransition();
+  const change = (deck: string) =>
+    startTransition(async () => {
+      const r = await setClassLessonAction(deck);
+      onDone(r.ok ? (deck ? `The class is now on ${deck}.` : 'Class lesson cleared: new words come in book order.') : r.error);
+    });
+  return (
+    <section className="panel" aria-labelledby="lesson-h">
+      <div className="panel-h"><h2 id="lesson-h">Class lesson</h2><span className="muted">where the class is now</span></div>
+      <div className="field">
+        <label htmlFor="class-lesson">The class is on</label>
+        <select id="class-lesson" value={current ?? ''} disabled={pending} onChange={(e) => change(e.target.value)}>
+          <option value="">Not set (book order)</option>
+          {decks.map((d) => <option key={d.deck} value={d.deck}>{d.deck} · {plural(d.words, 'word', 'words')}</option>)}
+        </select>
+      </div>
+      <p className="hint">
+        Students studying “All decks” get new words from this lesson first, then the lessons before it, newest first.
+        Later lessons wait until you move on; anyone can still pick a deck to study it early. Words already started keep their reviews.
+      </p>
+    </section>
   );
 }
 

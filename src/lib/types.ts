@@ -171,12 +171,14 @@ export interface AppData {
   cheers: Cheer[]; // cheers received and not yet seen
   ai: boolean; // the AI word helper is switched on for this server (for everyone signed in)
   streak: { days: number; studiedToday: boolean }; // from the server: right across all your devices
+  classLesson: string | null; // the lesson the class is on, set by the teacher
 }
 
 /** What GET /api/state returns to a guest (not signed in). Their progress stays in their browser. */
 export interface GuestData {
   me: null;
   words: Record<string, Word>;
+  classLesson: string | null;
 }
 
 /** What the UI works with: Maps for fast lookup. */
@@ -184,4 +186,6 @@ export interface StudyData {
   words: Map<string, Word>;
   cards: Map<string, CardDoc>;
   prefs: Prefs;
+  /** The lesson the class is on, set by the teacher (e.g. "Lektion 10"): see orderNewWords() in queue.ts. */
+  classLesson?: string | null;
 }

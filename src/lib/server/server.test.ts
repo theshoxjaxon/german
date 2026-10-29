@@ -62,12 +62,13 @@ describe('passwords', () => {
 describe('database', () => {
   const doc = (f: CardDoc['f']): CardDoc => ({ f, r: null, suspended: false, updatedAt: Date.now() });
 
-  it('seeds the built-in lists (Lektion 3, 5 and 7)', async () => {
+  it('seeds the built-in lists (Lektion 2, 3, 4, 5, 7, 8, 9 and 10)', async () => {
     const words = Object.values(await repo.listWords(null));
-    expect(words.filter((w) => w.deck === 'Lektion 3')).toHaveLength(34);
-    expect(words.filter((w) => w.deck === 'Lektion 5')).toHaveLength(59);
-    expect(words.filter((w) => w.deck === 'Lektion 7')).toHaveLength(46);
-    expect(words).toHaveLength(139);
+    const count = (deck: string) => words.filter((w) => w.deck === deck).length;
+    expect([2, 3, 4, 5, 7, 8, 9, 10].map((n) => count(`Lektion ${n}`))).toEqual([61, 34, 48, 59, 46, 47, 85, 62]);
+    expect(words).toHaveLength(442);
+    // No word appears in two lessons
+    expect(new Set(words.map((w) => w.term.toLowerCase())).size).toBe(words.length);
   });
 
   it('makes everyone a student in the one class, and an ADMIN_EMAILS address admin once it is verified', async () => {
@@ -193,7 +194,7 @@ describe('database', () => {
     const mine = await repo.listWords(malika.id);
     expect(mine['m-bahnhof']).toMatchObject({ term: 'der Bahnhof', personal: true });
     expect(mine['l3-familie'].personal).toBeUndefined(); // shared words stay shared
-    expect(Object.keys(mine)).toHaveLength(140);
+    expect(Object.keys(mine)).toHaveLength(443);
     expect((await repo.listWords(aziz.id))['m-bahnhof']).toBeUndefined(); // others don't see it
     expect((await repo.listWords(teacher.id))['m-bahnhof']).toBeUndefined(); // not even the admin
     expect((await repo.listWords(null))['m-bahnhof']).toBeUndefined(); // nor guests
@@ -221,7 +222,7 @@ describe('database', () => {
     expect(await repo.findUserById(malika.id)).toBeNull();
     expect(await repo.listCards(malika.id)).toEqual({});
     expect(await repo.countOwnWords(malika.id)).toBe(0); // her own words went too
-    expect(Object.keys(await repo.listWords(null))).toHaveLength(139); // the shared ones stay
+    expect(Object.keys(await repo.listWords(null))).toHaveLength(442); // the shared ones stay
     expect((await repo.adminStats()).totals.profiles).toBe(1);
   });
 
@@ -440,5 +441,19 @@ describe('password links (forgot / reset)', () => {
     const done = await repo.useResetToken(await repo.createResetToken(t.id, MIN45), '$2b$x');
     expect((await repo.ensureAdminRole(done!)).role).toBe('admin');
     expect((await byEmail('third@markaz.uz')).role).toBe('admin');
+  });
+});
+
+describe('the class lesson', () => {
+  it('is unset until a teacher picks one of the shared decks', async () => {
+    expect(await repo.getClassLesson()).toBeNull();
+    expect(await repo.setClassLesson('Lektion 99')).toBe(false); // no such deck
+    expect(await repo.getClassLesson()).toBeNull();
+    expect(await repo.setClassLesson('Lektion 7')).toBe(true);
+    expect(await repo.getClassLesson()).toBe('Lektion 7');
+    expect((await repo.adminStats()).classLesson).toBe('Lektion 7');
+    expect((await repo.adminStats()).decks.map((d) => d.deck)).toEqual(expect.arrayContaining(['Lektion 3', 'Lektion 7']));
+    expect(await repo.setClassLesson(null)).toBe(true);
+    expect(await repo.getClassLesson()).toBeNull();
   });
 });

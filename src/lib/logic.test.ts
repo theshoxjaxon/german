@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseList, suggestDeck } from './import-parser';
-import { buildQueue, pickNext, quizArticle } from './queue';
+import { buildQueue, lessonNumber, orderNewWords, pickNext, quizArticle } from './queue';
 import { packWords, SEED_PACKS } from './seed';
 import { answer } from './srs';
 import { cleanTerm, guessPos, highlightParts, norm, splitTerm } from './text';
@@ -52,6 +52,48 @@ describe('import parser', () => {
   });
   it('suggests the next lesson', () => {
     expect(suggestDeck(['Lektion 2', 'Lektion 3'])).toBe('Lektion 4');
+  });
+});
+
+describe('the class lesson', () => {
+  const allPacks = (): StudyData => {
+    const words = new Map<string, ReturnType<typeof packWords>[string]>();
+    for (const pack of SEED_PACKS) for (const [id, w] of Object.entries(packWords(pack, NOW - 1000))) words.set(id, w);
+    return { words, cards: new Map(), prefs: DEFAULT_PREFS };
+  };
+  const decksOf = (q: ReturnType<typeof buildQueue>) => [...new Set(q.fresh.map((x) => x.word.deck))];
+
+  it('reads lesson numbers from deck names', () => {
+    expect(lessonNumber('Lektion 10')).toBe(10);
+    expect(lessonNumber(' lektion 2 ')).toBe(2);
+    expect(lessonNumber('My words')).toBeNull();
+    expect(lessonNumber(null)).toBeNull();
+  });
+
+  it('without one, brings in new words in book order', () => {
+    expect(decksOf(buildQueue(allPacks(), NOW))[0]).toBe('Lektion 2');
+  });
+
+  it('starts "All decks" at the class lesson, goes back from there, and holds later lessons back', () => {
+    const q = buildQueue({ ...allPacks(), classLesson: 'Lektion 8' }, NOW);
+    expect(decksOf(q)).toEqual(['Lektion 8', 'Lektion 7', 'Lektion 5', 'Lektion 4', 'Lektion 3', 'Lektion 2']);
+    expect(pickNext(q, NOW)?.word.deck).toBe('Lektion 8');
+    // With both directions on, recognition still comes before production within a lesson
+    const both = buildQueue({ ...allPacks(), classLesson: 'Lektion 8', prefs: { ...DEFAULT_PREFS, dirF: true, dirR: true } }, NOW);
+    const l8 = both.fresh.filter((x) => x.word.deck === 'Lektion 8');
+    expect(l8.findIndex((x) => x.dir === 'r')).toBeGreaterThan(0);
+    expect(l8.findIndex((x) => x.dir === 'r')).toBeGreaterThan(l8.findLastIndex((x) => x.dir === 'f'));
+  });
+
+  it('leaves a chosen deck alone, even a later lesson', () => {
+    const q = buildQueue({ ...allPacks(), classLesson: 'Lektion 8', prefs: { ...DEFAULT_PREFS, studyDeck: 'Lektion 10' } }, NOW);
+    expect(decksOf(q)).toEqual(['Lektion 10']);
+  });
+
+  it('puts decks that are not lessons (your own words) after the lessons', () => {
+    const w = (deck: string) => ({ word: { deck } as never });
+    const out = orderNewWords([w('My words'), w('Lektion 2'), w('Lektion 9'), w('Lektion 4')], 'Lektion 4');
+    expect(out.map((x) => (x.word as { deck: string }).deck)).toEqual(['Lektion 4', 'Lektion 2', 'My words']);
   });
 });
 
