@@ -2,6 +2,7 @@ import { AI_IMAGE_TYPES, AI_MAX_IMAGE_CHARS, AI_MAX_LINES, AI_MAX_TEXT, isAiLang
 import { aiEnabled, AiError, makeWords } from '@/lib/server/ai';
 import { badRequest, ok, readJson } from '@/lib/server/http';
 import { hit } from '@/lib/server/rate-limit';
+import * as repo from '@/lib/server/repo';
 import { requireUser } from '@/lib/server/session';
 import { HOUR } from '@/lib/time';
 
@@ -34,7 +35,7 @@ export async function POST(req: Request) {
     request.image = { data: image.data, mediaType: image.mediaType as AiImageType };
   } else {
     const text = typeof body.text === 'string' ? body.text.trim() : '';
-    if (!text) return badRequest('Type at least one German word.');
+    if (!text) return badRequest('Type at least one word.');
     if (text.length > AI_MAX_TEXT || text.split('\n').length > AI_MAX_LINES) {
       return badRequest(`Send up to ${AI_MAX_LINES} words at a time.`);
     }
@@ -46,7 +47,8 @@ export async function POST(req: Request) {
     return fail(429, 'You’ve used the AI helper a lot this hour. Try again later, or add words by hand.');
   }
   try {
-    return ok(await makeWords(request));
+    // Cards in the language of the course you're studying
+    return ok(await makeWords(request, (await repo.getCourse(user.courseId))?.targetLang));
   } catch (e) {
     if (e instanceof AiError) return fail(e.status, e.message);
     throw e;

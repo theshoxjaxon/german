@@ -195,4 +195,6 @@ export interface StudyData {
   prefs: Prefs;
   /** The lesson the class is on, set by the teacher (e.g. "Lektion 10"): see orderNewWords() in queue.ts. */
   classLesson?: string | null;
+  /** The course studied: its language decides whether terms have der/die/das. */
+  course?: Pick<Course, 'targetLang'> | null;
 }

@@ -1,19 +1,16 @@
 'use client';
 
 import { useState } from 'react';
+import { useCourseLang } from '@/lib/client/course';
 import { useT } from '@/lib/client/i18n';
 import { speak, useSpeechSupported } from '@/lib/client/speech';
 import { store, useStore } from '@/lib/client/store';
+import { voiceFor } from '@/lib/courses';
 import type { Prefs, UiLang } from '@/lib/types';
 import { BottomSheet } from './BottomSheet';
 import { ConfirmButton, Icon, SyncNote } from './ui';
 import { useUI } from './ui-context';
 
-const VOICES: [string, string][] = [
-  ['de-DE', 'German (Germany)'], ['de-AT', 'German (Austria)'], ['de-CH', 'German (Switzerland)'],
-  ['en-US', 'English (US)'], ['en-GB', 'English (UK)'], ['fr-FR', 'French'], ['es-ES', 'Spanish'],
-  ['it-IT', 'Italian'], ['ru-RU', 'Russian'], ['tr-TR', 'Turkish'],
-];
 /** Each language is named in itself, so you can find yours whatever the interface shows now. */
 const LANGS: [UiLang, string][] = [['uz', 'Oʻzbekcha'], ['en', 'English']];
 const parseSteps = (s: string) =>
@@ -40,6 +37,8 @@ export function SettingsSheet() {
   const { prefs } = useStore();
   const ui = useUI();
   const { t, lang } = useT();
+  const studied = useCourseLang(); // the language of the course: its voices and card hints
+  const voice = voiceFor(prefs.ttsLang, studied);
   const speech = useSpeechSupported();
   const [learn, setLearn] = useState(prefs.learnSteps.join(' '));
   const [relearn, setRelearn] = useState(prefs.relearnSteps.join(' '));
@@ -88,16 +87,18 @@ export function SettingsSheet() {
           <p className="section-title">{t('Card types')}</p>
           <label className="toggle-row">
             <input type="checkbox" checked={prefs.dirF} onChange={(e) => setDir('dirF', e.target.checked)} />
-            <span>{t('Recognition')}<small>{t('See the German word, recall the meaning')}</small></span>
+            <span>{t('Recognition')}<small>{t(studied.text.recognitionHint)}</small></span>
           </label>
           <label className="toggle-row">
             <input type="checkbox" checked={prefs.dirR} onChange={(e) => setDir('dirR', e.target.checked)} />
-            <span>{t('Production')}<small>{t('See the meaning, say the German word with its article. Each word gets a second card.')}</small></span>
+            <span>{t('Production')}<small>{t(studied.text.productionHint)}</small></span>
           </label>
-          <label className="toggle-row">
-            <input type="checkbox" checked={prefs.genderQuiz} onChange={(e) => store.setPrefs({ genderQuiz: e.target.checked })} />
-            <span>{t('der, die or das?')}<small>{t('For nouns, pick the article before you see the answer')}</small></span>
-          </label>
+          {studied.articles && (
+            <label className="toggle-row">
+              <input type="checkbox" checked={prefs.genderQuiz} onChange={(e) => store.setPrefs({ genderQuiz: e.target.checked })} />
+              <span>{t('der, die or das?')}<small>{t('For nouns, pick the article before you see the answer')}</small></span>
+            </label>
+          )}
         </div>
 
         <div className="settings-group">
@@ -106,12 +107,12 @@ export function SettingsSheet() {
             <>
               <label className="toggle-row">
                 <input type="checkbox" checked={prefs.autoplay} onChange={(e) => store.setPrefs({ autoplay: e.target.checked })} />
-                <span>{t('Read the word aloud')}<small>{t('Automatically, when you see the German word')}</small></span>
+                <span>{t('Read the word aloud')}<small>{t(studied.text.autoplayHint)}</small></span>
               </label>
               <label className="toggle-row">
                 <input type="checkbox" checked={prefs.slowSpeech} onChange={(e) => {
                   store.setPrefs({ slowSpeech: e.target.checked });
-                  speak('die Familie', prefs.ttsLang, e.target.checked);
+                  speak(studied.sample, voice, e.target.checked);
                 }} />
                 <span>{t('Speak slowly')}<small>{t('Hear every sound clearly')}</small></span>
               </label>
@@ -147,11 +148,11 @@ export function SettingsSheet() {
             {speech && (
               <div className="field">
                 <label htmlFor="set-lang">{t('Voice language')}</label>
-                <select id="set-lang" value={prefs.ttsLang} onChange={(e) => {
+                <select id="set-lang" value={voice} onChange={(e) => {
                   store.setPrefs({ ttsLang: e.target.value });
-                  speak('Guten Tag', e.target.value, prefs.slowSpeech);
+                  speak(studied.hello, e.target.value, prefs.slowSpeech);
                 }}>
-                  {VOICES.map(([k, l]) => <option key={k} value={k}>{t(l)}</option>)}
+                  {studied.voices.map(([k, l]) => <option key={k} value={k}>{t(l)}</option>)}
                 </select>
               </div>
             )}

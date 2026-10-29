@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { langOf, LANGS, voiceFor } from './courses';
 import { parseList, suggestDeck } from './import-parser';
 import { buildQueue, lessonNumber, orderNewWords, pickNext, quizArticle } from './queue';
 import { packWords, SEED_PACKS } from './seed';
@@ -137,5 +138,37 @@ describe('words view', () => {
   it('sorts A–Z by the noun, ignoring der/die/das', () => {
     const rows = visibleRows(data(), NOW, '', EMPTY_FILTERS, { key: 'term', dir: 'asc' });
     expect(rows.slice(0, 5).map((r) => r.w.term)).toEqual(['dein', 'doch', 'ein bisschen', 'das Enkelkind', 'die Familie']);
+  });
+});
+
+describe('languages', () => {
+  const english = (term: string, deck = 'A1') => ({ ...packWords(SEED_PACKS[0], NOW)['l3-familie'], id: `en-${term}`, term, deck });
+
+  it('reads levels and units as places in the course', () => {
+    expect(['A1', 'a2', 'B1', 'B2', 'C1', 'C2'].map(lessonNumber)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(lessonNumber('Unit 4')).toBe(4);
+    expect(lessonNumber('Lesson 12')).toBe(12);
+    expect(lessonNumber('A3')).toBeNull();
+    const w = (deck: string) => ({ word: { deck } as never });
+    const out = orderNewWords([w('A1'), w('B2'), w('A2'), w('B1'), w('My words')], 'B1');
+    expect(out.map((x) => (x.word as { deck: string }).deck)).toEqual(['B1', 'A2', 'A1', 'My words']); // B2 waits
+  });
+
+  it('has der/die/das only in German', () => {
+    expect(splitTerm('die out', false)).toEqual({ art: '', rest: 'die out' });
+    expect(guessPos('Apple', false)).toBe('other'); // capitalised is a German noun, not an English one
+    const item = { word: english('die out'), dir: 'f' as const };
+    expect(quizArticle(item, { genderQuiz: true }, false)).toBe('');
+    const words = new Map([['en-die out', english('die out')], ['en-apple', english('apple')]]);
+    const study: StudyData = { words, cards: new Map(), prefs: DEFAULT_PREFS, course: { targetLang: 'en' } };
+    expect(visibleRows(study, NOW, '', { ...EMPTY_FILTERS, gender: ['die'] }, { key: 'source', dir: 'asc' })).toHaveLength(2); // no gender filter
+    expect(visibleRows(study, NOW, '', EMPTY_FILTERS, { key: 'term', dir: 'asc' }).map((r) => r.w.term)).toEqual(['apple', 'die out']);
+  });
+
+  it('reads aloud in the language of the course', () => {
+    expect(voiceFor('de-AT', LANGS.de)).toBe('de-AT');
+    expect(voiceFor('de-AT', LANGS.en)).toBe('en-GB'); // a German voice can't read English
+    expect(voiceFor('en-US', LANGS.en)).toBe('en-US');
+    expect(langOf(null)).toBe(LANGS.de);
   });
 });

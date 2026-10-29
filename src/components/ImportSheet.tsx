@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useCourseLang } from '@/lib/client/course';
 import { useT } from '@/lib/client/i18n';
 import { store, useStore } from '@/lib/client/store';
 import { parseList, suggestDeck } from '@/lib/import-parser';
@@ -17,6 +18,7 @@ export function ImportSheet() {
   const data = useStore();
   const ui = useUI();
   const { t, tn } = useT();
+  const lang = useCourseLang();
   const [text, setText] = useState('');
   const [deckInput, setDeckInput] = useState<string | null>(null); // null until the user types a deck
   const [tags, setTags] = useState('');
@@ -48,7 +50,7 @@ export function ImportSheet() {
       id: `${newId()}${i.toString(36)}`,
       term: p.term,
       meaning: p.meaning,
-      pos: guessPos(p.term),
+      pos: guessPos(p.term, lang.articles),
       pronunciation: '', forms: '', example: '', exampleTr: '', mnemonic: '', notes: '',
       tags: tagList,
       deck,
@@ -111,7 +113,7 @@ export function ImportSheet() {
               <tbody>
                 {todo.slice(0, 6).map((p) => (
                   <tr key={p.term}>
-                    <td lang="de"><Term term={p.term} /></td>
+                    <td lang={lang.code}><Term term={p.term} /></td>
                     <td>{p.meaning}</td>
                   </tr>
                 ))}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useRef, useEffect } from 'react';
+import { useCourseLang } from '@/lib/client/course';
 import { useNow } from '@/lib/client/hooks';
 import { useT } from '@/lib/client/i18n';
 import { useStore } from '@/lib/client/store';
@@ -26,6 +27,7 @@ export function FilterSheet() {
   const now = useNow();
   const ui = useUI();
   const { t, tn } = useT();
+  const { articles } = useCourseLang();
   const { filters } = ui.query;
 
   const groups = useMemo(() => {
@@ -37,7 +39,8 @@ export function FilterSheet() {
     const out: Record<FilterGroup, Option[]> = {
       deck: deckCounts(data.words).map(([d, n]) => ({ value: d, label: d || t('(no deck)'), count: n })),
       status: STATUS_OPTS.map(([k, l]) => ({ value: k, label: t(l), count: count((i) => matchesStatus(k, infos[i])) })),
-      gender: (['der', 'die', 'das', 'none'] as const).map((k) => ({
+      // der/die/das only in German
+      gender: (articles ? (['der', 'die', 'das', 'none'] as const) : []).map((k) => ({
         value: k, label: k === 'none' ? t('no article') : k, art: k === 'none' ? undefined : k,
         count: count((i) => (genderOf(words[i].term) || 'none') === k),
       })),
@@ -47,7 +50,7 @@ export function FilterSheet() {
       tag: tags.map((tag) => ({ value: tag, label: tag, count: count((i) => (words[i].tags || []).includes(tag)) })),
     };
     return out;
-  }, [data, now, t]);
+  }, [data, now, t, articles]);
 
   const shown = useMemo(() => visibleRows(data, now, ui.query.q, filters, ui.sort).length, [data, now, ui.query.q, filters, ui.sort]);
   const toggle = (group: FilterGroup, value: string) =>

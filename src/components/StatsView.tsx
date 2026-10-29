@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useCourseLang } from '@/lib/client/course';
 import { useNow } from '@/lib/client/hooks';
 import { useT } from '@/lib/client/i18n';
 import { useStore } from '@/lib/client/store';
@@ -16,6 +17,7 @@ export function StatsView() {
   const now = useNow();
   const ui = useUI();
   const { t, tn } = useT();
+  const lang = useCourseLang();
   const ready = data.status === 'ready' && now > 0;
   const st = useMemo(() => (ready ? computeStats(data, now) : null), [ready, data, now]);
   const [fcSel, setFcSel] = useState<number | null>(null);
@@ -42,7 +44,7 @@ export function StatsView() {
   const dMax = Math.max(1, ...dTot);
   const dPeak = dTot.indexOf(Math.max(...dTot));
   const revTotal = dTot.reduce((a, b) => a + b, 0);
-  const dayName = (di: number) => (di === st.today ? t('Today') : dayLong(di));
+  const dayName = (di: number) => (di === st.today ? t('Today') : dayLong(di, lang.locale));
   const dueOn = (k: number) => tn(fc[k], '{day}: {n} card due', '{day}: {n} cards due', { day: dayName(st.today + k) });
   const answeredOn = (k: number) => t('{day}: {ok} remembered, {again} again', { day: dayName(st.days[k].di), ok: st.days[k].ok, again: st.days[k].again });
 
@@ -89,7 +91,7 @@ export function StatsView() {
             <div key={k} className="fach" role="listitem" aria-label={tn(n, 'Compartment {k}, {range}: {n} card', 'Compartment {k}, {range}: {n} cards', { k: k + 1, range: t(FACH_RANGE[k]) })}>
               <span className="fach-n">{n}</span>
               <span className="fach-box"><span className={`fach-fill f${k + 1}`} style={{ height: `${((n / fmax) * 100).toFixed(1)}%` }} /></span>
-              <span className="fach-name" lang="de">Fach {k + 1}</span>
+              <span className="fach-name" lang={lang.code}>{lang.box} {k + 1}</span>
               <span className="fach-range">{t(FACH_RANGE[k])}</span>
             </div>
           ))}
@@ -111,7 +113,7 @@ export function StatsView() {
               aria-label={dueOn(k)}>
               <span className="col-val">{n > 0 && (k === fcPeak || k === 0) ? n : ''}</span>
               <span className="col-plot"><span className="col-bar" style={{ height: `${((n / fcMax) * 100).toFixed(1)}%` }} /></span>
-              <span className="col-x" lang="de">{weekday(st.today + k)}</span>
+              <span className="col-x" lang={lang.code}>{weekday(st.today + k, lang.locale)}</span>
             </button>
           ))}
         </div>
@@ -134,7 +136,7 @@ export function StatsView() {
                   {d.ok > 0 && <span className="seg-ok" style={{ flex: d.ok }} />}
                 </span>
               </span>
-              <span className="col-x" lang="de">{weekday(d.di)}</span>
+              <span className="col-x" lang={lang.code}>{weekday(d.di, lang.locale)}</span>
             </button>
           ))}
         </div>
@@ -154,7 +156,7 @@ export function StatsView() {
             {st.hard.map(({ w, lapses, ease }) => (
               <button key={w.id} className="hard-row" onClick={() => ui.openSheet({ kind: 'word', id: w.id })}>
                 <span className="grow">
-                  <span className="t" lang="de"><Term term={w.term} /></span>
+                  <span className="t" lang={lang.code}><Term term={w.term} /></span>
                   <span className="m">{w.meaning}</span>
                 </span>
                 <span className="num">{tn(lapses, '{n} lapse', '{n} lapses')}<br />{t('ease {p}%', { p: Math.round(ease * 100) })}</span>

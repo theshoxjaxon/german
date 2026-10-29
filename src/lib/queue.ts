@@ -39,10 +39,16 @@ export function deckCounts(words: Map<string, Word>): [string, number][] {
 }
 export const deckNames = (words: Map<string, Word>) => deckCounts(words).map(([d]) => d).filter(Boolean);
 
-/** "Lektion 10" → 10. Null for a deck that isn't a numbered lesson (your own words, say). */
+/**
+ * Where a deck is in the course: "Lektion 10", "Unit 10" or "Lesson 10" → 10, a level A1 → 1,
+ * A2 → 2, B1 → 3 … C2 → 6. Null for a deck that is neither (your own words, say).
+ */
 export function lessonNumber(deck: string | null | undefined): number | null {
-  const m = /^lektion\s+(\d+)$/i.exec((deck ?? '').trim());
-  return m ? Number(m[1]) : null;
+  const d = (deck ?? '').trim();
+  const lesson = /^(?:lektion|lesson|unit)\s+(\d+)$/i.exec(d);
+  if (lesson) return Number(lesson[1]);
+  const level = /^([abc])([12])$/i.exec(d);
+  return level ? (level[1].toLowerCase().charCodeAt(0) - 97) * 2 + Number(level[2]) : null;
 }
 
 /**
@@ -153,8 +159,8 @@ export function buildQueue(data: StudyData, now: number): Queue {
  * The der/die/das quiz: on a recognition card for a noun with an article, the article is hidden
  * and the learner picks it first. Returns the right article, or '' when there is no quiz.
  */
-export function quizArticle(item: Pick<QueueItem, 'word' | 'dir'> | null, prefs: Pick<Prefs, 'genderQuiz'>): Article | '' {
-  if (!item || !prefs.genderQuiz || item.dir !== 'f') return '';
+export function quizArticle(item: Pick<QueueItem, 'word' | 'dir'> | null, prefs: Pick<Prefs, 'genderQuiz'>, articles = true): Article | '' {
+  if (!item || !prefs.genderQuiz || item.dir !== 'f' || !articles) return '';
   return genderOf(item.word.term);
 }
 

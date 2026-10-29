@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { AI_LANGUAGES, isAiLanguage, type AiLanguage, type AiResult } from '@/lib/ai-shared';
 import { prepareImage, requestAiWords } from '@/lib/client/ai';
+import { useCourseLang } from '@/lib/client/course';
 import { useLocalState } from '@/lib/client/hooks';
 import { useT } from '@/lib/client/i18n';
 import { store, useStore } from '@/lib/client/store';
@@ -32,13 +33,14 @@ export function LanguageSelect({ id, value, onChange }: { id: string; value: AiL
 }
 
 /**
- * "Add words with AI": a photo of a vocabulary list, or German words typed one per line.
+ * "Add words with AI": a photo of a vocabulary list, or words typed one per line, in the language studied.
  * The AI suggests finished flashcards; the person ticks the ones to keep and picks the topic.
  */
 export function AiSheet() {
   const data = useStore();
   const ui = useUI();
   const { t, tn } = useT();
+  const studied = useCourseLang();
   const shared = addsSharedWords(data.me);
   const [mode, setMode] = useLocalState<Mode>('kk.aiMode', 'photo', isMode);
   const [lang, setLang] = useAiLanguage();
@@ -143,7 +145,7 @@ export function AiSheet() {
       >
         {result.words.length === 0 ? (
           <div className="ai-empty" role="status">
-            <p><b>{t('No German words found.')}</b></p>
+            <p><b>{t(studied.text.aiNone)}</b></p>
             {result.note && <p className="muted">{result.note}</p>}
             <p className="hint">{t('Try a sharper photo with the word list filling the picture, or type the words instead.')}</p>
           </div>
@@ -169,10 +171,10 @@ export function AiSheet() {
                   <label className={`ai-row${picked.has(i) ? ' is-on' : ''}`}>
                     <input type="checkbox" checked={picked.has(i)} onChange={() => toggle(i)} />
                     <span className="ai-main">
-                      <span className="ai-term" lang="de"><Term term={w.term} /></span>
+                      <span className="ai-term" lang={studied.code}><Term term={w.term} /></span>
                       {w.pronunciation && <span className="ai-ipa">{w.pronunciation}</span>}
                       <span className="ai-meaning">{w.meaning}</span>
-                      {w.example && <span className="ai-example" lang="de">{w.example}</span>}
+                      {w.example && <span className="ai-example" lang={studied.code}>{w.example}</span>}
                     </span>
                     <span className="ai-side">
                       <span className="tag">{t(POS_LABEL[w.pos])}</span>
@@ -214,7 +216,7 @@ export function AiSheet() {
 
         {mode === 'photo' ? (
           <div className="ai-photo">
-            <p className="lede">{t('Take a photo of a word list: a textbook page, a worksheet, the whiteboard or your notes. The AI finds the German words and fills in the rest.')}</p>
+            <p className="lede">{t(studied.text.aiPhoto)}</p>
             {photo ? (
               <figure className="ai-preview">
                 {/* eslint-disable-next-line @next/next/no-img-element -- a local data: URL preview */}
@@ -232,10 +234,10 @@ export function AiSheet() {
           </div>
         ) : (
           <div className="field">
-            <label htmlFor="ai-text">{t('German words, one per line')}</label>
+            <label htmlFor="ai-text">{t(studied.text.aiTextLabel)}</label>
             <textarea id="ai-text" rows={7} value={text} onChange={(e) => setText(e.target.value)} disabled={busy} spellCheck={false} autoCapitalize="off" data-autofocus
               placeholder={'Bahnhof\nder Zug\nfahren\numsteigen – to change trains'} />
-            <p className="hint">{t('Just the German is enough. The AI adds the article, meaning, pronunciation, forms, an example and a memory hook. Meanings you type are kept.')}</p>
+            <p className="hint">{t(studied.text.aiTextHint)}</p>
           </div>
         )}
 

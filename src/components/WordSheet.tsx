@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import { useCourseLang } from '@/lib/client/course';
 import { useNow } from '@/lib/client/hooks';
 import { useT } from '@/lib/client/i18n';
 import { requestAiWords } from '@/lib/client/ai';
 import { speak, useSpeechSupported } from '@/lib/client/speech';
 import { store, useStore } from '@/lib/client/store';
+import { voiceFor } from '@/lib/courses';
 import { addsSharedWords, canEditWord, MY_WORDS_DECK } from '@/lib/ownership';
 import { currentDeck, deckNames, enabledDirs, lapsesOf, latestDeck, LEECH_AT, nextOrder, stateInfo } from '@/lib/queue';
 import { cleanTerm, guessPos, newId, norm, parseTags } from '@/lib/text';
@@ -22,6 +24,7 @@ export function WordSheet({ id }: { id: string | null }) {
   const data = useStore();
   const ui = useUI();
   const { t, tn } = useT();
+  const lang = useCourseLang();
   const speech = useSpeechSupported();
   // Fill the form once from the word as it was when the sheet opened, so live updates never overwrite typing.
   const [initial] = useState<Word | null>(() => (id ? data.words.get(id) ?? null : null));
@@ -61,7 +64,7 @@ export function WordSheet({ id }: { id: string | null }) {
     const meaning = get('meaning');
     const deck = get('deck');
     const next: typeof errors = {};
-    if (!term) next.term = t('Enter the German word or phrase.');
+    if (!term) next.term = t(lang.text.enterWord);
     if (!meaning) next.meaning = t('Enter what it means.');
     const dup = [...store.getSnapshot().words.values()].find((x) => x.id !== initial?.id && norm(x.term) === norm(term) && (x.deck || '') === deck);
     if (term && dup) next.term = t('This word is already in {deck}.', { deck: deck || t('your words') });
@@ -76,7 +79,7 @@ export function WordSheet({ id }: { id: string | null }) {
       id: initial?.id ?? newId(),
       term,
       meaning,
-      pos: (get('pos') as Pos) || guessPos(term),
+      pos: (get('pos') as Pos) || guessPos(term, lang.articles),
       pronunciation: get('pronunciation'),
       forms: get('forms'),
       example: get('example'),
@@ -101,7 +104,7 @@ export function WordSheet({ id }: { id: string | null }) {
     const termEl = field('term');
     const term = termEl?.value.trim() ?? '';
     if (!term) {
-      setErrors({ term: t('Type the German word first.') });
+      setErrors({ term: t(lang.text.typeFirst) });
       termEl?.focus();
       return;
     }
@@ -111,7 +114,7 @@ export function WordSheet({ id }: { id: string | null }) {
       const r = await requestAiWords({ mode: 'text', language: aiLang, text: given ? `${term} – ${given}` : term });
       const w = r.words[0];
       if (!w) {
-        ui.toast(t(r.note || 'The AI didn’t recognise this as a German word.'));
+        ui.toast(t(r.note || lang.text.notRecognised));
         return;
       }
       // Take the AI's spelling when it only adds the article or fixes capitals ("bahnhof" → "der Bahnhof").
@@ -145,7 +148,7 @@ export function WordSheet({ id }: { id: string | null }) {
 
   return (
     <BottomSheet
-      title={initial ? <span lang="de"><Term term={initial.term} /></span> : t('New word')}
+      title={initial ? <span lang={lang.code}><Term term={initial.term} /></span> : t('New word')}
       footer={
         canEdit ? (
           <>
@@ -165,8 +168,8 @@ export function WordSheet({ id }: { id: string | null }) {
         </p>
         <fieldset className="form" disabled={!canEdit}>
         <div className="field">
-          <label htmlFor="f-term">{t('German word or phrase')}</label>
-          <input id="f-term" name="term" defaultValue={initial?.term} required autoComplete="off" autoCapitalize="off" spellCheck={false} lang="de"
+          <label htmlFor="f-term">{t(lang.text.word)}</label>
+          <input id="f-term" name="term" defaultValue={initial?.term} required autoComplete="off" autoCapitalize="off" spellCheck={false} lang={lang.code}
             aria-describedby="f-term-hint f-term-err" aria-invalid={!!errors.term} data-autofocus={initial ? undefined : true} />
           {canEdit && <p className="hint" id="f-term-hint">{t('Start nouns with der, die or das to get the gender colour.')}</p>}
           {errors.term && <p className="err" id="f-term-err">{errors.term}</p>}
@@ -192,7 +195,7 @@ export function WordSheet({ id }: { id: string | null }) {
               <input id="f-pron" name="pronunciation" className="ipa-input" defaultValue={initial?.pronunciation} placeholder="[faˈmiːli̯ə]" autoComplete="off" spellCheck={false} />
               {speech && (
                 <button type="button" className="speak" aria-label={t('Hear the word')}
-                  onClick={() => speak((document.getElementById('f-term') as HTMLInputElement | null)?.value, data.prefs.ttsLang, data.prefs.slowSpeech)}>
+                  onClick={() => speak((document.getElementById('f-term') as HTMLInputElement | null)?.value, voiceFor(data.prefs.ttsLang, lang), data.prefs.slowSpeech)}>
                   <Icon name="volume" />
                 </button>
               )}
@@ -208,11 +211,11 @@ export function WordSheet({ id }: { id: string | null }) {
         </div>
         <div className="field">
           <label htmlFor="f-forms">{t('Forms')}</label>
-          <input id="f-forms" name="forms" defaultValue={initial?.forms} placeholder={t('Plural, or verb forms: er spricht · sprach · hat gesprochen')} autoComplete="off" lang="de" />
+          <input id="f-forms" name="forms" defaultValue={initial?.forms} placeholder={t(lang.text.forms)} autoComplete="off" lang={lang.code} />
         </div>
         <div className="field">
           <label htmlFor="f-example">{t('Example sentence')}</label>
-          <textarea id="f-example" name="example" rows={2} lang="de" defaultValue={initial?.example} />
+          <textarea id="f-example" name="example" rows={2} lang={lang.code} defaultValue={initial?.example} />
         </div>
         <div className="field">
           <label htmlFor="f-exampleTr">{t('Example translation')}</label>
@@ -257,10 +260,6 @@ export function WordSheet({ id }: { id: string | null }) {
   );
 }
 
-const DIRS = [
-  ['f', 'Recognition', 'German → meaning'],
-  ['r', 'Production', 'meaning → German'],
-] as const;
 
 function ProgressPanel({ wordId }: { wordId: string }) {
   const data = useStore();
@@ -268,9 +267,11 @@ function ProgressPanel({ wordId }: { wordId: string }) {
   const ui = useUI();
   const tr = useT();
   const { t, span } = tr;
+  const { text } = useCourseLang();
   const doc = data.cards.get(wordId);
   const today = dayIndex(now);
-  const dirs = DIRS.filter(([d]) => enabledDirs(data.prefs).includes(d) || doc?.[d]);
+  const dirs = ([['f', 'Recognition', text.dirF], ['r', 'Production', text.dirR]] as const)
+    .filter(([d]) => enabledDirs(data.prefs).includes(d) || doc?.[d]);
 
   const toggleSuspend = () => {
     const suspended = !doc?.suspended;

@@ -1,6 +1,7 @@
 'use client';
 
 import { answersToday, shownStreak } from '@/lib/goal';
+import { useCourseLang } from '@/lib/client/course';
 import { useNow } from '@/lib/client/hooks';
 import { useT } from '@/lib/client/i18n';
 import { store, useStore } from '@/lib/client/store';
@@ -50,14 +51,16 @@ export function StudyView() {
   const now = useNow();
   const ui = useUI();
   const { t, tn, span } = useT();
+  const lang = useCourseLang();
   const ready = data.status === 'ready' && now > 0;
 
+  // Greeted in the language studied: "Hallo, Malika!", "Hello, Sardor!"
   const head = (
     <header className="vhead">
       <div>
-        <p className="eyebrow" lang="de">{ready ? studyDayTitle(now) : ' '}</p>
-        <h1 lang="de">{data.me ? `Hallo, ${data.me.displayName.split(' ')[0]}!` : 'Hallo!'}</h1>
-        {data.guest && <p className="vhead-lede">{t('German A1 words with Uzbek meanings. A few minutes a day: each card comes back just before you’d forget it.')}</p>}
+        <p className="eyebrow" lang={lang.code}>{ready ? studyDayTitle(now, lang.locale) : ' '}</p>
+        <h1 lang={lang.code}>{data.me ? `${lang.hello}, ${data.me.displayName.split(' ')[0]}!` : `${lang.hello}!`}</h1>
+        {data.guest && <p className="vhead-lede">{t(lang.text.guestLede)}</p>}
       </div>
       <div className="vhead-actions">
         <button className="icon-btn" onClick={() => ui.openSheet({ kind: 'settings' })} aria-label={t('Study settings')}>
@@ -98,7 +101,7 @@ export function StudyView() {
     if (nx.soonest) note = tn(q.learning.length, '{n} card comes back in {time}.', '{n} cards come back in {time}.', { time: span(nx.soonest - now) });
     else if (q.fresh.length && q.newLeft === 0) note = t('You reached today’s limit of {n} new cards.', { n: data.prefs.newPerDay });
     else if (nx.day === today + 1) note = tn(nx.count, 'Next reviews tomorrow: {n} card.', 'Next reviews tomorrow: {n} cards.');
-    else if (nx.day != null) note = tn(nx.count, 'Next reviews on {day}: {n} card.', 'Next reviews on {day}: {n} cards.', { day: dayLong(nx.day) });
+    else if (nx.day != null) note = tn(nx.count, 'Next reviews on {day}: {n} card.', 'Next reviews on {day}: {n} cards.', { day: dayLong(nx.day, lang.locale) });
     else note = t('Nothing to study in this deck.');
   }
 
@@ -171,7 +174,7 @@ export function StudyView() {
               <div key={i} className={`wk${i === 0 ? ' is-today' : ''}`}>
                 <span className="wk-n">{n || ''}</span>
                 <span className="wk-plot"><i style={{ height: `${((n / wmax) * 100).toFixed(1)}%` }} /></span>
-                <span className="wk-d" lang="de">{weekday(today + i)}</span>
+                <span className="wk-d" lang={lang.code}>{weekday(today + i, lang.locale)}</span>
               </div>
             ))}
           </div>

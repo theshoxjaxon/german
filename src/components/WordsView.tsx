@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, type KeyboardEvent, type ReactNode } from 'react';
+import { useCourseLang } from '@/lib/client/course';
 import { useNow } from '@/lib/client/hooks';
 import { useT, type Translator } from '@/lib/client/i18n';
 import { useStore } from '@/lib/client/store';
@@ -180,6 +181,7 @@ export function WordsView() {
 function WordTable({ rows, now }: { rows: Row[]; now: number }) {
   const ui = useUI();
   const tr = useT();
+  const lang = useCourseLang();
   const { t } = tr;
   const cols = COLUMNS.filter((c) => ui.fields.includes(c.key));
   const sortBy = (key: SortKey) => {
@@ -225,7 +227,7 @@ function WordTable({ rows, now }: { rows: Row[]; now: number }) {
             <th scope="row" className="c-term">
               <span className="term-cell">
                 <span className="rownum">{n + 1}</span>
-                <span className="t" lang="de"><Term term={w.term} /></span>
+                <span className="t" lang={lang.code}><Term term={w.term} /></span>
                 {w.personal && <MineBadge />}
               </span>
             </th>
@@ -253,6 +255,7 @@ export function MineBadge() {
 function Gallery({ rows, now }: { rows: Row[]; now: number }) {
   const ui = useUI();
   const tr = useT();
+  const lang = useCourseLang();
   return (
     <div className="gallery">
       {rows.map(({ w, i }) => {
@@ -263,7 +266,7 @@ function Gallery({ rows, now }: { rows: Row[]; now: number }) {
               <span>{tr.t(POS_LABEL[w.pos] || '').toLowerCase()}</span>
               <span>{due === '–' ? '' : due}</span>
             </span>
-            <span className="gcard-term" lang="de"><Term term={w.term} /></span>
+            <span className="gcard-term" lang={lang.code}><Term term={w.term} /></span>
             {w.pronunciation && <span className="gcard-ipa">{w.pronunciation}</span>}
             <span className="gcard-meaning">{w.meaning}</span>
             <span className="gcard-foot">

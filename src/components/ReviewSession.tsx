@@ -2,8 +2,10 @@
 
 import Link from 'next/link';
 import { Fragment, useEffect, useEffectEvent, useRef, useState, type PointerEvent } from 'react';
+import { useCourseLang } from '@/lib/client/course';
 import { useNow } from '@/lib/client/hooks';
 import { useT } from '@/lib/client/i18n';
+import { langOf, voiceFor } from '@/lib/courses';
 import { answersToday } from '@/lib/goal';
 import { speak, stopSpeech } from '@/lib/client/speech';
 import { store, useStore } from '@/lib/client/store';
@@ -31,6 +33,8 @@ export function ReviewSession({ first, startedAt, onClose }: { first: QueueItem 
   const now = useNow();
   const ui = useUI();
   const { t } = useT();
+  const lang = useCourseLang();
+  const voice = voiceFor(data.prefs.ttsLang, lang);
   const [current, setCurrent] = useState<QueueItem | null>(first);
   const [deal, setDeal] = useState(0); // bumps for every card shown, so the card remounts unflipped
   const [flipped, setFlipped] = useState(false);
@@ -49,16 +53,17 @@ export function ReviewSession({ first, startedAt, onClose }: { first: QueueItem 
     setCurrent(next);
     setDeal((d) => d + 1);
     // With the article quiz, read only the noun: the article would give the answer away.
-    const said = next && (quizArticle(next, snap.prefs) ? splitTerm(next.word.term).rest : next.word.term);
-    if (next && snap.prefs.autoplay && next.dir === 'f') speak(said || undefined, snap.prefs.ttsLang, snap.prefs.slowSpeech);
+    const l = langOf(snap.course);
+    const said = next && (quizArticle(next, snap.prefs, l.articles) ? splitTerm(next.word.term).rest : next.word.term);
+    if (next && snap.prefs.autoplay && next.dir === 'f') speak(said || undefined, voiceFor(snap.prefs.ttsLang, l), snap.prefs.slowSpeech);
   }
 
   function flip(to = !flipped) {
     if (!current) return;
     if (to && !flipped) revealedAt.current = Date.now();
     setFlipped(to);
-    const hidden = current.dir === 'r' || !!quizArticle(current, data.prefs); // the full word wasn't heard yet
-    if (to && data.prefs.autoplay && hidden) speak(current.word.term, data.prefs.ttsLang, data.prefs.slowSpeech);
+    const hidden = current.dir === 'r' || !!quizArticle(current, data.prefs, lang.articles); // the full word wasn't heard yet
+    if (to && data.prefs.autoplay && hidden) speak(current.word.term, voice, data.prefs.slowSpeech);
   }
 
   /** The article quiz: pick der, die or das, then see the answer. */
@@ -126,7 +131,7 @@ export function ReviewSession({ first, startedAt, onClose }: { first: QueueItem 
       e.preventDefault();
       if (flipped) rate('good');
       else flip(true);
-    } else if (!flipped && quizArticle(current, data.prefs) && /^[1-3]$/.test(e.key)) {
+    } else if (!flipped && quizArticle(current, data.prefs, lang.articles) && /^[1-3]$/.test(e.key)) {
       e.preventDefault();
       pick(ARTICLES[+e.key - 1]);
     } else if (flipped && /^[1-4]$/.test(e.key)) {
@@ -137,7 +142,7 @@ export function ReviewSession({ first, startedAt, onClose }: { first: QueueItem 
       undo();
     } else if (e.key.toLowerCase() === 'p' && current) {
       e.preventDefault();
-      speak(current.word.term, data.prefs.ttsLang, data.prefs.slowSpeech);
+      speak(current.word.term, voice, data.prefs.slowSpeech);
     }
   });
   useEffect(() => {
@@ -176,7 +181,7 @@ export function ReviewSession({ first, startedAt, onClose }: { first: QueueItem 
   const left = counts.fresh + counts.learning + counts.review;
   const progress = tally.answered + left ? (tally.answered / (tally.answered + left)) * 100 : 100;
   const kind = !current ? '' : !current.s || current.s.type === 'new' ? 'new' : current.s.type === 'review' ? 'due' : 'learn';
-  const quiz = quizArticle(current, data.prefs);
+  const quiz = quizArticle(current, data.prefs, lang.articles);
 
   return (
     <div className="review" role="dialog" aria-modal="true" aria-label={t('Review session')}>
@@ -361,7 +366,7 @@ function Flashcard({ item, quiz, picked, flipped, onFlip, onSwipe }: {
 function FaceHead({ item, showGender }: { item: QueueItem; showGender: boolean }) {
   const { t } = useT();
   const w = item.word;
-  const g = genderOf(w.term);
+  const g = genderOf(w.term, useCourseLang().articles);
   const pos = t(POS_LABEL[w.pos] || '').toLowerCase();
   const isNew = !item.s || item.s.type === 'new';
   return (
@@ -379,6 +384,7 @@ function FaceHead({ item, showGender }: { item: QueueItem; showGender: boolean }
 
 function FrontFace({ item, quiz }: { item: QueueItem; quiz: Article | '' }) {
   const { t } = useT();
+  const lang = useCourseLang();
   const w = item.word;
   if (item.dir === 'r') {
     // Production card: no gender hint on the question side.
@@ -386,7 +392,7 @@ function FrontFace({ item, quiz }: { item: QueueItem; quiz: Article | '' }) {
       <>
         <FaceHead item={item} showGender={false} />
         <div className="face-main">
-          <p className="prompt">{t('In German?')}</p>
+          <p className="prompt">{t(lang.text.prompt)}</p>
           <p className="meaning-xl">{w.meaning}</p>
         </div>
         <p className="face-foot">{t('Say it out loud, then tap to check')}</p>
@@ -400,7 +406,7 @@ function FrontFace({ item, quiz }: { item: QueueItem; quiz: Article | '' }) {
       <>
         <FaceHead item={item} showGender={false} />
         <div className="face-main">
-          <p className={`term-xl ${termSizeClass(w.term)}`} lang="de"><span className="art-blank" aria-label={t('which article?')}>___</span> {rest}</p>
+          <p className={`term-xl ${termSizeClass(w.term)}`} lang={lang.code}><span className="art-blank" aria-label={t('which article?')}>___</span> {rest}</p>
           <SpeakButton text={rest} />
         </div>
         <p className="face-foot">{t('der, die or das?')}</p>
@@ -411,7 +417,7 @@ function FrontFace({ item, quiz }: { item: QueueItem; quiz: Article | '' }) {
     <>
       <FaceHead item={item} showGender />
       <div className="face-main">
-        <p className={`term-xl ${termSizeClass(w.term)}`} lang="de"><Term term={w.term} /></p>
+        <p className={`term-xl ${termSizeClass(w.term, lang.articles)}`} lang={lang.code}><Term term={w.term} /></p>
         <SpeakButton text={w.term} />
       </div>
       <p className="face-foot">{t('Tap to reveal')}</p>
@@ -422,6 +428,7 @@ function FrontFace({ item, quiz }: { item: QueueItem; quiz: Article | '' }) {
 function BackFace({ item, quiz, picked }: { item: QueueItem; quiz: Article | ''; picked: Article | null }) {
   const { cards } = useStore();
   const { t } = useT();
+  const lang = useCourseLang();
   const w = item.word;
   const leech = lapsesOf(cards.get(w.id)) >= LEECH_AT;
   return (
@@ -432,12 +439,12 @@ function BackFace({ item, quiz, picked }: { item: QueueItem; quiz: Article | '';
           <p className={`quiz-result ${picked === quiz ? 'is-right' : 'is-wrong'}`} role="status">
             <Icon name={picked === quiz ? 'check' : 'x'} />
             {picked === quiz
-              ? <span><b lang="de">Richtig!</b> {t('It’s {art}.', { art: quiz })}</span>
+              ? <span><b lang={lang.code}>{lang.correct}</b> {t('It’s {art}.', { art: quiz })}</span>
               : <span>{t('Not {picked}: it’s {term}. Rate it Hard or Again.', { picked, term: w.term })}</span>}
           </p>
         )}
         <div className="back-term">
-          <p className="term-lg" lang="de"><Term term={w.term} /></p>
+          <p className="term-lg" lang={lang.code}><Term term={w.term} /></p>
           <SpeakButton text={w.term} />
         </div>
         {w.pronunciation && <p className="ipa">{w.pronunciation}</p>}
@@ -445,13 +452,13 @@ function BackFace({ item, quiz, picked }: { item: QueueItem; quiz: Article | '';
         {w.forms && (
           <div className="forms">
             <span className="lbl">{t('Forms')}</span>
-            <span lang="de">{w.forms}</span>
+            <span lang={lang.code}>{w.forms}</span>
           </div>
         )}
         {w.example && (
           <figure className="example">
-            <blockquote lang="de">
-              {highlightParts(w.example, w.term).map((p, i) => (p.mark ? <mark key={i}>{p.text}</mark> : <Fragment key={i}>{p.text}</Fragment>))}{' '}
+            <blockquote lang={lang.code}>
+              {highlightParts(w.example, w.term, lang.articles).map((p, i) => (p.mark ? <mark key={i}>{p.text}</mark> : <Fragment key={i}>{p.text}</Fragment>))}{' '}
               <SpeakButton text={w.example} small />
             </blockquote>
             {w.exampleTr && <figcaption>{w.exampleTr}</figcaption>}
@@ -483,6 +490,7 @@ function DoneScreen({ answered, again, startedAt, now, onClose, onMore, left, on
 }) {
   const data = useStore();
   const { t, tn, span } = useT();
+  const lang = useCourseLang();
   const at = Math.max(now, startedAt);
   const q = buildQueue(data, at);
   const nx = nextDueSummary(data, at);
@@ -496,7 +504,7 @@ function DoneScreen({ answered, again, startedAt, now, onClose, onMore, left, on
       time: span(nx.soonest - at),
     });
   } else if (nx.day === today + 1) next = tn(nx.count, 'Next reviews tomorrow: {n} card.', 'Next reviews tomorrow: {n} cards.');
-  else if (nx.day != null) next = tn(nx.count, 'Next reviews on {day}: {n} card.', 'Next reviews on {day}: {n} cards.', { day: dayLong(nx.day) });
+  else if (nx.day != null) next = tn(nx.count, 'Next reviews on {day}: {n} card.', 'Next reviews on {day}: {n} cards.', { day: dayLong(nx.day, lang.locale) });
   const canLearnMore = q.fresh.length > 0 && q.newLeft === 0;
   const saveNudge = data.guest && answered > 0; // the moment of value: ask guests to keep their progress
   const goal = data.prefs.dailyGoal;
@@ -514,7 +522,7 @@ function DoneScreen({ answered, again, startedAt, now, onClose, onMore, left, on
     <>
       <div className="rv-stage">
         <section className="done" aria-live="polite">
-          <p className="eyebrow" lang="de">{left ? 'Pause' : 'Fertig!'}</p>
+          <p className="eyebrow" lang={lang.code}>{left ? lang.pause : lang.done}</p>
           <h2>{t(left ? 'Good work so far' : answered ? 'Done for now' : 'Nothing to study right now')}</h2>
           {answered > 0 && (
             <div className="done-stats">

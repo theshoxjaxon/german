@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'Karteikasten',
     short_name: 'Karteikasten',
-    description: 'Spaced-repetition flashcards and a word database for German vocabulary.',
+    description: 'Spaced-repetition flashcards and a word database for German and English vocabulary, with Uzbek meanings.',
     start_url: '/',
     display: 'standalone',
     background_color: '#e8ecf1',

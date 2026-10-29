@@ -58,15 +58,16 @@ export function ClassView({ active }: { active: boolean }) {
   const member = isClassMember(data.me);
   const { t } = useT();
 
-  // Refresh whenever the tab is opened.
+  // Refresh whenever the tab is opened, and after switching to another course (another class).
+  const courseId = data.course?.id;
   useEffect(() => {
     if (active && data.me) void store.loadClass();
-  }, [active, data.me]);
+  }, [active, data.me, courseId]);
 
   const head = (
     <header className="vhead">
       <div>
-        <p className="eyebrow" lang="de">Lernzentrum</p>
+        <p className="eyebrow">{data.course?.name}</p>
         <h1>{t('Your class')}</h1>
       </div>
     </header>

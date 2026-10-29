@@ -3,9 +3,11 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useT } from '@/lib/client/i18n';
 import { speak, useSpeechSupported } from '@/lib/client/speech';
+import { useCourseLang } from '@/lib/client/course';
 import { store, useStore } from '@/lib/client/store';
 import type { WordInfo } from '@/lib/queue';
 import { initials } from '@/lib/account-rules';
+import { voiceFor } from '@/lib/courses';
 import { splitTerm } from '@/lib/text';
 import { useUI } from './ui-context';
 
@@ -52,9 +54,9 @@ export function Icon({ name }: { name: IconName }) {
   return <svg className="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false" dangerouslySetInnerHTML={{ __html: ICONS[name] }} />;
 }
 
-/** "die Familie" with the article in its gender colour (der blue, die red, das green). */
+/** "die Familie" with the article in its gender colour (der blue, die red, das green). Other languages: as written. */
 export function Term({ term }: { term: string }) {
-  const { art, rest } = splitTerm(term);
+  const { art, rest } = splitTerm(term, useCourseLang().articles);
   if (!art) return <>{rest}</>;
   return (
     <>
@@ -82,10 +84,12 @@ export function StatusPill({ info }: { info: Pick<WordInfo, 'status' | 'relearni
 export function SpeakButton({ text, small = false }: { text: string | undefined; small?: boolean }) {
   const supported = useSpeechSupported();
   const { prefs } = useStore();
+  const lang = useCourseLang();
   const { t } = useT();
   if (!supported || !text) return null;
   return (
-    <button type="button" className={`speak ${small ? 'sm' : ''}`} aria-label={t('Play pronunciation')} onClick={() => speak(text, prefs.ttsLang, prefs.slowSpeech)}>
+    <button type="button" className={`speak ${small ? 'sm' : ''}`} aria-label={t('Play pronunciation')}
+      onClick={() => speak(text, voiceFor(prefs.ttsLang, lang), prefs.slowSpeech)}>
       <Icon name="volume" />
     </button>
   );

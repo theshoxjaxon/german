@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { span, translate, translateCount } from './i18n';
 import { UZ } from './i18n-uz';
+import { LANGS } from './courses';
 import { CHEERS, MAX_OWN_WORDS, POS_OPTIONS, RATING_LABEL } from './types';
 import { FILTER_LABEL, SORTS, STATUS_OPTS } from './words-view';
 
@@ -101,6 +102,11 @@ function wanted(): Set<string> {
   STATUS_OPTS.forEach(([, l]) => add(l));
   Object.values(FILTER_LABEL).forEach(add);
   Object.values(SORTS).forEach((s) => [s?.label, s?.short].forEach(add));
+  // What each language studied says on the cards, the forms and in Settings
+  for (const l of Object.values(LANGS)) {
+    [l.name, ...Object.values(l.text)].forEach(add);
+    l.voices.forEach(([, label]) => add(label));
+  }
   for (const line of read('components/StatsView.tsx').match(/FACH_RANGE = \[([^\]]*)\]/)![1].split(',')) add(literals(line)[0]);
   for (const m of read('components/ui.tsx').match(/STATUS_LABEL = \{([^}]*)\}/)![1].matchAll(/'([^']+)'/g)) add(m[1]);
   // Messages that come from the server or shared rules and are shown through t()
@@ -118,7 +124,7 @@ function wanted(): Set<string> {
 
 const placeholders = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 // Technical texts nobody sees in the student app (they mean a broken request, not a person's mistake)
-const IGNORE = /^(Send \{|Expected \{|Invalid |Too many cards|Cross-site|Sign in to continue|Only admins|The AI answer had|Karteikasten:|Karteikasten AI:|This is a photo of a German vocabulary list|Send JSON|continue_with$)/;
+const IGNORE = /^(Send \{|Expected \{|Invalid |Too many cards|Cross-site|Sign in to continue|Only admins|The AI answer had|Karteikasten:|Karteikasten AI:|This is a photo of a|Nouns with(out)? |Send JSON|continue_with$)/;
 
 describe('Uzbek interface', () => {
   const keys = [...wanted()].filter((k) => !IGNORE.test(k));
