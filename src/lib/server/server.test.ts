@@ -13,6 +13,7 @@ import { hashPassword, temporaryPassword, verifyPassword } from './password';
 
 let repo: typeof import('./repo');
 const G = 'german'; // the course everyone from before courses is in
+const ENGLISH_WORDS = 375 + 327; // A1 + A2
 let close = async () => {};
 
 beforeAll(async () => {
@@ -76,7 +77,8 @@ describe('database', () => {
 
   it('seeds the English course with its own decks', async () => {
     const english = Object.values(await repo.listWords(null, 'english'));
-    expect(english.filter((w) => w.deck === 'A1')).toHaveLength(375);
+    expect(['A1', 'A2'].map((deck) => english.filter((w) => w.deck === deck).length)).toEqual([375, 327]);
+    expect(english).toHaveLength(ENGLISH_WORDS);
     expect(english.every((w) => w.id.startsWith('en-') && /^\/.+\/$/.test(w.pronunciation) && w.meaning && w.example && w.exampleTr)).toBe(true);
     expect(new Set(english.map((w) => w.term.toLowerCase())).size).toBe(english.length);
     expect((await repo.listCourses()).map((c) => [c.id, c.targetLang, c.note, c.words])).toEqual([
@@ -503,7 +505,7 @@ describe('courses', () => {
     dbm.setDatabase(conn); // a server restart with the new version
     await dbm.getDb();
     expect((await repo.listCourses())[0]).toEqual({ id: G, name: 'German · Momente', targetLang: 'de', note: '', currentLesson: 'Lektion 8', words: before });
-    expect((await repo.listCourses())[1]).toMatchObject({ id: 'english', words: 375 }); // added on the same start
+    expect((await repo.listCourses())[1]).toMatchObject({ id: 'english', words: ENGLISH_WORDS }); // added on the same start
     expect(Object.keys(await repo.listWords(null, G))).toHaveLength(before);
     expect(Object.keys(await repo.listCards(nodira.id, G))).toEqual(['l3-familie']); // progress stays
     const members = await conn.query<{ n: number }>('SELECT (SELECT count(*)::int FROM users) - (SELECT count(*)::int FROM course_members) AS n');
@@ -540,7 +542,7 @@ describe('courses', () => {
     expect((await repo.listWords(null, G))['l3-familie'].term).toBe('die Familie');
     expect(await repo.saveWord(repo.ownerFor(sevara), 'english', 's-apple', word('an apple'))).toBe('ok');
     const sevaras = await repo.listWords(sevara.id, 'english');
-    expect(Object.keys(sevaras)).toHaveLength(375 + 2);
+    expect(Object.keys(sevaras)).toHaveLength(ENGLISH_WORDS + 2);
     expect(sevaras['s-apple']).toMatchObject({ personal: true });
     expect((await repo.listWords(sevara.id, G))['s-apple']).toBeUndefined();
     expect((await repo.listWords(null, G))['en-station']).toBeUndefined();
