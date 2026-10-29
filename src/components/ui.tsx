@@ -13,6 +13,8 @@ import { useUI } from './ui-context';
 const ICONS = {
   x: '<path d="M6 6l12 12M18 6 6 18"/>',
   back: '<path d="M15 5 8 12l7 7"/>',
+  next: '<path d="m9 5 7 7-7 7"/>',
+  down: '<path d="m6 9 6 6 6-6"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   minus: '<path d="M5 12h14"/>',
   sliders: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',

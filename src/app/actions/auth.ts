@@ -10,7 +10,7 @@ import { redirect } from 'next/navigation';
 import { after } from 'next/server';
 import { cleanDisplayName, normalizeEmail, safeNext } from '@/lib/account-rules';
 import { changePasswordSchema, forgotSchema, formValues, loginSchema, parseForm, resetSchema, signupSchema } from '@/lib/auth-schemas';
-import { chosenCourse } from '@/lib/server/course';
+import { adoptChosenCourse, chosenCourse } from '@/lib/server/course';
 import { describeDbError } from '@/lib/server/db-health';
 import { appUrl, RESET_MINUTES, sendPasswordEmail } from '@/lib/server/mail';
 import { burnPasswordCheck, hashPassword, verifyPassword } from '@/lib/server/password';
@@ -63,6 +63,7 @@ export async function login(_prev: FormState, form: FormData): Promise<FormState
     }
     if (!(await verifyPassword(parsed.data.password, user.passwordHash))) return { error: WRONG, fields };
     await repo.ensureAdminRole(user);
+    await adoptChosenCourse(user.id);
     await startSession(user.id);
   } catch (e) {
     return unavailable(e, fields);
@@ -87,6 +88,7 @@ export async function signup(_prev: FormState, form: FormData): Promise<FormStat
       courseId: await chosenCourse(),
     });
     if (user === 'taken') return { fieldErrors: { email: 'Email already registered.' }, fields };
+    await adoptChosenCourse(user.id);
     await startSession(user.id);
   } catch (e) {
     return unavailable(e, fields);

@@ -117,7 +117,7 @@ export function SignupForm() {
   const [state, action, pending] = useActionState<FormState, FormData>(signup, {});
   const { ref, onSubmit, errors: e, formError } = useCheckedForm(signupSchema, ['name', 'email', 'password', 'confirm'], state);
   const visitor = useClientValue(visitorId, null); // links this browser's guest visits to the new profile
-  useEffect(noteVisit, []);
+  useEffect(() => noteVisit(), []);
   const { t } = useT();
   return (
     <form ref={ref} action={action} onSubmit={onSubmit} className="form auth-form" noValidate>

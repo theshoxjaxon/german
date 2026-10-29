@@ -1,4 +1,5 @@
 // Shared data model for the client, the API routes and the tests.
+import type { Course } from './courses';
 
 export type Rating = 'again' | 'hard' | 'good' | 'easy';
 export const RATINGS: Rating[] = ['again', 'hard', 'good', 'easy'];
@@ -174,6 +175,8 @@ export interface AppData {
   ai: boolean; // the AI word helper is switched on for this server (for everyone signed in)
   streak: { days: number; studiedToday: boolean }; // from the server: right across all your devices
   classLesson: string | null; // the lesson the class is on, set by the teacher
+  course: Course; // the course you're studying: words, cards and the class are this course's
+  courses: Course[]; // every course, for the switcher
 }
 
 /** What GET /api/state returns to a guest (not signed in). Their progress stays in their browser. */
@@ -181,6 +184,8 @@ export interface GuestData {
   me: null;
   words: Record<string, Word>;
   classLesson: string | null;
+  course: Course | null; // null: hasn't picked one yet (no words then)
+  courses: Course[];
 }
 
 /** What the UI works with: Maps for fast lookup. */

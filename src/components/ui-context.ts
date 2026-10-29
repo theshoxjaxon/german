@@ -18,7 +18,8 @@ export type SheetSpec =
   | { kind: 'settings' }
   | { kind: 'csv'; text: string }
   | { kind: 'account' }
-  | { kind: 'cheer'; to: string };
+  | { kind: 'cheer'; to: string }
+  | { kind: 'course' };
 
 export interface WordsQuery {
   q: string;

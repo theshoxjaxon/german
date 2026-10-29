@@ -10,6 +10,7 @@ import { AccountSheet, CheerSheet } from './AccountSheets';
 import { AiSheet } from './AiSheet';
 import { BrandMark } from './auth/AuthShell';
 import { ClassView } from './ClassView';
+import { CoursePicker, CoursePill, CourseSheet } from './CourseViews';
 import { GuestActions, LockedView } from './GuestViews';
 import { ReviewSession } from './ReviewSession';
 import { SettingsSheet } from './SettingsSheet';
@@ -35,13 +36,20 @@ const isSort = (v: unknown) =>
   !!v && typeof v === 'object' && (v as Sort).key in SORTS && ((v as Sort).dir === 'asc' || (v as Sort).dir === 'desc');
 
 export default function KarteikastenApp() {
-  const { me, guest } = useStore();
+  const { me, guest, status, course } = useStore();
   const { t, lang } = useT();
   const [tab, setTab] = useLocalState<Tab>('kk.tab', 'study', isTab);
   const [layout, setLayout] = useLocalState<Layout>('kk.layout', 'table', isLayout);
   const [sort, setSort] = useLocalState<Sort>('kk.sort', DEFAULT_SORT, isSort);
   const [fields, setFields] = useLocalState<string[]>('kk.fields', DEFAULT_FIELDS, isFieldList);
   const [query, setQueryState] = useState<WordsQuery>({ q: '', filters: EMPTY_FILTERS });
+  // A search or filter (by deck, say) belongs to one course: start fresh after switching.
+  const [queryCourse, setQueryCourse] = useState(course?.id);
+  if (queryCourse !== course?.id) {
+    setQueryCourse(course?.id);
+    setQueryState({ q: '', filters: EMPTY_FILTERS });
+  }
+  const picking = status === 'ready' && guest && !course; // a guest who hasn't picked a course yet
   const [sheet, setSheet] = useState<SheetSpec | null>(null);
   const [sheetClosing, setSheetClosing] = useState(false);
   const [review, setReview] = useState<{ first: QueueItem | null; startedAt: number } | null>(null);
@@ -141,6 +149,7 @@ export default function KarteikastenApp() {
             <BrandMark size={26} />
             <span className="appbar-word">Karteikasten</span>
           </span>
+          <CoursePill />
           {me && (
             <button className="appbar-user" onClick={() => openSheet({ kind: 'account' })} aria-label={t('Your profile, {name}', { name: me.displayName })}>
               <span className="appbar-name">{me.displayName.split(' ')[0]}</span>
@@ -150,21 +159,22 @@ export default function KarteikastenApp() {
           {guest && <GuestActions />}
         </header>
         <main className="views">
-          <section className="view" aria-label={t('Study')} hidden={tab !== 'study'}>
+          {picking && <section className="view"><CoursePicker /></section>}
+          <section className="view" aria-label={t('Study')} hidden={picking || tab !== 'study'}>
             <StudyView />
           </section>
           {/* Guests practise the flashcards and browse the words (read-only); Class and Progress come with a free profile. */}
-          <section className="view view-words" aria-label={t('Words')} hidden={tab !== 'words'}>
+          <section className="view view-words" aria-label={t('Words')} hidden={picking || tab !== 'words'}>
             <WordsView />
           </section>
-          <section className="view" aria-label={t('Class')} hidden={tab !== 'class'}>
+          <section className="view" aria-label={t('Class')} hidden={picking || tab !== 'class'}>
             {guest ? <LockedView feature="class" /> : <ClassView active={tab === 'class'} />}
           </section>
-          <section className="view" aria-label={t('Progress')} hidden={tab !== 'stats'}>
+          <section className="view" aria-label={t('Progress')} hidden={picking || tab !== 'stats'}>
             {guest ? <LockedView feature="stats" /> : <StatsView />}
           </section>
         </main>
-        <nav className="tabbar" aria-label={t('Sections')}>
+        <nav className="tabbar" aria-label={t('Sections')} hidden={picking}>
           {TABS.map((tb) => {
             const locked = guest && (tb.id === 'class' || tb.id === 'stats');
             return (
@@ -214,5 +224,7 @@ function SheetHost({ spec }: { spec: SheetSpec }) {
       return <AccountSheet />;
     case 'cheer':
       return <CheerSheet to={spec.to} />;
+    case 'course':
+      return <CourseSheet />;
   }
 }

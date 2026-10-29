@@ -137,6 +137,7 @@ export function StudyView() {
               {d === data.classLesson && <span className="chip-now">{t('class')}</span>}
             </button>
           ))}
+          {data.course?.note && <span className="chip chip-note">{t(data.course.note)}</span>}
         </div>
       )}
 

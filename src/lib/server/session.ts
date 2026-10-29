@@ -14,7 +14,7 @@ const TTL = 30 * DAY;
 const RENEW_BELOW = 15 * DAY; // sliding expiry: active users stay signed in
 const VISIT_EVERY = 5 * MIN;
 
-async function isHttps(): Promise<boolean> {
+export async function isHttps(): Promise<boolean> {
   if (process.env.COOKIE_SECURE) return process.env.COOKIE_SECURE === 'true';
   const proto = (await headers()).get('x-forwarded-proto') ?? '';
   return proto.split(',')[0].trim() === 'https';

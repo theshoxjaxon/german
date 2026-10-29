@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { safeNext } from '@/lib/account-rules';
-import { chosenCourse } from '@/lib/server/course';
+import { adoptChosenCourse, chosenCourse } from '@/lib/server/course';
 import { describeDbError } from '@/lib/server/db-health';
 import { googleClientId, verifyGoogleCredential } from '@/lib/server/google';
 import { readJson } from '@/lib/server/http';
@@ -44,6 +44,7 @@ export async function POST(req: Request) {
     if (result === 'unverified') return fail(403, 'Google hasn’t verified this email address, so it can’t be used here.');
     if (result === 'other-google') return fail(409, 'This email is linked to a different Google account. Log in with your password instead.');
     const user = await repo.ensureAdminRole(result.user);
+    await adoptChosenCourse(user.id);
     await startSession(user.id);
     return Response.json({ next: safeNext(next), created: result.created }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (e) {
