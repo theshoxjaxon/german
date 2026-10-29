@@ -1,17 +1,18 @@
 # Karteikasten (germanApp)
 
-A mobile-first vocabulary app for a learning center. Students study German words with spaced-repetition flashcards, each with their own private progress, and see how their classmates are doing. The teacher manages the words and sees who is active on an admin dashboard.
+A mobile-first vocabulary app for learning centers. Students study German or English words with spaced-repetition flashcards, each with their own private progress, and see how their classmates are doing. Teachers manage their course's words and see who is active on an admin dashboard.
 
+- **Courses**: one app, several courses: **German · Momente** and **English** (A1–B2) are built in, and an admin can start more. Each course has its own words, class, leaderboard, teachers and current lesson; one login works for all of them, and progress in each course is kept. A center shares its course's link (`/c/english`): whoever opens it studies that course, and signing up puts them in its class. Switch courses from the pill in the top bar.
 - **Try it without an account**: anyone can open the app, practise the flashcards and browse the word list as a guest. Progress is kept in that browser, and moves into their profile when they sign up.
-- **Accounts**: sign up free with **Continue with Google** or with name, email and password. Forgot your password? An emailed link (via Resend) lets you choose a new one. Everyone who signs up is in the one class and on its leaderboard (no class code for now). Email addresses are private: students never see one, not even their own; only the admin does.
-- **Study**: Anki-style flashcards (SM-2): tap to flip, swipe or tap Again / Hard / Good / Easy (keys: Space, 1–4, Z to undo). For nouns, a **der / die / das quiz** comes first. A **daily goal** ring and your **streak** sit on the home screen; ending a session early shows what you did first. Every student's progress is private.
+- **Accounts**: sign up free with **Continue with Google** or with name, email and password. Forgot your password? An emailed link (via Resend) lets you choose a new one. Everyone who signs up is in their course's class and on its leaderboard (no class code for now). Email addresses are private: students never see one, not even their own; only the admin does.
+- **Study**: Anki-style flashcards (SM-2): tap to flip, swipe or tap Again / Hard / Good / Easy (keys: Space, 1–4, Z to undo). For German nouns, a **der / die / das quiz** comes first. A **daily goal** ring and your **streak** sit on the home screen; ending a session early shows what you did first. Every student's progress is private.
 - **Oʻzbekcha / English**: the whole student app speaks Uzbek or English (switch in Study settings, or on the login and sign-up pages). The admin pages stay in English.
-- **Class**: Snapchat-style daily streaks, each classmate's active-word count, a leaderboard, and cheers you can send each other.
+- **Class**: Snapchat-style daily streaks, each classmate's active-word count, a leaderboard per course, and cheers you can send each other.
 - **Words**: an Airtable-style table and card gallery: search, filter, sort. Teachers manage the shared lesson words; every student can also add **their own words**, which only they see and study.
-- **AI word helper** (optional): take a photo of a word list (textbook page, worksheet, whiteboard, notes) or type German words, and Claude turns them into finished flashcards: article, meaning, IPA, forms, an example sentence and a memory hook. You tick the ones to keep and pick the topic. In the word form, **Fill in the rest with AI** completes a single word.
-- **Admin dashboard** at `/admin`: profiles created, new sign-ups, daily / weekly / monthly active students, 30-day charts, a student table with emails, password resets, the sign-up link to share, and **which lesson the class is on**.
+- **AI word helper** (optional): take a photo of a word list (textbook page, worksheet, whiteboard, notes) or type words, and Claude turns them into finished flashcards in the course's language: meaning, IPA, forms (German: with the article), an example sentence and a memory hook. You tick the ones to keep and pick the topic. In the word form, **Fill in the rest with AI** completes a single word.
+- **Admin dashboard** at `/admin`, per course: members, new sign-ups, daily / weekly / monthly active students, 30-day charts, a member table, the course's invite link, its name and note, and **which lesson the class is on**. Admins also see emails, reset passwords, make teachers and start new courses.
 
-It comes with all twelve Momente lessons, German → Uzbek, 653 words in all, each with IPA, an example sentence, plural or verb forms and a memory hook:
+**German · Momente** comes with all twelve Momente lessons, German → Uzbek, 653 words in all, each with IPA, an example sentence, plural or verb forms and a memory hook:
 
 | Lektion | Words | Topics |
 | --- | --- | --- |
@@ -28,7 +29,18 @@ It comes with all twelve Momente lessons, German → Uzbek, 653 words in all, ea
 | 11 | 38 | the weekend, errands, opening times, the doctor |
 | 12 | 78 | trips, seasons and months, festivals, invitations at work |
 
-Lektion 1, 2, 4, 6 and 8–12 follow the class's own word lists, with their Uzbek meanings checked and corrected. Words tagged `extra` aren't in those lists: useful words for the topic (the weekdays and months, furniture, bread and tea, the bus stop …). Austrian and Swiss variants (*Hendl*, *Schlagobers*, *Perron* …) are in the notes of the standard word rather than cards of their own. A word is never in two lessons. New built-in lists are added to an existing database once, on the next start (`SEED_PACKS` in `src/lib/seed.ts`); words the teacher deleted don't come back, and words already typed in by hand aren't doubled.
+Lektion 1, 2, 4, 6 and 8–12 follow the class's own word lists, with their Uzbek meanings checked and corrected. Words tagged `extra` aren't in those lists: useful words for the topic (the weekdays and months, furniture, bread and tea, the bus stop …). Austrian and Swiss variants (*Hendl*, *Schlagobers*, *Perron* …) are in the notes of the standard word rather than cards of their own. A word is never in two lessons.
+
+**English** comes with four level decks, English → Uzbek, 1,306 words, marked *More words coming soon*. Every word has its Uzbek meaning, British IPA, irregular forms (*go · went · gone*, *child · children*, *good · better · best*), an example sentence with its Uzbek translation, and notes in Uzbek on the usual slips (*I'm 19*, not *I have 19 years*; *bored* vs *boring*; *borrow* vs *lend*). Memory hooks and notes are in Uzbek, so beginners can read them:
+
+| Deck | Words | Topics |
+| --- | --- | --- |
+| A1 | 375 | greetings, family, numbers and time, days and months, food, the home, first verbs, adjectives and colours, question words, the body, clothes, town and travel, weather, school, free time |
+| A2 | 327 | travel and directions, health and feelings, personality, home life, shopping and eating out, school, jobs, technology, nature, time words, phrasal verbs |
+| B1 | 304 | work and money, relationships, agreeing and arguing, environment, society and law, culture and news, education and ideas, lifestyle, sport, travel, linking words |
+| B2 | 300 | analysing and arguing, change and problems, character and strong feelings, economy and law, science, health and media, essay linking words, formal verbs |
+
+A word is never in two decks of a course. New built-in lists are added to an existing database once, on the next start (`SEED_PACKS` and `SEED_COURSES` in `src/lib/seed.ts`); words a teacher deleted don't come back, and words already typed in by hand aren't doubled.
 
 Built with Next.js 16 (App Router), React 19, TypeScript and PostgreSQL (Supabase).
 
@@ -131,35 +143,39 @@ Copy `.env.example` to `.env.local`. Only `DATABASE_URL` is required.
 
 ## Roles and privacy
 
-| | Guest (no profile) | Student | Admin (teacher) |
-| --- | --- | --- | --- |
-| Study the flashcards, settings | ✓ (saved in this browser) | ✓ | ✓ |
-| Browse the word list | ✓ (read-only) | ✓ | ✓ |
-| Progress, streak, daily goal | goal and streak on this device | ✓ | ✓ |
-| Add, edit, import, delete **your own** words (only you see them) | – | ✓ | – |
-| Class leaderboard: classmates' streaks, active words, answers; send cheers | – | ✓ | ✓ |
-| AI word helper (costs the center API credit; hourly limit) | – | ✓ | ✓ |
-| See email addresses (anyone's, or your own) | – | – | ✓ |
-| See anyone else's cards | – | – | – |
-| Add, edit, import, delete the shared lesson words | – | – | ✓ |
-| `/admin`: stats, emails, reset passwords, make admins, take people off the leaderboard, delete profiles | – | – | ✓ |
-| `/admin/analytics`: North Star, funnel, retention | – | – | ✓ |
+| | Guest (no profile) | Student | Course teacher | Admin |
+| --- | --- | --- | --- | --- |
+| Study the flashcards, settings | ✓ (saved in this browser) | ✓ | ✓ | ✓ |
+| Browse the word list | ✓ (read-only) | ✓ | ✓ | ✓ |
+| Progress, streak, daily goal | goal and streak on this device | ✓ | ✓ | ✓ |
+| Add, edit, import, delete **your own** words (only you see them) | – | ✓ | – | – |
+| Class leaderboard: classmates' streaks, active words, answers; send cheers | – | ✓ | ✓ | ✓ |
+| AI word helper (costs the center API credit; hourly limit) | – | ✓ | ✓ | ✓ |
+| See email addresses (anyone's, or your own) | – | – | – | ✓ |
+| See anyone else's cards | – | – | – | – |
+| Add, edit, import, delete the shared lesson words | – | – | their course | every course |
+| `/admin` and `/admin/analytics`: stats, the class lesson, the course's name and note, take people off the leaderboard | – | – | their course | every course |
+| Reset passwords, make teachers and admins, delete profiles, start new courses | – | – | – | ✓ |
 
-**One class, no code (for now).** Everyone who signs up is in the class and on its leaderboard, and can use the AI helper. A teacher can take someone off the leaderboard in `/admin` (they keep studying, but aren't listed and can't send cheers). A class code can come back later if the center grows to several classes.
+**Courses.** Each course is its own class: its words, members, leaderboard, cheers, teachers and current lesson. Everyone joins a course when they sign up (the one whose link they followed, else the one they picked as a guest, else German) and can join more from the course pill; their progress, own words and lesson choice in each course stay. Answers, streaks and the daily goal count all of a person's courses together. A new guest sees *What are you learning?* first; a course link such as `/c/english` skips that. An admin starts a course in `/admin` → **New course** (name, link, language studied, note for students); its words come from the importer, the AI helper or a built-in list.
 
-**The class lesson.** In `/admin`, set *The class is on* to the lesson the class has reached. Studying “All decks”, everyone (guests too) then gets new words from that lesson first, then the lessons before it, newest first (10, 9, 8 …), so nobody starting today is sent back to Lektion 2 first. Later lessons wait until you move the setting on; anyone can still tap a lesson to study it early, and words already started keep their reviews. The lesson is marked *class* on the Study screen. Not set: new words come in book order.
+**Cards follow the course's language.** German has the der/die/das quiz, gender colours and German voices; English has none of that, British (or American) voices, and English dates on the study page. The AI helper writes cards for the course's language, and "All decks" understands both *Lektion N* / *Unit N* and levels (*A1* … *C2*) when a class lesson is set.
 
-**Admins.** Nobody becomes admin by signing up first. An address in `ADMIN_EMAILS` becomes admin once it's proven to be theirs: a Google sign-in (Google verified the address) or a password reset link sent to it. An admin can make others admin in `/admin`.
+**No class code (for now).** Everyone who signs up is on their course's leaderboard and can use the AI helper. A course's teacher can take someone off the leaderboard in `/admin` (they keep studying, but aren't listed and can't send cheers).
 
-**Email privacy.** Students see names and photos, never email addresses: not classmates', and not their own (the menu and `/account` show only name and photo). The server leaves emails out of everything it sends a student; only admins get them.
+**The class lesson.** In `/admin`, set *The class is on* to the lesson or level the class has reached. Studying “All decks”, everyone in that course (guests too) then gets new words from that lesson first, then the lessons before it, newest first (10, 9, 8 … or B1, A2, A1), so nobody starting today is sent back to the beginning. Later lessons wait until you move the setting on; anyone can still tap a lesson to study it early, and words already started keep their reviews. The lesson is marked *class* on the Study screen. Not set: new words come in book order.
 
-**Language.** Each person picks Oʻzbekcha or English in Study settings; it is saved with their settings, so it follows them to every device, and the browser remembers it for the login page. Before anyone chooses, Uzbek phones get Uzbek. The translations live in `src/lib/i18n-uz.ts`, keyed by the English text; `i18n.test.ts` fails if any text the app shows is missing there. The built-in memory hooks are content, not interface, and are still in English.
+**Admins and teachers.** Nobody becomes admin by signing up first. An address in `ADMIN_EMAILS` becomes admin once it's proven to be theirs: a Google sign-in (Google verified the address) or a password reset link sent to it. Admins run every course. In `/admin` → Manage, an admin makes a member **teacher of this course** (they then edit that course's lesson words in the app and open its dashboard, without seeing emails) or makes someone admin.
 
-**Guests.** `/` opens straight to the flashcards. Guest progress stays in the browser; guests never show up in the admin numbers or the Class tab. For the funnel on `/admin/analytics` the browser sends one anonymous count a day: a random id it made up (kept in `localStorage` as `kk.visitor`) and whether it has answered a card. No name, no cookie, no IP address is stored. If that browser later signs up, the id is linked to the new profile, so the funnel can tell who tried the app first. The word list itself is public, because guests need it to study. On sign-up, the guest's progress and settings move into the new profile. A guest who logs in to a profile that already has progress is asked first (*Add to my profile* / *No, discard it*), because on a shared classroom computer that guest may have been someone else. Words the profile already studied always keep the profile's progress.
+**Email privacy.** Students and course teachers see names and photos, never email addresses: not classmates', and not their own (the menu and `/account` show only name and photo). The server leaves emails out of everything it sends them; only admins get them.
+
+**Language.** Each person picks Oʻzbekcha or English in Study settings; it is saved with their settings, so it follows them to every device, and the browser remembers it for the login page. Before anyone chooses, Uzbek phones get Uzbek. The translations live in `src/lib/i18n-uz.ts`, keyed by the English text; `i18n.test.ts` fails if any text the app shows is missing there. The built-in memory hooks are content, not interface: the German ones are in English, the English course's are in Uzbek.
+
+**Guests.** `/` opens straight to the flashcards. Guest progress stays in the browser; guests never show up in the admin numbers or the Class tab. For the funnel on `/admin/analytics` the browser sends one anonymous count a day: a random id it made up (kept in `localStorage` as `kk.visitor`), the course and whether it has answered a card. No name, no IP address is stored. The course a guest picked is remembered in a `kk_course` cookie (only the course id), so signing up or logging in lands them in it; it is cleared once a profile has taken it over, so on a shared computer the next person keeps their own course. If that browser later signs up, the id is linked to the new profile, so the funnel can tell who tried the app first. The word list itself is public, because guests need it to study. On sign-up, the guest's progress and settings move into the new profile. A guest who logs in to a profile that already has progress is asked first (*Add to my profile* / *No, discard it*), because on a shared classroom computer that guest may have been someone else. Words the profile already studied always keep the profile's progress.
 
 Only counts are shared on the Class tab. Nobody, the admin included, sees another person's individual cards, answers or own words.
 
-**Words.** One `words` table holds both kinds: `owner_id` is empty for a shared lesson word and holds the student's id for their own word. The server only ever returns the shared words plus your own, and only lets the owner (or, for lesson words, an admin) change or delete a word. Each person can have up to 2,000 own words. Deleting a profile deletes their own words and progress with it.
+**Words.** One `words` table holds both kinds, each in a course (`course_id`): `owner_id` is empty for a shared lesson word and holds the student's id for their own word. The server only ever returns your course's shared words plus your own words in it, and only lets the owner (or, for lesson words, that course's teachers and admins) change or delete a word. Each person can have up to 2,000 own words. Deleting a profile deletes their own words and progress with it.
 
 **Forgotten password?** *Forgot password?* on the login page emails a link (it always answers "If that email exists, we've sent a link", so nobody can test which addresses have profiles). Google-only profiles use the same link to set a password. A teacher can also open the student in `/admin` → **Reset password** for a temporary password like `tante-fest-4821`; they change it under *Your profile → Account and password*.
 
@@ -167,8 +183,8 @@ Only counts are shared on the Class tab. Nobody, the admin included, sees anothe
 
 | Number | Definition |
 | --- | --- |
-| Profiles created | All accounts, admins included |
-| New this week | Profiles created in the last 7 days |
+| Members | Everyone in the course, its teachers included |
+| New this week | Joined the course in the last 7 days |
 | Studied today (daily active) | Answered at least one card today |
 | Opened today | Opened the app today, whether or not they studied |
 | Active this week / month | Studied on at least one of the last 7 / 30 days |
@@ -219,23 +235,26 @@ src/app/api/*      requireUser() on every route: valid session, role, same-origi
 src/lib/server/    repo.ts (all SQL) · db.ts (pool, schema, seed) · session.ts · password.ts · rate-limit.ts
                    google.ts · mail.ts · admins.ts
 src/lib/           auth-schemas.ts (zod: the same rules in the browser and on the server)
-Postgres/Supabase  users · sessions · password_reset_tokens · rate_limits · words · cards · prefs · activity · cheers · settings
+Postgres/Supabase  courses · course_members · users · sessions · password_reset_tokens · rate_limits · words · cards · prefs
+                   · activity · cheers · visitors · settings
 ```
 
 | Endpoint | Who | Purpose |
 | --- | --- | --- |
-| `GET /api/state` | anyone | Signed in: you, the words, your progress, settings, new cheers. Guest: `{ me: null, words }` |
+| `GET /api/state` | anyone | Signed in: you, your course and the list of courses, its words, your progress, settings, new cheers. Guest: `{ me: null, words, course }` (no course yet: `course: null`, no words) |
+| `POST /api/course` | anyone | `{ id }` switches course: signed in, you join it; guests: remembered in this browser |
+| `GET /c/:course` | anyone | A course's invite link: opens the app in that course (signed in: join it) |
 | `GET /api/me` | signed in | Who you are: name, photo, role, how you log in (email for admins only); 401 when signed out |
 | `POST /api/auth/google` | anyone | `{ credential }` from the Google button → verifies it, signs in (creates or links the profile) |
 | `POST /api/cards/import` | signed in | Add progress made as a guest (never overwrites existing progress) |
 | `GET /api/health` | anyone | Is the database reachable, and if not, why (no secrets shown) |
-| `POST /api/visit` | anyone | Anonymous guest count for the funnel: `{ id, tried }`, at most once a day per browser (rate limited) |
+| `POST /api/visit` | anyone | Anonymous guest count for the funnel: `{ id, tried, course }`, at most once a day per browser (rate limited) |
 | `POST /api/ai/words` | signed in | AI word helper: photo or typed list → suggested flashcards (nothing is saved) |
 | `POST /api/logout` | signed in | Sign out; a plain form post, so the full page reload clears the old profile from memory |
-| `PUT/DELETE /api/words/:id`, `POST /api/words` | signed in | Add, edit, delete, import words: admins the shared lesson words, everyone else their own |
-| `PUT/DELETE /api/cards/:wordId`, `DELETE /api/cards` | signed in | Save or reset **your** progress |
+| `PUT/DELETE /api/words/:id`, `POST /api/words` | signed in | Add, edit, delete, import words in your course: its teachers the shared lesson words, everyone else their own |
+| `PUT/DELETE /api/cards/:wordId`, `DELETE /api/cards` | signed in | Save or reset **your** progress (reset: this course only) |
 | `PUT /api/prefs` | signed in | Your settings |
-| `GET /api/class` | signed in | The leaderboard: classmates' streaks and counts (no emails) |
+| `GET /api/class` | signed in | Your course's leaderboard: classmates' streaks and counts (no emails) |
 | `POST /api/cheers`, `POST /api/cheers/seen` | signed in | Send a cheer (1 per classmate per day), mark yours as read |
 
 ### Security
@@ -293,5 +312,6 @@ Nothing extra is tracked for students: mastery and recall come from the review h
 - **Profiles from before email sign-in** (username only) can't log in any more: they have no email. `/admin` lists them as "no email (old profile)"; delete them there, and have those people sign up again.
 
 - `npm run build` prints "Failed to find font override values for Atkinson Hyperlegible …". That is harmless: Next.js has no fallback metrics for these newer fonts yet.
-- Pronunciation uses the voices installed on the device. On iPhone, German voices are under Settings → Accessibility → Spoken Content → Voices.
+- Pronunciation uses the voices installed on the device. On iPhone, German and English voices are under Settings → Accessibility → Spoken Content → Voices.
+- **Several centers on one app.** Vercel's free Hobby plan is meant for non-commercial use; once paying centers rely on it, move to Vercel Pro. Supabase's free tier holds thousands of students.
 - `npm audit --omit=dev` finds 0 vulnerabilities in what the app runs. The advisories `npm audit` shows are in dev tools (the Vitest 3 test runner and Next.js's ESLint config). Vitest 4+ fixes its part, but npm 10's installer crashes on it; if `npm -v` shows 11 or newer, run `npm i -D vitest@latest`.

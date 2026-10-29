@@ -874,3 +874,5 @@ details.advanced[open] > summary { margin-bottom: 10px; }
 .appbar-guest .btn { white-space: nowrap; }
 @media (max-width: 419px) { .appbar:has(.appbar-guest) .appbar-word { display: none; } }
 @media (max-width: 519px) { .appbar:has(.course-pill) .appbar-word { display: none; } }
+@media (max-width: 419px) { .appbar:has(.appbar-guest) .course-pill > .ic:first-child { display: none; } }
+@media (max-width: 374px) { .appbar:has(.appbar-guest) .course-pill > .ic { display: none; } .appbar:has(.appbar-guest) .course-pill { padding: 0 10px; } }
