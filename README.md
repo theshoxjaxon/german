@@ -11,20 +11,24 @@ A mobile-first vocabulary app for a learning center. Students study German words
 - **AI word helper** (optional): take a photo of a word list (textbook page, worksheet, whiteboard, notes) or type German words, and Claude turns them into finished flashcards: article, meaning, IPA, forms, an example sentence and a memory hook. You tick the ones to keep and pick the topic. In the word form, **Fill in the rest with AI** completes a single word.
 - **Admin dashboard** at `/admin`: profiles created, new sign-ups, daily / weekly / monthly active students, 30-day charts, a student table with emails, password resets, the sign-up link to share, and **which lesson the class is on**.
 
-It comes with eight lessons of Momente, German → Uzbek, 442 words in all, each with IPA, an example sentence, plural or verb forms and a memory hook:
+It comes with all twelve Momente lessons, German → Uzbek, 653 words in all, each with IPA, an example sentence, plural or verb forms and a memory hook:
 
 | Lektion | Words | Topics |
 | --- | --- | --- |
+| 1 | 43 | hello, names, how are you, where from |
 | 2 | 61 | age, family status, jobs |
 | 3 | 34 | family, languages |
 | 4 | 48 | home, furniture, shopping and prices |
 | 5 | 59 | things, colours, asking how to say and spell words |
+| 6 | 52 | the office, appointments, on the phone |
 | 7 | 46 | hobbies, compliments, *können* |
 | 8 | 47 | free time, making plans, weekdays, telling the time |
 | 9 | 85 | food, café and restaurant, the working day |
 | 10 | 62 | travel: airport, station, phoning |
+| 11 | 38 | the weekend, errands, opening times, the doctor |
+| 12 | 78 | trips, seasons and months, festivals, invitations at work |
 
-Lektion 2, 4, 8, 9 and 10 follow the class's own word lists, with their Uzbek meanings checked and corrected. Words tagged `extra` aren't in those lists: useful words for the topic (the weekdays, furniture, bread and tea, the bus stop …). Austrian and Swiss variants (*Hendl*, *Schlagobers*, *Perron* …) are in the notes of the standard word rather than cards of their own. A word is never in two lessons. New built-in lists are added to an existing database once, on the next start (`SEED_PACKS` in `src/lib/seed.ts`); words the teacher deleted don't come back, and words already typed in by hand aren't doubled.
+Lektion 1, 2, 4, 6 and 8–12 follow the class's own word lists, with their Uzbek meanings checked and corrected. Words tagged `extra` aren't in those lists: useful words for the topic (the weekdays and months, furniture, bread and tea, the bus stop …). Austrian and Swiss variants (*Hendl*, *Schlagobers*, *Perron* …) are in the notes of the standard word rather than cards of their own. A word is never in two lessons. New built-in lists are added to an existing database once, on the next start (`SEED_PACKS` in `src/lib/seed.ts`); words the teacher deleted don't come back, and words already typed in by hand aren't doubled.
 
 Built with Next.js 16 (App Router), React 19, TypeScript and PostgreSQL (Supabase).
 

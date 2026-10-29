@@ -71,12 +71,12 @@ describe('the class lesson', () => {
   });
 
   it('without one, brings in new words in book order', () => {
-    expect(decksOf(buildQueue(allPacks(), NOW))[0]).toBe('Lektion 2');
+    expect(decksOf(buildQueue(allPacks(), NOW))[0]).toBe('Lektion 1');
   });
 
   it('starts "All decks" at the class lesson, goes back from there, and holds later lessons back', () => {
     const q = buildQueue({ ...allPacks(), classLesson: 'Lektion 8' }, NOW);
-    expect(decksOf(q)).toEqual(['Lektion 8', 'Lektion 7', 'Lektion 5', 'Lektion 4', 'Lektion 3', 'Lektion 2']);
+    expect(decksOf(q)).toEqual(['Lektion 8', 'Lektion 7', 'Lektion 6', 'Lektion 5', 'Lektion 4', 'Lektion 3', 'Lektion 2', 'Lektion 1']);
     expect(pickNext(q, NOW)?.word.deck).toBe('Lektion 8');
     // With both directions on, recognition still comes before production within a lesson
     const both = buildQueue({ ...allPacks(), classLesson: 'Lektion 8', prefs: { ...DEFAULT_PREFS, dirF: true, dirR: true } }, NOW);
