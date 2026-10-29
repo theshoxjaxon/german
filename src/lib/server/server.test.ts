@@ -74,6 +74,17 @@ describe('database', () => {
     expect(new Set(words.map((w) => w.term.toLowerCase())).size).toBe(words.length);
   });
 
+  it('seeds the English course with its own decks', async () => {
+    const english = Object.values(await repo.listWords(null, 'english'));
+    expect(english.filter((w) => w.deck === 'A1')).toHaveLength(375);
+    expect(english.every((w) => w.id.startsWith('en-') && /^\/.+\/$/.test(w.pronunciation) && w.meaning && w.example && w.exampleTr)).toBe(true);
+    expect(new Set(english.map((w) => w.term.toLowerCase())).size).toBe(english.length);
+    expect((await repo.listCourses()).map((c) => [c.id, c.targetLang, c.note, c.words])).toEqual([
+      [G, 'de', '', 653],
+      ['english', 'en', 'More words coming soon', english.length],
+    ]);
+  });
+
   it('makes everyone a student in the one class, and an ADMIN_EMAILS address admin once it is verified', async () => {
     // Signing up first with the teacher's address, unverified, doesn't make anyone admin
     const early = await profile('ustoz@markaz.uz', 'Not the teacher');
@@ -476,7 +487,9 @@ describe('courses', () => {
     const jasur = await byEmail('jasur@example.com');
     const before = Object.keys(await repo.listWords(null, G)).length;
     const funnel = (await repo.analytics('30', G)).funnel.guests.map((s) => s.count);
-    // Make it look like schema 8: one class, its lesson in settings, the leaderboard on users
+    // Make it look like schema 8: one class, its lesson in settings, the leaderboard on users, no English
+    await conn.query(`DELETE FROM words WHERE course_id <> 'german'`);
+    await conn.query(`DELETE FROM settings WHERE key LIKE 'seeded:english-%'`);
     await conn.query('DROP TABLE course_members');
     await conn.query('ALTER TABLE words DROP COLUMN course_id');
     await conn.query('ALTER TABLE users DROP COLUMN course_id');
@@ -489,9 +502,8 @@ describe('courses', () => {
 
     dbm.setDatabase(conn); // a server restart with the new version
     await dbm.getDb();
-    expect(await repo.listCourses()).toEqual([
-      { id: G, name: 'German · Momente', targetLang: 'de', note: '', currentLesson: 'Lektion 8', words: before },
-    ]);
+    expect((await repo.listCourses())[0]).toEqual({ id: G, name: 'German · Momente', targetLang: 'de', note: '', currentLesson: 'Lektion 8', words: before });
+    expect((await repo.listCourses())[1]).toMatchObject({ id: 'english', words: 375 }); // added on the same start
     expect(Object.keys(await repo.listWords(null, G))).toHaveLength(before);
     expect(Object.keys(await repo.listCards(nodira.id, G))).toEqual(['l3-familie']); // progress stays
     const members = await conn.query<{ n: number }>('SELECT (SELECT count(*)::int FROM users) - (SELECT count(*)::int FROM course_members) AS n');
@@ -505,12 +517,10 @@ describe('courses', () => {
   });
 
   it('keeps words, progress, leaderboards and teachers apart', async () => {
-    expect(await repo.createCourse({ id: 'english', name: 'English', targetLang: 'en', note: 'More words coming soon' })).toBe('ok');
-    expect(await repo.createCourse({ id: 'english', name: 'Again', targetLang: 'en' })).toBe('taken');
-    expect((await repo.listCourses()).map((c) => [c.id, c.targetLang, c.note])).toEqual([
-      [G, 'de', ''],
-      ['english', 'en', 'More words coming soon'],
-    ]);
+    expect(await repo.createCourse({ id: 'english', name: 'Again', targetLang: 'en' })).toBe('taken'); // built in
+    expect(await repo.createCourse({ id: 'english-b1', name: 'English B1 evening', targetLang: 'en' })).toBe('ok');
+    expect((await repo.listCourses()).map((c) => [c.id, c.targetLang])).toEqual([[G, 'de'], ['english', 'en'], ['english-b1', 'en']]);
+    expect((await repo.getCourse('english-b1'))?.words).toBe(0);
 
     // Signing up from an English link lands in English; an unknown course falls back to German
     const sevara = await profile('sevara@example.com', 'Sevara', { courseId: 'english' });
@@ -529,7 +539,9 @@ describe('courses', () => {
     expect(await repo.putWords(repo.ownerFor(teacher), 'english', [{ id: 'l3-mutter', data: word('hijacked') }])).toBe(0);
     expect((await repo.listWords(null, G))['l3-familie'].term).toBe('die Familie');
     expect(await repo.saveWord(repo.ownerFor(sevara), 'english', 's-apple', word('an apple'))).toBe('ok');
-    expect(Object.keys(await repo.listWords(sevara.id, 'english')).sort()).toEqual(['en-station', 's-apple']);
+    const sevaras = await repo.listWords(sevara.id, 'english');
+    expect(Object.keys(sevaras)).toHaveLength(375 + 2);
+    expect(sevaras['s-apple']).toMatchObject({ personal: true });
     expect((await repo.listWords(sevara.id, G))['s-apple']).toBeUndefined();
     expect((await repo.listWords(null, G))['en-station']).toBeUndefined();
 
@@ -561,7 +573,7 @@ describe('courses', () => {
 
     // Ali may run the English course in /admin, not the German one; admins run both
     expect((await repo.taughtCourses(teacher)).map((c) => c.id)).toEqual(['english']);
-    expect((await repo.taughtCourses(ustoz)).map((c) => c.id)).toEqual([G, 'english']);
+    expect((await repo.taughtCourses(ustoz)).map((c) => c.id)).toEqual([G, 'english', 'english-b1']);
     expect(await repo.membership('english', ali.id)).toEqual({ role: 'teacher', onBoard: true });
     expect(await repo.membership('english', ustoz.id)).toBeNull();
     await repo.updateCourse('english', { name: 'English · Speak Up', note: '' });

@@ -59,7 +59,7 @@ describe('import parser', () => {
 describe('the class lesson', () => {
   const allPacks = (): StudyData => {
     const words = new Map<string, ReturnType<typeof packWords>[string]>();
-    for (const pack of SEED_PACKS) for (const [id, w] of Object.entries(packWords(pack, NOW - 1000))) words.set(id, w);
+    for (const pack of SEED_PACKS.filter((p) => p.course === 'german')) for (const [id, w] of Object.entries(packWords(pack, NOW - 1000))) words.set(id, w);
     return { words, cards: new Map(), prefs: DEFAULT_PREFS };
   };
   const decksOf = (q: ReturnType<typeof buildQueue>) => [...new Set(q.fresh.map((x) => x.word.deck))];
