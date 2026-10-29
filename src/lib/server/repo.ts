@@ -263,6 +263,30 @@ export async function getCourse(id: string): Promise<Course | null> {
   return r.rows[0] ? toCourse(r.rows[0]) : null;
 }
 
+/** The courses someone may run in /admin: every course for admins, else the ones they teach. */
+export async function taughtCourses(user: { id: string; role: Role }): Promise<Course[]> {
+  const all = await listCourses();
+  if (user.role === 'admin') return all;
+  const db = await getDb();
+  const r = await db.query(`SELECT course_id FROM course_members WHERE user_id = $1 AND role = 'teacher'`, [user.id]);
+  const mine = new Set(r.rows.map((row) => str(row.course_id)));
+  return all.filter((c) => mine.has(c.id));
+}
+
+/** Rename a course or change its note ("More words coming soon"). */
+export async function updateCourse(id: string, patch: { name: string; note: string }): Promise<void> {
+  const db = await getDb();
+  await db.query('UPDATE courses SET name = $2, note = $3 WHERE id = $1', [id, patch.name, patch.note]);
+}
+
+/** Is this person in the course (and how)? Null: not a member. */
+export async function membership(courseId: string, userId: string): Promise<{ role: 'student' | 'teacher'; onBoard: boolean } | null> {
+  const db = await getDb();
+  const r = await db.query('SELECT role, on_board FROM course_members WHERE course_id = $1 AND user_id = $2', [courseId, userId]);
+  const row = r.rows[0];
+  return row ? { role: row.role === 'teacher' ? 'teacher' : 'student', onBoard: row.on_board !== false } : null;
+}
+
 /** A new course (by an admin). Its id is also its link, /c/<id>. 'taken': that id is in use. */
 export async function createCourse(
   c: { id: string; name: string; targetLang: TargetLang; note?: string }, now = Date.now(),
@@ -827,7 +851,7 @@ export interface AdminStats {
   signupsByDay: number[];
   people: {
     id: string;
-    email: string; // '' for profiles from before sign-in by email
+    email: string; // '' for profiles from before sign-in by email, and always for teachers who aren't admins
     displayName: string;
     avatarUrl: string | null;
     hasGoogle: boolean;
@@ -848,8 +872,11 @@ export interface AdminStats {
   decks: { deck: string; words: number }[]; // the shared decks, for picking it
 }
 
-/** /admin for one course: its members, their activity and its lesson. */
-export async function adminStats(courseId: string, now = Date.now()): Promise<AdminStats> {
+/**
+ * /admin for one course: its members, their activity and its lesson. Email addresses only with
+ * `emails` (for admins): a course's teachers see names, like everyone else.
+ */
+export async function adminStats(courseId: string, emails = false, now = Date.now()): Promise<AdminStats> {
   const today = todayKey(now);
   const days = lastDays(today, 30);
   const week = lastDays(today, 7);
@@ -877,7 +904,7 @@ export async function adminStats(courseId: string, now = Date.now()): Promise<Ad
     people: users
       .map((u) => ({
         id: u.id,
-        email: u.email,
+        email: emails ? u.email : '',
         displayName: u.displayName,
         avatarUrl: u.avatarUrl,
         hasGoogle: u.hasGoogle,

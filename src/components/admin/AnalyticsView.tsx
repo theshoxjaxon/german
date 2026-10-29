@@ -3,9 +3,11 @@
 import Link from 'next/link';
 import type { CSSProperties } from 'react';
 import { PERIODS, type Analytics, type FunnelStep } from '@/lib/analytics';
+import type { Course } from '@/lib/courses';
 import { dayLabelLong, dayLabelShortDe, dayLabelWithYear, rangeLabel } from '@/lib/stats';
 import { plural } from '@/lib/time';
 import { ColumnChart, Spark } from './charts';
+import { CourseBar } from './CourseBar';
 
 const pct = (x: number | null) => (x === null ? '–' : `${Math.round(x * 100)}%`);
 const dec = (x: number | null) => (x === null ? '–' : x.toFixed(1));
@@ -80,7 +82,7 @@ function Funnel({ title, steps, drop }: { title: string; steps: FunnelStep[]; dr
   );
 }
 
-export function AnalyticsView({ data }: { data: Analytics }) {
+export function AnalyticsView({ data, admin, course, courses }: { data: Analytics; admin: boolean; course: Course; courses: Course[] }) {
   const { users, weeks, northStar: ns, inputs, health, funnel } = data;
   const thisWeek = at(ns.perWeek, 0);
   const perLearner = at(inputs.activeLearners, 0) ? thisWeek / at(inputs.activeLearners, 0) : null;
@@ -93,10 +95,11 @@ export function AnalyticsView({ data }: { data: Analytics }) {
       <div className="page admin-page analytics">
         <header className="vhead">
           <div>
-            <p className="eyebrow" lang="de">Lernzentrum · {dayLabelLong(data.today)}</p>
+            <p className="eyebrow">{course.name} · {dayLabelLong(data.today)}</p>
             <h1>Analytics</h1>
           </div>
         </header>
+        <CourseBar course={course} courses={courses} admin={admin} />
         {users.students === 0 && (
           <p className="notice" role="status">No students yet. The numbers fill in as students sign up and study.</p>
         )}
@@ -147,7 +150,7 @@ export function AnalyticsView({ data }: { data: Analytics }) {
             <h2 id="funnel-h">Student journey <span className="muted">(funnel)</span></h2>
             <nav className="seg" aria-label="Period">
               {PERIODS.map((p) => (
-                <Link key={p.value} className="seg-btn" href={`/admin/analytics?period=${p.value}`} scroll={false}
+                <Link key={p.value} className="seg-btn" href={`/admin/analytics?course=${encodeURIComponent(course.id)}&period=${p.value}`} scroll={false}
                   aria-current={data.period === p.value ? 'true' : undefined}>
                   {p.label}
                 </Link>

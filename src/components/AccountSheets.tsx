@@ -30,7 +30,7 @@ export function AccountSheet() {
         </div>
       </div>
       <div className="optlist show-icons">
-        {me.role === 'admin' && (
+        {me.teacher && (
           <Link className="opt" href="/admin">
             {t('Admin dashboard')} <Icon name="shield" />
           </Link>

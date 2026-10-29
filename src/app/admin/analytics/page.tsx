@@ -18,9 +18,10 @@ export default function AnalyticsPage({ searchParams }: PageProps<'/admin/analyt
 
 async function AnalyticsData({ searchParams }: Pick<PageProps<'/admin/analytics'>, 'searchParams'>) {
   await connection(); // depends on the request and the current time
-  const period = parsePeriod((await searchParams).period);
-  const r = await adminData('/admin/analytics', (user) => repo.analytics(period, user.courseId));
+  const params = await searchParams;
+  const period = parsePeriod(params.period);
+  const r = await adminData('/admin/analytics', params.course, (c) => repo.analytics(period, c.course.id));
   if ('down' in r) return <DatabaseDown message={r.down} />;
   if ('student' in r) return <NotAdmin name={r.student} />;
-  return <AnalyticsView data={r.data} />;
+  return <AnalyticsView data={r.data} admin={r.admin} course={r.course} courses={r.courses} />;
 }

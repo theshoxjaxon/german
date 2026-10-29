@@ -667,6 +667,9 @@ mark { background: linear-gradient(transparent 52%, var(--mark-soft) 52%); color
 .admin-main { padding-inline: 16px; padding-block: 0 calc(32px + env(safe-area-inset-bottom, 0px)); }
 .admin-page { max-width: 980px; }
 .admin-page .vhead { align-items: center; }
+.course-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: -4px; }
+.course-bar select { min-height: 40px; max-width: 100%; padding: 0 34px 0 12px; border-radius: 10px; font-weight: 600; }
+.course-bar-name { font-weight: 700; }
 .tiles-6 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 @media (min-width: 700px) { .tiles-6 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .cols-30 { grid-template-columns: repeat(30, minmax(0, 1fr)); }

@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { AdminNav } from '@/components/admin/AdminNav';
+import { Suspense } from 'react';
+import { AdminNav, AdminNavLinks } from '@/components/admin/AdminNav';
 import { BrandMark } from '@/components/auth/AuthShell';
 
 export default function AdminLayout({ children }: LayoutProps<'/admin'>) {
@@ -10,7 +11,9 @@ export default function AdminLayout({ children }: LayoutProps<'/admin'>) {
           <BrandMark size={26} />
           <span className="appbar-word">Karteikasten</span>
         </Link>
-        <AdminNav />
+        <Suspense fallback={<AdminNavLinks />}>
+          <AdminNav />
+        </Suspense>
       </header>
       {children}
     </div>

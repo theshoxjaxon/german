@@ -97,7 +97,8 @@ describe('database', () => {
     expect(student).toMatchObject({ displayName: 'Malika K', hasPassword: true, hasGoogle: false, avatarUrl: null });
     expect(JSON.stringify(await repo.classOverview(teacher.id, G))).not.toContain('@');
     expect(JSON.stringify(await repo.unseenCheers(student.id))).not.toContain('@');
-    expect((await repo.adminStats(G)).people.map((p) => p.email).sort()).toEqual(['malika@example.com', 'ustoz@markaz.uz']);
+    expect((await repo.adminStats(G, true)).people.map((p) => p.email).sort()).toEqual(['malika@example.com', 'ustoz@markaz.uz']);
+    expect((await repo.adminStats(G)).people.map((p) => p.email)).toEqual(['', '']); // a teacher who isn't an admin sees names only
   });
 
   it('stores only a hash of the session token and expires sessions', async () => {
@@ -557,6 +558,14 @@ describe('courses', () => {
     const inGerman = (await repo.findUserById(ali.id))!;
     expect(inGerman).toMatchObject({ courseId: G, teacher: false });
     expect(repo.ownerFor(inGerman)).toBe(ali.id);
+
+    // Ali may run the English course in /admin, not the German one; admins run both
+    expect((await repo.taughtCourses(teacher)).map((c) => c.id)).toEqual(['english']);
+    expect((await repo.taughtCourses(ustoz)).map((c) => c.id)).toEqual([G, 'english']);
+    expect(await repo.membership('english', ali.id)).toEqual({ role: 'teacher', onBoard: true });
+    expect(await repo.membership('english', ustoz.id)).toBeNull();
+    await repo.updateCourse('english', { name: 'English · Speak Up', note: '' });
+    expect(await repo.getCourse('english')).toMatchObject({ name: 'English · Speak Up', note: '' });
 
     // Each course has its own dashboard, lesson and reset
     const stats = await repo.adminStats('english');
