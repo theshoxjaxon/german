@@ -12,13 +12,13 @@ import { currentUser } from '@/lib/server/session';
  */
 export async function adminData<T>(
   path: string,
-  load: () => Promise<T>,
+  load: (user: repo.UserRow) => Promise<T>,
 ): Promise<{ user: repo.UserRow; data: T } | { down: string } | { student: string }> {
   let user: repo.UserRow | null;
   let data: T | undefined;
   try {
     user = await currentUser();
-    if (user?.role === 'admin') data = await load();
+    if (user?.role === 'admin') data = await load(user);
   } catch (e) {
     const { problem, message } = describeDbError(e);
     console.error(`Karteikasten: database unavailable (${problem}). ${message}`);

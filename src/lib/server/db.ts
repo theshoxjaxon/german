@@ -11,7 +11,7 @@
  * - A cold start costs one small query: the schema is only (re)built when its version changes.
  */
 import pg from 'pg';
-import { packWords, SEED_PACKS } from '../seed';
+import { packWords, SEED_COURSES, SEED_PACKS } from '../seed';
 import { safeTimeZone } from '../stats';
 
 export type Row = Record<string, unknown>;
@@ -22,7 +22,7 @@ export interface Db {
 }
 
 /** Bump when the schema or the built-in word lists change: every database then runs migrate() once more. */
-const SCHEMA_VERSION = '8';
+const SCHEMA_VERSION = '9';
 
 /*
  * Times are milliseconds since 1970 (JavaScript's Date.now()) in BIGINT columns; days are
@@ -160,6 +160,56 @@ CREATE INDEX IF NOT EXISTS rate_limits_reset_idx ON rate_limits (reset_at);
 WITH once AS (INSERT INTO settings (key, value) VALUES ('open_class', '1') ON CONFLICT (key) DO NOTHING RETURNING 1)
 UPDATE users SET in_class = true WHERE NOT in_class AND EXISTS (SELECT 1 FROM once);
 
+-- Schema 9: courses (German · Momente, English …). Each has its own words, members, leaderboard
+-- and current lesson; one login works for all of them. Everything from before is German.
+CREATE TABLE IF NOT EXISTS courses (
+  id             text PRIMARY KEY,      -- also its link: /c/<id>
+  name           text NOT NULL,
+  target_lang    text NOT NULL,         -- the language studied: de, en
+  meaning_lang   text NOT NULL DEFAULT 'uz',
+  note           text NOT NULL DEFAULT '', -- e.g. "More words coming soon"
+  current_lesson text,                  -- the deck the class is on
+  sort           integer NOT NULL DEFAULT 0,
+  created_at     bigint NOT NULL
+);
+INSERT INTO courses (id, name, target_lang, sort, created_at)
+VALUES ('german', 'German · Momente', 'de', 1, (extract(epoch FROM now()) * 1000)::bigint)
+ON CONFLICT (id) DO NOTHING;
+
+ALTER TABLE words ADD COLUMN IF NOT EXISTS course_id text REFERENCES courses (id) ON DELETE CASCADE;
+UPDATE words SET course_id = 'german' WHERE course_id IS NULL;
+ALTER TABLE words ALTER COLUMN course_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS words_course_idx ON words (course_id);
+
+-- Who studies (or teaches) which course. on_board: listed on that course's leaderboard.
+CREATE TABLE IF NOT EXISTS course_members (
+  course_id text NOT NULL REFERENCES courses (id) ON DELETE CASCADE,
+  user_id   text NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  role      text NOT NULL DEFAULT 'student' CHECK (role IN ('student', 'teacher')),
+  on_board  boolean NOT NULL DEFAULT true,
+  joined_at bigint NOT NULL,
+  PRIMARY KEY (course_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS course_members_user_idx ON course_members (user_id);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS course_id text REFERENCES courses (id) ON DELETE SET NULL; -- the active course
+ALTER TABLE visitors ADD COLUMN IF NOT EXISTS course_id text REFERENCES courses (id) ON DELETE SET NULL;
+
+-- Once: everyone so far studied German. Admins teach it; the leaderboard and the class lesson carry over.
+WITH once AS (
+  INSERT INTO settings (key, value) VALUES ('courses_migrated', '1') ON CONFLICT (key) DO NOTHING RETURNING 1
+), members AS (
+  INSERT INTO course_members (course_id, user_id, role, on_board, joined_at)
+  SELECT 'german', u.id, CASE WHEN u.role = 'admin' THEN 'teacher' ELSE 'student' END, u.in_class, u.created_at
+  FROM users u, once
+  ON CONFLICT (course_id, user_id) DO NOTHING
+), lesson AS (
+  UPDATE courses SET current_lesson = (SELECT value FROM settings WHERE key = 'class_lesson')
+  WHERE id = 'german' AND EXISTS (SELECT 1 FROM once)
+), guests AS (
+  UPDATE visitors SET course_id = 'german' WHERE course_id IS NULL AND EXISTS (SELECT 1 FROM once)
+)
+UPDATE users SET course_id = 'german' WHERE course_id IS NULL AND EXISTS (SELECT 1 FROM once);
+
 -- Supabase also publishes the public schema through its REST API. Row Level Security with no
 -- policies closes that door: only this server (connecting as the table owner) reads the data.
 ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
@@ -173,6 +223,8 @@ ALTER TABLE cheers   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE visitors ENABLE ROW LEVEL SECURITY;
 ALTER TABLE password_reset_tokens ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rate_limits ENABLE ROW LEVEL SECURITY;
+ALTER TABLE courses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE course_members ENABLE ROW LEVEL SECURITY;
 
 INSERT INTO settings (key, value) VALUES ('schema_version', '${SCHEMA_VERSION}')
   ON CONFLICT (key) DO UPDATE SET value = excluded.value;
@@ -219,21 +271,29 @@ async function migrate(db: Db): Promise<void> {
   let status = await db.query(STATUS).catch(() => null); // fails when the tables don't exist yet
   if (status?.rows[0]?.version !== SCHEMA_VERSION) {
     await db.query(SCHEMA);
-    // Load each built-in list (Lektion 3, Lektion 5, …) as shared words, once per database. One
-    // statement per list, so it happens exactly once even with several servers, and deleting
-    // the words later doesn't bring them back. Words the center already has (same term,
-    // shared) are skipped, so a list typed in by hand isn't doubled.
     const now = Date.now();
+    // The built-in courses. An existing course is left as it is (a teacher may have renamed it).
+    await db.query(
+      `INSERT INTO courses (id, name, target_lang, note, sort, created_at)
+       SELECT x.id, x.name, x."targetLang", x.note, x.sort, $2 FROM jsonb_to_recordset($1::jsonb)
+         AS x(id text, name text, "targetLang" text, note text, sort int)
+       ON CONFLICT (id) DO NOTHING`,
+      [JSON.stringify(SEED_COURSES), now],
+    );
+    // Load each built-in list (Lektion 3, Lektion 5, …) as shared words of its course, once per
+    // database. One statement per list, so it happens exactly once even with several servers,
+    // and deleting the words later doesn't bring them back. Words the course already has (same
+    // term, shared) are skipped, so a list typed in by hand isn't doubled.
     for (const pack of SEED_PACKS) {
       await db.query(
         `WITH first AS (INSERT INTO settings (key, value) VALUES ($3, '1') ON CONFLICT (key) DO NOTHING RETURNING 1)
-         INSERT INTO words (id, owner_id, data, updated_at)
-         SELECT x.id, NULL, x.data, $2 FROM jsonb_to_recordset($1::jsonb) AS x(id text, data jsonb), first
+         INSERT INTO words (id, owner_id, course_id, data, updated_at)
+         SELECT x.id, NULL, $4, x.data, $2 FROM jsonb_to_recordset($1::jsonb) AS x(id text, data jsonb), first
          WHERE NOT EXISTS (
-           SELECT 1 FROM words w WHERE w.owner_id IS NULL AND lower(w.data->>'term') = lower(x.data->>'term')
+           SELECT 1 FROM words w WHERE w.owner_id IS NULL AND w.course_id = $4 AND lower(w.data->>'term') = lower(x.data->>'term')
          )
          ON CONFLICT (id) DO NOTHING`,
-        [JSON.stringify(Object.values(packWords(pack, now)).map(({ id, ...data }) => ({ id, data }))), now, pack.flag],
+        [JSON.stringify(Object.values(packWords(pack, now)).map(({ id, ...data }) => ({ id, data }))), now, pack.flag, pack.course],
       );
     }
     await backfillAnalytics(db);

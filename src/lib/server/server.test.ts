@@ -12,6 +12,7 @@ import type { GoogleProfile } from './repo';
 import { hashPassword, temporaryPassword, verifyPassword } from './password';
 
 let repo: typeof import('./repo');
+const G = 'german'; // the course everyone from before courses is in
 let close = async () => {};
 
 beforeAll(async () => {
@@ -36,7 +37,9 @@ beforeAll(async () => {
 afterAll(() => close());
 
 /** A profile by email, as the sign-up form makes it (or with Google, when `emailVerified`). */
-const profile = async (email: string, displayName: string, extra: { emailVerified?: boolean; visitorId?: string; googleId?: string } = {}) => {
+const profile = async (
+  email: string, displayName: string, extra: { emailVerified?: boolean; visitorId?: string; googleId?: string; courseId?: string } = {},
+) => {
   const u = await repo.createUser({ email, displayName, passwordHash: '$2b$11$not-a-real-hash', ...extra });
   if (u === 'taken') throw new Error(`${email} is taken`);
   return u;
@@ -63,7 +66,7 @@ describe('database', () => {
   const doc = (f: CardDoc['f']): CardDoc => ({ f, r: null, suspended: false, updatedAt: Date.now() });
 
   it('seeds the built-in lists (Lektion 1 to 12)', async () => {
-    const words = Object.values(await repo.listWords(null));
+    const words = Object.values(await repo.listWords(null, G));
     const count = (deck: string) => words.filter((w) => w.deck === deck).length;
     expect(Array.from({ length: 12 }, (_, i) => count(`Lektion ${i + 1}`))).toEqual([43, 61, 34, 48, 59, 52, 46, 47, 85, 62, 38, 78]);
     expect(words).toHaveLength(653);
@@ -80,8 +83,8 @@ describe('database', () => {
 
     const teacher = await profile('ustoz@markaz.uz', 'Ustoz', { emailVerified: true }); // e.g. with Google
     const student = await profile('malika@example.com', 'Malika K');
-    expect(teacher.role).toBe('admin');
-    expect([student.role, student.inClass]).toEqual(['student', true]);
+    expect(teacher).toMatchObject({ role: 'admin', teacher: true, courseId: G });
+    expect(student).toMatchObject({ role: 'student', teacher: false, inClass: true, courseId: G, member: true });
     expect(await repo.createUser({ email: 'malika@example.com', displayName: 'Other', passwordHash: 'x' })).toBe('taken');
     expect((await byEmail('malika@example.com')).displayName).toBe('Malika K');
   });
@@ -92,9 +95,9 @@ describe('database', () => {
     expect(student).not.toHaveProperty('email'); // not even their own
     expect(teacher.email).toBe('ustoz@markaz.uz');
     expect(student).toMatchObject({ displayName: 'Malika K', hasPassword: true, hasGoogle: false, avatarUrl: null });
-    expect(JSON.stringify(await repo.classOverview(teacher.id))).not.toContain('@');
+    expect(JSON.stringify(await repo.classOverview(teacher.id, G))).not.toContain('@');
     expect(JSON.stringify(await repo.unseenCheers(student.id))).not.toContain('@');
-    expect((await repo.adminStats()).people.map((p) => p.email).sort()).toEqual(['malika@example.com', 'ustoz@markaz.uz']);
+    expect((await repo.adminStats(G)).people.map((p) => p.email).sort()).toEqual(['malika@example.com', 'ustoz@markaz.uz']);
   });
 
   it('stores only a hash of the session token and expires sessions', async () => {
@@ -116,16 +119,16 @@ describe('database', () => {
     await repo.putCard(malika.id, 'l3-mutter', doc(answer(null, 'easy', t)));
     expect(await repo.putCard(malika.id, 'no-such-word', doc(s1))).toBe('no-word');
 
-    expect(Object.keys(await repo.listCards(malika.id))).toEqual(expect.arrayContaining(['l3-familie', 'l3-mutter']));
-    expect(await repo.listCards(teacher.id)).toEqual({}); // private per person
+    expect(Object.keys(await repo.listCards(malika.id, G))).toEqual(expect.arrayContaining(['l3-familie', 'l3-mutter']));
+    expect(await repo.listCards(teacher.id, G)).toEqual({}); // private per person
 
-    const cls = await repo.classOverview(teacher.id);
+    const cls = await repo.classOverview(teacher.id, G);
     const m = cls.members.find((x) => x.id === malika.id)!;
     expect(m).toMatchObject({ activeWords: 2, answersToday: 3, studiedToday: true, streak: 1, isMe: false });
     expect(await repo.myStreak(malika.id)).toEqual({ days: 1, studiedToday: true });
     expect(await repo.myStreak(teacher.id)).toEqual({ days: 0, studiedToday: false });
 
-    const stats = await repo.adminStats();
+    const stats = await repo.adminStats(G);
     expect(stats.totals).toMatchObject({ profiles: 2, admins: 1, studiedToday: 1, openedToday: 2, activeWeek: 1, answersToday: 3 });
     expect(stats.studiedByDay.at(-1)).toBe(1);
     expect(stats.signupsByDay.at(-1)).toBe(2);
@@ -134,27 +137,27 @@ describe('database', () => {
   it('limits cheers to one per classmate per day', async () => {
     const malika = await byEmail('malika@example.com');
     const teacher = await byEmail('ustoz@markaz.uz');
-    expect(await repo.sendCheer(teacher.id, malika.id, 'keep-going')).toBe('ok');
-    expect(await repo.sendCheer(teacher.id, malika.id, 'great-streak')).toBe('already');
-    expect(await repo.sendCheer(malika.id, malika.id, 'keep-going')).toBe('self');
+    expect(await repo.sendCheer(teacher.id, malika.id, 'keep-going', G)).toBe('ok');
+    expect(await repo.sendCheer(teacher.id, malika.id, 'great-streak', G)).toBe('already');
+    expect(await repo.sendCheer(malika.id, malika.id, 'keep-going', G)).toBe('self');
     const inbox = await repo.unseenCheers(malika.id);
     expect(inbox).toHaveLength(1);
     expect(inbox[0]).toMatchObject({ kind: 'keep-going', from: { id: teacher.id, displayName: 'Ustoz' } });
     await repo.markCheersSeen(malika.id);
     expect(await repo.unseenCheers(malika.id)).toHaveLength(0);
-    expect((await repo.classOverview(teacher.id)).members.find((x) => x.id === malika.id)?.cheeredToday).toBe(true);
+    expect((await repo.classOverview(teacher.id, G)).members.find((x) => x.id === malika.id)?.cheeredToday).toBe(true);
   });
 
   it('puts everyone on the leaderboard until a teacher takes them off it', async () => {
     const teacher = await byEmail('ustoz@markaz.uz');
     const karim = await profile('karim@example.com', 'Karim');
-    const names = async () => (await repo.classOverview(teacher.id)).members.map((m) => m.displayName);
+    const names = async () => (await repo.classOverview(teacher.id, G)).members.map((m) => m.displayName);
     expect(await names()).toContain('Karim');
-    await repo.setInClass(karim.id, false);
+    await repo.setOnBoard(G, karim.id, false);
     expect(await names()).not.toContain('Karim');
-    expect(await repo.sendCheer(teacher.id, karim.id, 'keep-going')).toBe('no-user');
-    expect((await repo.adminStats()).people.find((p) => p.id === karim.id)?.inClass).toBe(false);
-    await repo.setInClass(karim.id, true);
+    expect(await repo.sendCheer(teacher.id, karim.id, 'keep-going', G)).toBe('no-user');
+    expect((await repo.adminStats(G)).people.find((p) => p.id === karim.id)?.inClass).toBe(false);
+    await repo.setOnBoard(G, karim.id, true);
     expect(await names()).toContain('Karim');
     await repo.deleteUser(karim.id);
   });
@@ -170,11 +173,11 @@ describe('database', () => {
       'no-such-word': doc(answer(null, 'good', t)),
     };
     expect(await repo.importCards(created.id, guest, { newPerDay: 5 })).toBe(1);
-    const cards = await repo.listCards(created.id);
+    const cards = await repo.listCards(created.id, G);
     expect(Object.keys(cards).sort()).toEqual(['l3-mutter', 'l3-vater']);
     expect(cards['l3-mutter'].f?.log.at(-1)?.r).toBe('easy');
     expect((await repo.getPrefs(created.id)).newPerDay).toBe(5);
-    const me = (await repo.classOverview(created.id)).members.find((m) => m.isMe)!;
+    const me = (await repo.classOverview(created.id, G)).members.find((m) => m.isMe)!;
     expect(me).toMatchObject({ activeWords: 2, answersToday: 3, studiedToday: true });
     // Importing again changes nothing.
     expect(await repo.importCards(created.id, guest)).toBe(0);
@@ -190,28 +193,28 @@ describe('database', () => {
       tags: [], deck: 'My words', order: 0, createdAt: 1, updatedAt: 1,
     });
 
-    expect(await repo.saveWord(repo.ownerFor(malika), 'm-bahnhof', word('der Bahnhof'))).toBe('ok');
-    const mine = await repo.listWords(malika.id);
+    expect(await repo.saveWord(repo.ownerFor(malika), G, 'm-bahnhof', word('der Bahnhof'))).toBe('ok');
+    const mine = await repo.listWords(malika.id, G);
     expect(mine['m-bahnhof']).toMatchObject({ term: 'der Bahnhof', personal: true });
     expect(mine['l3-familie'].personal).toBeUndefined(); // shared words stay shared
     expect(Object.keys(mine)).toHaveLength(654);
-    expect((await repo.listWords(aziz.id))['m-bahnhof']).toBeUndefined(); // others don't see it
-    expect((await repo.listWords(teacher.id))['m-bahnhof']).toBeUndefined(); // not even the admin
-    expect((await repo.listWords(null))['m-bahnhof']).toBeUndefined(); // nor guests
+    expect((await repo.listWords(aziz.id, G))['m-bahnhof']).toBeUndefined(); // others don't see it
+    expect((await repo.listWords(teacher.id, G))['m-bahnhof']).toBeUndefined(); // not even the admin
+    expect((await repo.listWords(null, G))['m-bahnhof']).toBeUndefined(); // nor guests
 
     // Nobody else can change, delete or study it; students can't change lesson words.
-    expect(await repo.saveWord(repo.ownerFor(aziz), 'm-bahnhof', word('hijacked'))).toBe('forbidden');
-    expect(await repo.saveWord(repo.ownerFor(teacher), 'm-bahnhof', word('hijacked'))).toBe('forbidden');
-    expect(await repo.deleteWord(repo.ownerFor(aziz), 'm-bahnhof')).toBe('forbidden');
-    expect(await repo.saveWord(repo.ownerFor(malika), 'l3-familie', word('changed'))).toBe('forbidden');
+    expect(await repo.saveWord(repo.ownerFor(aziz), G, 'm-bahnhof', word('hijacked'))).toBe('forbidden');
+    expect(await repo.saveWord(repo.ownerFor(teacher), G, 'm-bahnhof', word('hijacked'))).toBe('forbidden');
+    expect(await repo.deleteWord(repo.ownerFor(aziz), G, 'm-bahnhof')).toBe('forbidden');
+    expect(await repo.saveWord(repo.ownerFor(malika), G, 'l3-familie', word('changed'))).toBe('forbidden');
     expect(await repo.putCard(aziz.id, 'm-bahnhof', doc(answer(null, 'good', Date.now())))).toBe('no-word');
-    expect((await repo.listWords(malika.id))['m-bahnhof'].term).toBe('der Bahnhof');
+    expect((await repo.listWords(malika.id, G))['m-bahnhof'].term).toBe('der Bahnhof');
 
     // The owner studies it like any other word; bulk import lands in their own words too.
     expect(await repo.putCard(malika.id, 'm-bahnhof', doc(answer(null, 'good', Date.now())))).toBe('ok');
-    expect(await repo.putWords(repo.ownerFor(malika), [{ id: 'm-zug', data: word('der Zug') }, { id: 'm-bus', data: word('der Bus') }])).toBe(2);
+    expect(await repo.putWords(repo.ownerFor(malika), G, [{ id: 'm-zug', data: word('der Zug') }, { id: 'm-bus', data: word('der Bus') }])).toBe(2);
     expect(await repo.countOwnWords(malika.id)).toBe(3);
-    expect(await repo.deleteWord(repo.ownerFor(malika), 'm-bus')).toBe('ok');
+    expect(await repo.deleteWord(repo.ownerFor(malika), G, 'm-bus')).toBe('ok');
     expect(await repo.countOwnWords(malika.id)).toBe(2);
     await repo.deleteUser(aziz.id);
   });
@@ -220,10 +223,10 @@ describe('database', () => {
     const malika = await byEmail('malika@example.com');
     await repo.deleteUser(malika.id);
     expect(await repo.findUserById(malika.id)).toBeNull();
-    expect(await repo.listCards(malika.id)).toEqual({});
+    expect(await repo.listCards(malika.id, G)).toEqual({});
     expect(await repo.countOwnWords(malika.id)).toBe(0); // her own words went too
-    expect(Object.keys(await repo.listWords(null))).toHaveLength(653); // the shared ones stay
-    expect((await repo.adminStats()).totals.profiles).toBe(1);
+    expect(Object.keys(await repo.listWords(null, G))).toHaveLength(653); // the shared ones stay
+    expect((await repo.adminStats(G)).totals.profiles).toBe(1);
   });
 
   it('adds a new built-in list to an existing database once, without undoing the teacher’s changes', async () => {
@@ -234,15 +237,15 @@ describe('database', () => {
     await conn.query(`DELETE FROM words WHERE id LIKE 'l5-%'`);
     await conn.query(`DELETE FROM settings WHERE key = 'seeded:lektion-5'`);
     await conn.query(`UPDATE settings SET value = '1' WHERE key = 'schema_version'`);
-    await repo.deleteWord(null, 'l3-oma');
-    await repo.saveWord(null, 'w-handmade', {
+    await repo.deleteWord(null, G, 'l3-oma');
+    await repo.saveWord(null, G, 'w-handmade', {
       term: 'die Uhr', meaning: 'soat', pos: 'noun', pronunciation: '', forms: '', example: '', exampleTr: '', mnemonic: '', notes: '',
       tags: [], deck: 'Lektion 5', order: 1, createdAt: 1, updatedAt: 1,
     });
 
     dbm.setDatabase(conn); // a server restart with the new version
     await dbm.getDb();
-    const words = await repo.listWords(null);
+    const words = await repo.listWords(null, G);
     expect(Object.values(words).filter((w) => w.deck === 'Lektion 5')).toHaveLength(59); // 58 new + the hand-made one
     expect(words['l5-uhr']).toBeUndefined(); // not doubled
     expect(words['l5-handy']?.meaning).toBe('mobil telefon');
@@ -250,7 +253,7 @@ describe('database', () => {
 
     dbm.setDatabase(conn); // and again: nothing changes
     await dbm.getDb();
-    expect(Object.keys(await repo.listWords(null))).toHaveLength(Object.keys(words).length);
+    expect(Object.keys(await repo.listWords(null, G))).toHaveLength(Object.keys(words).length);
   });
 });
 
@@ -283,7 +286,7 @@ describe('analytics', () => {
     await repo.putCard(nodira.id, 'l3-familie', state([e1, e2], 6)); // undo
     expect(await masteredAt(nodira.id)).toBe(e3.t);
 
-    const a = await repo.analytics('90');
+    const a = await repo.analytics('90', G);
     expect(a.northStar).toMatchObject({ total: 1, learnersThisWeek: 1 });
     expect(a.northStar.perWeek.at(-1)).toBe(1);
     expect(a.inputs.recallRate.at(-1)).toBe(0.5); // Hard (not remembered) and Easy (remembered)
@@ -291,12 +294,12 @@ describe('analytics', () => {
   });
 
   it('counts anonymous visitors and links the browser someone signs up in', async () => {
-    await repo.recordVisitor(V1, false);
-    await repo.recordVisitor(V1, true); // answered a card as a guest
-    await repo.recordVisitor(V2, false); // only looked
+    await repo.recordVisitor(V1, false, G);
+    await repo.recordVisitor(V1, true, G); // answered a card as a guest
+    await repo.recordVisitor(V2, false, G); // only looked
     await profile('jasur@example.com', 'Jasur', { visitorId: V1 });
 
-    const { funnel, users } = await repo.analytics('30');
+    const { funnel, users } = await repo.analytics('30', G);
     expect(funnel.guests.map((s) => s.count)).toEqual([3, 1, 1]); // V0, V1, V2 → V1 tried → V1 joined
     expect(funnel.joinedDirectly).toBe(1); // V0 (nodira) signed up without trying
     expect(funnel.learners[0].count).toBe(2);
@@ -446,14 +449,126 @@ describe('password links (forgot / reset)', () => {
 
 describe('the class lesson', () => {
   it('is unset until a teacher picks one of the shared decks', async () => {
-    expect(await repo.getClassLesson()).toBeNull();
-    expect(await repo.setClassLesson('Lektion 99')).toBe(false); // no such deck
-    expect(await repo.getClassLesson()).toBeNull();
-    expect(await repo.setClassLesson('Lektion 7')).toBe(true);
-    expect(await repo.getClassLesson()).toBe('Lektion 7');
-    expect((await repo.adminStats()).classLesson).toBe('Lektion 7');
-    expect((await repo.adminStats()).decks.map((d) => d.deck)).toEqual(expect.arrayContaining(['Lektion 3', 'Lektion 7']));
-    expect(await repo.setClassLesson(null)).toBe(true);
-    expect(await repo.getClassLesson()).toBeNull();
+    expect(await repo.getClassLesson(G)).toBeNull();
+    expect(await repo.setClassLesson(G, 'Lektion 99')).toBe(false); // no such deck
+    expect(await repo.getClassLesson(G)).toBeNull();
+    expect(await repo.setClassLesson(G, 'Lektion 7')).toBe(true);
+    expect(await repo.getClassLesson(G)).toBe('Lektion 7');
+    expect((await repo.adminStats(G)).classLesson).toBe('Lektion 7');
+    expect((await repo.adminStats(G)).decks.map((d) => d.deck)).toEqual(expect.arrayContaining(['Lektion 3', 'Lektion 7']));
+    expect(await repo.setClassLesson(G, null)).toBe(true);
+    expect(await repo.getClassLesson(G)).toBeNull();
+  });
+});
+
+describe('courses', () => {
+  const word = (term: string, deck = 'A1'): WordData => ({
+    term, meaning: 'x', pos: 'noun', pronunciation: '', forms: '', example: '', exampleTr: '', mnemonic: '', notes: '',
+    tags: [], deck, order: 0, createdAt: 1, updatedAt: 1,
+  });
+  const card = (t = Date.now()): CardDoc => ({ f: answer(null, 'good', t), r: null, suspended: false, updatedAt: t });
+
+  it('moves a database from before courses into the German course, keeping everything', async () => {
+    const dbm = await import('./db');
+    const conn = await dbm.getDb();
+    const nodira = await byEmail('nodira@example.com');
+    const jasur = await byEmail('jasur@example.com');
+    const before = Object.keys(await repo.listWords(null, G)).length;
+    const funnel = (await repo.analytics('30', G)).funnel.guests.map((s) => s.count);
+    // Make it look like schema 8: one class, its lesson in settings, the leaderboard on users
+    await conn.query('DROP TABLE course_members');
+    await conn.query('ALTER TABLE words DROP COLUMN course_id');
+    await conn.query('ALTER TABLE users DROP COLUMN course_id');
+    await conn.query('ALTER TABLE visitors DROP COLUMN course_id');
+    await conn.query('DROP TABLE courses');
+    await conn.query(`DELETE FROM settings WHERE key = 'courses_migrated'`);
+    await conn.query(`INSERT INTO settings (key, value) VALUES ('class_lesson', 'Lektion 8')`);
+    await conn.query('UPDATE users SET in_class = false WHERE id = $1', [jasur.id]);
+    await conn.query(`UPDATE settings SET value = '8' WHERE key = 'schema_version'`);
+
+    dbm.setDatabase(conn); // a server restart with the new version
+    await dbm.getDb();
+    expect(await repo.listCourses()).toEqual([
+      { id: G, name: 'German · Momente', targetLang: 'de', note: '', currentLesson: 'Lektion 8', words: before },
+    ]);
+    expect(Object.keys(await repo.listWords(null, G))).toHaveLength(before);
+    expect(Object.keys(await repo.listCards(nodira.id, G))).toEqual(['l3-familie']); // progress stays
+    const members = await conn.query<{ n: number }>('SELECT (SELECT count(*)::int FROM users) - (SELECT count(*)::int FROM course_members) AS n');
+    expect(members.rows[0].n).toBe(0); // everyone is in German
+    expect(await byEmail('ustoz@markaz.uz')).toMatchObject({ courseId: G, member: true, teacher: true });
+    expect(await byEmail('jasur@example.com')).toMatchObject({ courseId: G, member: true, inClass: false }); // still off the board
+    expect((await repo.classOverview(nodira.id, G)).members.map((m) => m.id)).not.toContain(jasur.id);
+    expect((await repo.analytics('30', G)).funnel.guests.map((s) => s.count)).toEqual(funnel); // guests are German's
+    await repo.setOnBoard(G, jasur.id, true);
+    await repo.setClassLesson(G, null);
+  });
+
+  it('keeps words, progress, leaderboards and teachers apart', async () => {
+    expect(await repo.createCourse({ id: 'english', name: 'English', targetLang: 'en', note: 'More words coming soon' })).toBe('ok');
+    expect(await repo.createCourse({ id: 'english', name: 'Again', targetLang: 'en' })).toBe('taken');
+    expect((await repo.listCourses()).map((c) => [c.id, c.targetLang, c.note])).toEqual([
+      [G, 'de', ''],
+      ['english', 'en', 'More words coming soon'],
+    ]);
+
+    // Signing up from an English link lands in English; an unknown course falls back to German
+    const sevara = await profile('sevara@example.com', 'Sevara', { courseId: 'english' });
+    expect(sevara).toMatchObject({ courseId: 'english', member: true, inClass: true, teacher: false });
+    expect((await profile('odd@example.com', 'Odd', { courseId: 'klingon' })).courseId).toBe(G);
+
+    // An English teacher who isn't an admin changes English lesson words, never German ones
+    const ali = await profile('ali@example.com', 'Ali', { courseId: 'english' });
+    await repo.setCourseRole('english', ali.id, 'teacher');
+    const teacher = (await repo.findUserById(ali.id))!;
+    expect(teacher).toMatchObject({ role: 'student', teacher: true });
+    expect(repo.publicUser(teacher)).not.toHaveProperty('email'); // teachers aren't admins: no emails
+    expect(await repo.saveWord(repo.ownerFor(teacher), 'english', 'en-station', word('the station'))).toBe('ok');
+    expect(await repo.saveWord(repo.ownerFor(teacher), 'english', 'l3-familie', word('hijacked'))).toBe('forbidden');
+    expect(await repo.deleteWord(repo.ownerFor(teacher), 'english', 'l3-familie')).toBe('forbidden');
+    expect(await repo.putWords(repo.ownerFor(teacher), 'english', [{ id: 'l3-mutter', data: word('hijacked') }])).toBe(0);
+    expect((await repo.listWords(null, G))['l3-familie'].term).toBe('die Familie');
+    expect(await repo.saveWord(repo.ownerFor(sevara), 'english', 's-apple', word('an apple'))).toBe('ok');
+    expect(Object.keys(await repo.listWords(sevara.id, 'english')).sort()).toEqual(['en-station', 's-apple']);
+    expect((await repo.listWords(sevara.id, G))['s-apple']).toBeUndefined();
+    expect((await repo.listWords(null, G))['en-station']).toBeUndefined();
+
+    // Nodira also takes English: German progress stays, English starts fresh
+    const nodira = await byEmail('nodira@example.com');
+    expect(await repo.joinCourse(nodira.id, 'english')).toBe(true);
+    expect(await repo.joinCourse(nodira.id, 'no-such-course')).toBe(false);
+    expect(await byEmail('nodira@example.com')).toMatchObject({ courseId: 'english', member: true, inClass: true, teacher: false });
+    expect(await repo.listCards(nodira.id, 'english')).toEqual({});
+    expect(await repo.putCard(nodira.id, 'en-station', card())).toBe('ok');
+    expect(Object.keys(await repo.listCards(nodira.id, 'english'))).toEqual(['en-station']);
+    expect(Object.keys(await repo.listCards(nodira.id, G))).toEqual(['l3-familie']);
+
+    // Each course has its own leaderboard, and cheers stay inside it
+    const board = async (course: string) => (await repo.classOverview(sevara.id, course)).members;
+    expect((await board('english')).map((m) => m.displayName).sort()).toEqual(['Ali', 'Nodira', 'Sevara']);
+    expect((await board('english')).find((m) => m.id === ali.id)?.role).toBe('admin'); // the teacher badge
+    expect((await board('english')).find((m) => m.id === nodira.id)?.activeWords).toBe(1); // English words only
+    expect((await board(G)).map((m) => m.displayName)).not.toContain('Sevara');
+    const ustoz = await byEmail('ustoz@markaz.uz');
+    expect(await repo.sendCheer(sevara.id, ustoz.id, 'keep-going', 'english')).toBe('no-user'); // not in English
+    expect(await repo.sendCheer(sevara.id, nodira.id, 'keep-going', 'english')).toBe('ok');
+
+    // Teaching English doesn't make Ali a German teacher
+    expect(await repo.joinCourse(ali.id, G)).toBe(true);
+    const inGerman = (await repo.findUserById(ali.id))!;
+    expect(inGerman).toMatchObject({ courseId: G, teacher: false });
+    expect(repo.ownerFor(inGerman)).toBe(ali.id);
+
+    // Each course has its own dashboard, lesson and reset
+    const stats = await repo.adminStats('english');
+    expect(stats.people.map((p) => p.displayName).sort()).toEqual(['Ali', 'Nodira', 'Sevara']);
+    expect(stats.totals).toMatchObject({ profiles: 3, admins: 1 });
+    expect((await repo.analytics('30', 'english')).users.students).toBe(2); // Ali teaches
+    expect(await repo.setClassLesson('english', 'Lektion 3')).toBe(false); // a German deck
+    expect(await repo.setClassLesson('english', 'A1')).toBe(true);
+    expect(await repo.getClassLesson('english')).toBe('A1');
+    expect(await repo.getClassLesson(G)).toBeNull();
+    await repo.deleteAllCards(nodira.id, 'english');
+    expect(await repo.listCards(nodira.id, 'english')).toEqual({});
+    expect(Object.keys(await repo.listCards(nodira.id, G))).toEqual(['l3-familie']);
   });
 });

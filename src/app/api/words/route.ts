@@ -6,7 +6,7 @@ import { MAX_OWN_WORDS, type WordData } from '@/lib/types';
 
 /**
  * POST /api/words { words: [{ id, term, meaning, … }] } adds many words at once (Import).
- * Admins add shared lesson words; everyone else adds their own words, which only they see.
+ * Teachers add their course's shared lesson words; everyone else adds their own words, which only they see.
  */
 export async function POST(req: Request) {
   const auth = await requireUser(req);
@@ -24,6 +24,6 @@ export async function POST(req: Request) {
   if (owner && (await repo.countOwnWords(owner)) + clean.length > MAX_OWN_WORDS) {
     return badRequest(`You can have up to ${MAX_OWN_WORDS} of your own words.`);
   }
-  const count = await repo.putWords(owner, clean);
+  const count = await repo.putWords(owner, auth.user.courseId, clean);
   return ok({ ok: true, count });
 }

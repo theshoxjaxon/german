@@ -9,10 +9,11 @@
  */
 import { createHash, randomBytes } from 'node:crypto';
 import { COHORTS, computeAnalytics, WEEKS, type Analytics, type Period } from '../analytics';
+import { DEFAULT_COURSE, isTargetLang, type Course, type TargetLang } from '../courses';
 import { cardFlags, dayKey, diffActivity, isRecalled, lastDays, masteredAt, safeTimeZone, shiftDay, streakFrom } from '../stats';
 import {
   DEFAULT_PREFS, MAX_OWN_WORDS,
-  isClassMember, type CardDoc, type Cheer, type CheerKind, type ClassData, type ClassMember, type Me, type Prefs, type Role, type Word, type WordData,
+  type CardDoc, type Cheer, type CheerKind, type ClassData, type ClassMember, type Me, type Prefs, type Role, type Word, type WordData,
 } from '../types';
 import { DAY } from '../time';
 import { isAdminEmail } from './admins';
@@ -45,10 +46,20 @@ export interface UserRow extends Me {
   passwordHash: string | null; // null: signs in with Google only
   createdAt: number;
   lastSeenAt: number | null;
+  member: boolean; // a member of their active course (false only for a profile older than courses)
 }
 
-const USER_COLS = 'id, email, email_verified, google_id, avatar_url, display_name, role, in_class, created_at, last_seen_at, password_hash';
+/*
+ * A user always comes with their active course and their membership in it, so every route knows
+ * which course's words, leaderboard and teacher rights apply without asking the browser.
+ * No active course yet (or it was deleted): the default course.
+ */
+const USER_SELECT = `u.id, u.email, u.email_verified, u.google_id, u.avatar_url, u.display_name, u.role, u.created_at,
+  u.last_seen_at, u.password_hash, coalesce(u.course_id, '${DEFAULT_COURSE}') AS active_course,
+  m.user_id IS NOT NULL AS member, m.role AS course_role, m.on_board`;
+const USER_FROM = `users u LEFT JOIN course_members m ON m.user_id = u.id AND m.course_id = coalesce(u.course_id, '${DEFAULT_COURSE}')`;
 function toUser(r: Row): UserRow {
+  const role: Role = r.role === 'admin' ? 'admin' : 'student';
   return {
     id: str(r.id),
     email: str(r.email),
@@ -56,8 +67,11 @@ function toUser(r: Row): UserRow {
     googleId: r.google_id == null ? null : str(r.google_id),
     avatarUrl: r.avatar_url == null ? null : str(r.avatar_url),
     displayName: str(r.display_name),
-    role: r.role === 'admin' ? 'admin' : 'student',
-    inClass: r.in_class !== false,
+    role,
+    courseId: str(r.active_course),
+    teacher: role === 'admin' || r.course_role === 'teacher', // admins teach every course
+    inClass: r.on_board === true,
+    member: r.member === true,
     hasPassword: r.password_hash != null,
     hasGoogle: r.google_id != null,
     createdAt: num(r.created_at),
@@ -71,6 +85,8 @@ export const publicUser = (u: UserRow): Me => ({
   id: u.id,
   displayName: u.displayName,
   role: u.role,
+  courseId: u.courseId,
+  teacher: u.teacher,
   inClass: u.inClass,
   avatarUrl: u.avatarUrl,
   hasPassword: u.hasPassword,
@@ -82,22 +98,23 @@ export const publicUser = (u: UserRow): Me => ({
 export async function findUserByEmail(email: string): Promise<UserRow | null> {
   if (!email) return null;
   const db = await getDb();
-  const r = await db.query(`SELECT ${USER_COLS} FROM users WHERE email = $1`, [email]);
+  const r = await db.query(`SELECT ${USER_SELECT} FROM ${USER_FROM} WHERE u.email = $1`, [email]);
   return r.rows[0] ? toUser(r.rows[0]) : null;
 }
 
 export async function findUserById(id: string): Promise<UserRow | null> {
   const db = await getDb();
-  const r = await db.query(`SELECT ${USER_COLS} FROM users WHERE id = $1`, [id]);
+  const r = await db.query(`SELECT ${USER_SELECT} FROM ${USER_FROM} WHERE u.id = $1`, [id]);
   return r.rows[0] ? toUser(r.rows[0]) : null;
 }
 
 const isUniqueViolation = (e: unknown) => (e as { code?: string }).code === '23505' || /unique/i.test(String((e as Error).message));
 
 /**
- * Create a profile. Everyone is in the class (no class code for now). An ADMIN_EMAILS address
- * becomes admin right away only when it is already verified (signing up with Google).
- * `visitorId` (the browser's anonymous id) records that this browser joined, for the
+ * Create a profile in a course (`courseId`: the one the person picked or followed a link to;
+ * unknown → the default course). Everyone is on its leaderboard (no class code for now). An
+ * ADMIN_EMAILS address becomes admin right away only when it is already verified (signing up with
+ * Google). `visitorId` (the browser's anonymous id) records that this browser joined, for the
  * Visit → Try → Join funnel. 'taken': the email (or Google account) already has a profile.
  */
 export async function createUser(
@@ -109,6 +126,7 @@ export async function createUser(
     avatarUrl?: string | null;
     emailVerified?: boolean;
     visitorId?: string | null;
+    courseId?: string | null;
   },
   now = Date.now(),
 ): Promise<UserRow | 'taken'> {
@@ -117,20 +135,26 @@ export async function createUser(
   const verified = input.emailVerified ?? false;
   try {
     await db.query(
-      `WITH u AS (
-         INSERT INTO users (id, email, display_name, password_hash, google_id, avatar_url, email_verified, role, in_class, created_at, updated_at, last_seen_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9, $9, $9)
-         RETURNING id
+      `WITH course AS (
+         SELECT coalesce((SELECT id FROM courses WHERE id = $12), (SELECT id FROM courses WHERE id = '${DEFAULT_COURSE}')) AS id
+       ), u AS (
+         INSERT INTO users (id, email, display_name, password_hash, google_id, avatar_url, email_verified, role, in_class, created_at, updated_at, last_seen_at, course_id)
+         SELECT $1, $2, $3, $4, $5, $6, $7, $8, true, $9, $9, $9, id FROM course
+         RETURNING id, course_id
+       ), member AS (
+         INSERT INTO course_members (course_id, user_id, joined_at) SELECT course_id, id, $9 FROM u WHERE course_id IS NOT NULL
        ), visitor AS (
-         INSERT INTO visitors (id, first_day, last_day, user_id, joined_day)
-         SELECT $11, $10, $10, id, $10 FROM u WHERE $11::text IS NOT NULL
-         ON CONFLICT (id) DO UPDATE SET last_day = excluded.last_day, user_id = excluded.user_id, joined_day = excluded.joined_day
+         INSERT INTO visitors (id, first_day, last_day, user_id, joined_day, course_id)
+         SELECT $11, $10, $10, id, $10, course_id FROM u WHERE $11::text IS NOT NULL
+         ON CONFLICT (id) DO UPDATE SET last_day = excluded.last_day, user_id = excluded.user_id, joined_day = excluded.joined_day,
+           course_id = coalesce(excluded.course_id, visitors.course_id)
            WHERE visitors.user_id IS NULL
        )
        INSERT INTO activity (user_id, day, visits) SELECT id, $10, 1 FROM u`,
       [
         id, input.email, input.displayName, input.passwordHash ?? null, input.googleId ?? null, input.avatarUrl ?? null,
         verified, verified && isAdminEmail(input.email) ? 'admin' : 'student', now, todayKey(now), input.visitorId ?? null,
+        input.courseId ?? null,
       ],
     );
   } catch (e) {
@@ -144,7 +168,7 @@ export async function createUser(
 export async function ensureAdminRole(user: UserRow): Promise<UserRow> {
   if (user.role === 'admin' || !user.emailVerified || !isAdminEmail(user.email)) return user;
   await setRole(user.id, 'admin');
-  return { ...user, role: 'admin' };
+  return { ...user, role: 'admin', teacher: true };
 }
 
 export interface GoogleProfile {
@@ -170,16 +194,16 @@ export interface GoogleProfile {
  */
 export async function googleSignIn(
   g: GoogleProfile,
-  opts: { visitorId?: string | null } = {},
+  opts: { visitorId?: string | null; courseId?: string | null } = {},
   now = Date.now(),
 ): Promise<{ user: UserRow; created: boolean } | 'unverified' | 'other-google'> {
   const db = await getDb();
   for (let attempt = 0; attempt < 2; attempt++) {
     const known = await db.query(
-      `UPDATE users SET avatar_url = COALESCE($2, avatar_url), updated_at = $3 WHERE google_id = $1 RETURNING ${USER_COLS}`,
+      'UPDATE users SET avatar_url = COALESCE($2, avatar_url), updated_at = $3 WHERE google_id = $1 RETURNING id',
       [g.sub, g.picture, now],
     );
-    if (known.rows[0]) return { user: toUser(known.rows[0]), created: false };
+    if (known.rows[0]) return { user: (await findUserById(str(known.rows[0].id)))!, created: false };
     if (!g.emailVerified) return 'unverified';
 
     const linked = await db.query(
@@ -187,18 +211,18 @@ export async function googleSignIn(
          UPDATE users SET google_id = $2, avatar_url = COALESCE(avatar_url, $3), email_verified = true, updated_at = $4,
            password_hash = CASE WHEN email_verified THEN password_hash END
          WHERE email = $1 AND google_id IS NULL
-         RETURNING ${USER_COLS}, (SELECT NOT email_verified FROM users WHERE email = $1) AS was_unverified
+         RETURNING id, (SELECT NOT email_verified FROM users WHERE email = $1) AS was_unverified
        ), signout AS (
          DELETE FROM sessions WHERE user_id IN (SELECT id FROM link WHERE was_unverified)
        )
-       SELECT * FROM link`,
+       SELECT id FROM link`,
       [g.email, g.sub, g.picture, now],
     );
-    if (linked.rows[0]) return { user: toUser(linked.rows[0]), created: false };
+    if (linked.rows[0]) return { user: (await findUserById(str(linked.rows[0].id)))!, created: false };
     if (await findUserByEmail(g.email)) return 'other-google';
 
     const created = await createUser(
-      { email: g.email, displayName: g.name, googleId: g.sub, avatarUrl: g.picture, emailVerified: true, visitorId: opts.visitorId },
+      { email: g.email, displayName: g.name, googleId: g.sub, avatarUrl: g.picture, emailVerified: true, visitorId: opts.visitorId, courseId: opts.courseId },
       now,
     );
     if (created !== 'taken') return { user: created, created: true };
@@ -212,12 +236,77 @@ export async function setPasswordHash(userId: string, passwordHash: string, now 
   await db.query('UPDATE users SET password_hash = $2, updated_at = $3 WHERE id = $1', [userId, passwordHash, now]);
 }
 
-/** Admins take someone off the leaderboard or put them back (off it, they keep studying as usual). */
-export async function setInClass(userId: string, inClass: boolean): Promise<void> {
+
+/* ============================== courses ============================== */
+
+const toCourse = (r: Row): Course => ({
+  id: str(r.id),
+  name: str(r.name),
+  targetLang: (isTargetLang(r.target_lang) ? r.target_lang : 'de') as TargetLang,
+  note: str(r.note),
+  currentLesson: r.current_lesson ? str(r.current_lesson) : null,
+  words: num(r.words),
+});
+const COURSE_SELECT = `SELECT c.id, c.name, c.target_lang, c.note, c.current_lesson,
+  (SELECT count(*)::int FROM words w WHERE w.course_id = c.id AND w.owner_id IS NULL) AS words FROM courses c`;
+
+/** Every course, in the order the picker shows them. */
+export async function listCourses(): Promise<Course[]> {
   const db = await getDb();
-  await db.query('UPDATE users SET in_class = $2 WHERE id = $1', [userId, inClass]);
+  const r = await db.query(`${COURSE_SELECT} ORDER BY c.sort, c.name`);
+  return r.rows.map(toCourse);
 }
 
+export async function getCourse(id: string): Promise<Course | null> {
+  const db = await getDb();
+  const r = await db.query(`${COURSE_SELECT} WHERE c.id = $1`, [id]);
+  return r.rows[0] ? toCourse(r.rows[0]) : null;
+}
+
+/** A new course (by an admin). Its id is also its link, /c/<id>. 'taken': that id is in use. */
+export async function createCourse(
+  c: { id: string; name: string; targetLang: TargetLang; note?: string }, now = Date.now(),
+): Promise<'ok' | 'taken'> {
+  const db = await getDb();
+  const r = await db.query(
+    `INSERT INTO courses (id, name, target_lang, note, sort, created_at)
+     VALUES ($1, $2, $3, $4, (SELECT coalesce(max(sort), 0) + 1 FROM courses), $5)
+     ON CONFLICT (id) DO NOTHING RETURNING id`,
+    [c.id, c.name, c.targetLang, c.note ?? '', now],
+  );
+  return r.rowCount ? 'ok' : 'taken';
+}
+
+/**
+ * Make `courseId` your active course, joining it first if you're new to it (on its leaderboard,
+ * as a student). Your progress in other courses stays. False when there is no such course.
+ */
+export async function joinCourse(userId: string, courseId: string, now = Date.now()): Promise<boolean> {
+  const db = await getDb();
+  const r = await db.query(
+    `WITH c AS (SELECT id FROM courses WHERE id = $2), m AS (
+       INSERT INTO course_members (course_id, user_id, joined_at) SELECT id, $1, $3 FROM c
+       ON CONFLICT (course_id, user_id) DO NOTHING
+     )
+     UPDATE users SET course_id = c.id FROM c WHERE users.id = $1 RETURNING users.id`,
+    [userId, courseId, now],
+  );
+  return r.rowCount > 0;
+}
+
+/** Teachers take someone off their course's leaderboard or put them back (off it, they keep studying as usual). */
+export async function setOnBoard(courseId: string, userId: string, onBoard: boolean): Promise<void> {
+  const db = await getDb();
+  await db.query('UPDATE course_members SET on_board = $3 WHERE course_id = $1 AND user_id = $2', [courseId, userId, onBoard]);
+}
+
+/** A course's teachers edit its shared words, set its lesson and see its dashboard. */
+export async function setCourseRole(courseId: string, userId: string, role: 'student' | 'teacher'): Promise<void> {
+  const db = await getDb();
+  await db.query('UPDATE course_members SET role = $3 WHERE course_id = $1 AND user_id = $2', [courseId, userId, role]);
+}
+
+/** The platform role: admins (ADMIN_EMAILS) run the whole app and teach every course. */
 export async function setRole(userId: string, role: Role): Promise<void> {
   const db = await getDb();
   await db.query('UPDATE users SET role = $2 WHERE id = $1', [userId, role]);
@@ -244,12 +333,14 @@ export async function recordVisit(userId: string, now = Date.now()): Promise<voi
  * Someone opened the app without a profile (tried: and answered a card as a guest). Counted per
  * browser and day; the id is random and says nothing about the person.
  */
-export async function recordVisitor(visitorId: string, tried: boolean, now = Date.now()): Promise<void> {
+export async function recordVisitor(visitorId: string, tried: boolean, courseId: string | null, now = Date.now()): Promise<void> {
   const db = await getDb();
   await db.query(
-    `INSERT INTO visitors (id, first_day, last_day, tried_day) VALUES ($1, $2, $2, CASE WHEN $3::boolean THEN $2 END)
-     ON CONFLICT (id) DO UPDATE SET last_day = excluded.last_day, tried_day = COALESCE(visitors.tried_day, excluded.tried_day)`,
-    [visitorId, todayKey(now), tried],
+    `INSERT INTO visitors (id, first_day, last_day, tried_day, course_id)
+     VALUES ($1, $2, $2, CASE WHEN $3::boolean THEN $2 END, (SELECT id FROM courses WHERE id = $4))
+     ON CONFLICT (id) DO UPDATE SET last_day = excluded.last_day, tried_day = COALESCE(visitors.tried_day, excluded.tried_day),
+       course_id = COALESCE(excluded.course_id, visitors.course_id)`,
+    [visitorId, todayKey(now), tried, courseId],
   );
 }
 
@@ -273,8 +364,8 @@ export async function createSession(userId: string, ttlMs: number, now = Date.no
 export async function findSession(token: string, now = Date.now()): Promise<{ user: UserRow; expiresAt: number } | null> {
   const db = await getDb();
   const r = await db.query(
-    `SELECT ${USER_COLS.split(', ').map((c) => `u.${c}`).join(', ')}, s.expires_at AS session_expires
-     FROM sessions s JOIN users u ON u.id = s.user_id
+    `SELECT ${USER_SELECT}, s.expires_at AS session_expires
+     FROM ${USER_FROM} JOIN sessions s ON s.user_id = u.id
      WHERE s.id = $1 AND s.expires_at > $2`,
     [hashToken(token), now],
   );
@@ -343,19 +434,19 @@ export async function useResetToken(token: string, passwordHash: string, now = D
 
 /* ============================== words ============================== */
 /*
- * Two kinds of words live in one table:
- *   owner_id IS NULL  → a shared lesson word: everyone studies it, only admins change it
+ * Every word belongs to a course, and two kinds of words live in one table:
+ *   owner_id IS NULL  → a shared lesson word: everyone in the course studies it, only its teachers change it
  *   owner_id = <user> → that person's own word: only they see it, study it and change it
- * Admins write shared words; everyone else writes their own. `owner` below is that value.
+ * Teachers write their course's shared words; everyone else writes their own. `owner` below is that value.
  */
 
-/** Which words a write goes to: shared (null) for admins, their own for everyone else. */
-export const ownerFor = (user: { id: string; role: Role }): string | null => (user.role === 'admin' ? null : user.id);
+/** Which words a write goes to: shared (null) for the course's teachers, their own for everyone else. */
+export const ownerFor = (user: { id: string; teacher: boolean }): string | null => (user.teacher ? null : user.id);
 
-/** The shared words plus your own (guests: shared only). */
-export async function listWords(userId: string | null): Promise<Record<string, Word>> {
+/** A course's shared words plus your own words in it (guests: shared only). */
+export async function listWords(userId: string | null, courseId: string): Promise<Record<string, Word>> {
   const db = await getDb();
-  const r = await db.query('SELECT id, owner_id, data FROM words WHERE owner_id IS NULL OR owner_id = $1', [userId]);
+  const r = await db.query('SELECT id, owner_id, data FROM words WHERE course_id = $2 AND (owner_id IS NULL OR owner_id = $1)', [userId, courseId]);
   const out: Record<string, Word> = {};
   for (const row of r.rows) {
     const w = sanitizeWord(parse(row.data));
@@ -367,39 +458,44 @@ export async function listWords(userId: string | null): Promise<Record<string, W
 }
 
 /**
- * Create or update one word. 'forbidden': the id belongs to a word you may not change
- * (someone else's, or a shared one for a student). 'limit': too many own words.
+ * Create or update one word in a course. 'forbidden': the id belongs to a word you may not change
+ * (someone else's, a shared one for a student, or one in another course). 'limit': too many own words.
  */
-export async function saveWord(owner: string | null, id: string, data: WordData, now = Date.now()): Promise<'ok' | 'forbidden' | 'limit'> {
+export async function saveWord(
+  owner: string | null, courseId: string, id: string, data: WordData, now = Date.now(),
+): Promise<'ok' | 'forbidden' | 'limit'> {
   const db = await getDb();
   const r = await db.query(
-    `INSERT INTO words (id, owner_id, data, updated_at)
-     SELECT $1, $2, $3::jsonb, $4
+    `INSERT INTO words (id, owner_id, course_id, data, updated_at)
+     SELECT $1, $2, $6, $3::jsonb, $4
      WHERE $2::text IS NULL OR EXISTS (SELECT 1 FROM words WHERE id = $1) OR (SELECT count(*) FROM words WHERE owner_id = $2) < $5
      ON CONFLICT (id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at
-       WHERE words.owner_id IS NOT DISTINCT FROM excluded.owner_id
+       WHERE words.owner_id IS NOT DISTINCT FROM excluded.owner_id AND words.course_id = excluded.course_id
      RETURNING id`,
-    [id, owner, JSON.stringify(data), now, MAX_OWN_WORDS],
+    [id, owner, JSON.stringify(data), now, MAX_OWN_WORDS, courseId],
   );
   if (r.rowCount) return 'ok';
   const exists = await db.query('SELECT 1 FROM words WHERE id = $1', [id]);
   return exists.rowCount ? 'forbidden' : 'limit';
 }
 
-/** Add many words at once (Import). Ids that belong to someone else are skipped. Returns how many were saved. */
-export async function putWords(owner: string | null, words: { id: string; data: WordData }[], now = Date.now()): Promise<number> {
+/** Add many words to a course at once (Import). Ids that belong to someone else are skipped. Returns how many were saved. */
+export async function putWords(
+  owner: string | null, courseId: string, words: { id: string; data: WordData }[], now = Date.now(),
+): Promise<number> {
   if (!words.length) return 0;
   const db = await getDb();
   const r = await db.query(
-    `INSERT INTO words (id, owner_id, data, updated_at)
-     SELECT x.id, $2, x.data, $3 FROM jsonb_to_recordset($1::jsonb) AS x(id text, data jsonb)
+    `INSERT INTO words (id, owner_id, course_id, data, updated_at)
+     SELECT x.id, $2, $4, x.data, $3 FROM jsonb_to_recordset($1::jsonb) AS x(id text, data jsonb)
      ON CONFLICT (id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at
-       WHERE words.owner_id IS NOT DISTINCT FROM excluded.owner_id`,
-    [JSON.stringify(words), owner, now],
+       WHERE words.owner_id IS NOT DISTINCT FROM excluded.owner_id AND words.course_id = excluded.course_id`,
+    [JSON.stringify(words), owner, now, courseId],
   );
   return r.rowCount;
 }
 
+/** Your own words in all courses (the MAX_OWN_WORDS limit is per person). */
 export async function countOwnWords(userId: string): Promise<number> {
   const db = await getDb();
   const r = await db.query('SELECT count(*)::int AS n FROM words WHERE owner_id = $1', [userId]);
@@ -407,9 +503,12 @@ export async function countOwnWords(userId: string): Promise<number> {
 }
 
 /** Delete a word you may change. Everyone's progress on it goes too (ON DELETE CASCADE). */
-export async function deleteWord(owner: string | null, id: string): Promise<'ok' | 'forbidden'> {
+export async function deleteWord(owner: string | null, courseId: string, id: string): Promise<'ok' | 'forbidden'> {
   const db = await getDb();
-  const r = await db.query('DELETE FROM words WHERE id = $1 AND owner_id IS NOT DISTINCT FROM $2 RETURNING id', [id, owner]);
+  const r = await db.query(
+    'DELETE FROM words WHERE id = $1 AND owner_id IS NOT DISTINCT FROM $2 AND course_id = $3 RETURNING id',
+    [id, owner, courseId],
+  );
   if (r.rowCount) return 'ok';
   const exists = await db.query('SELECT 1 FROM words WHERE id = $1', [id]);
   return exists.rowCount ? 'forbidden' : 'ok'; // already gone is fine
@@ -417,9 +516,13 @@ export async function deleteWord(owner: string | null, id: string): Promise<'ok'
 
 /* ============================== progress (per person) ============================== */
 
-export async function listCards(userId: string): Promise<Record<string, CardDoc>> {
+/** Your progress on a course's words. */
+export async function listCards(userId: string, courseId: string): Promise<Record<string, CardDoc>> {
   const db = await getDb();
-  const r = await db.query('SELECT word_id, data FROM cards WHERE user_id = $1', [userId]);
+  const r = await db.query(
+    'SELECT c.word_id, c.data FROM cards c JOIN words w ON w.id = c.word_id WHERE c.user_id = $1 AND w.course_id = $2',
+    [userId, courseId],
+  );
   const out: Record<string, CardDoc> = {};
   for (const row of r.rows) {
     const c = sanitizeCard(parse(row.data));
@@ -470,9 +573,10 @@ export async function putCard(userId: string, wordId: string, doc: CardDoc | nul
   return 'ok';
 }
 
-export async function deleteAllCards(userId: string): Promise<void> {
+/** Reset your progress in one course. Other courses keep theirs. */
+export async function deleteAllCards(userId: string, courseId: string): Promise<void> {
   const db = await getDb();
-  await db.query('DELETE FROM cards WHERE user_id = $1', [userId]);
+  await db.query('DELETE FROM cards c USING words w WHERE w.id = c.word_id AND c.user_id = $1 AND w.course_id = $2', [userId, courseId]);
 }
 
 /**
@@ -561,18 +665,28 @@ export async function myStreak(userId: string, now = Date.now()): Promise<{ days
 
 /* ============================== cheers ============================== */
 
-export async function sendCheer(fromId: string, toId: string, kind: CheerKind, now = Date.now()): Promise<'ok' | 'already' | 'no-user' | 'self'> {
+/** Someone on a course's leaderboard (or one of its teachers): the people you can cheer there. */
+const ON_COURSE_BOARD = `SELECT 1 FROM course_members m JOIN users u ON u.id = m.user_id
+  WHERE m.course_id = $7 AND m.user_id = $3 AND (m.on_board OR m.role = 'teacher' OR u.role = 'admin')`;
+
+/** Cheer a classmate in `courseId` (your active course). One per classmate per day. */
+export async function sendCheer(
+  fromId: string, toId: string, kind: CheerKind, courseId: string, now = Date.now(),
+): Promise<'ok' | 'already' | 'no-user' | 'self'> {
   if (fromId === toId) return 'self';
   const db = await getDb();
   const r = await db.query(
-    `INSERT INTO cheers (id, from_user, to_user, kind, day, created_at)
-     SELECT $1, $2, $3, $4, $5, $6 WHERE EXISTS (SELECT 1 FROM users WHERE id = $3 AND (in_class OR role = 'admin'))
-     ON CONFLICT (from_user, to_user, day) DO NOTHING RETURNING id`,
-    [`c_${randomBytes(9).toString('base64url')}`, fromId, toId, kind, todayKey(now), now],
+    `WITH sent AS (
+       INSERT INTO cheers (id, from_user, to_user, kind, day, created_at)
+       SELECT $1, $2, $3, $4, $5, $6 WHERE EXISTS (${ON_COURSE_BOARD})
+       ON CONFLICT (from_user, to_user, day) DO NOTHING RETURNING id
+     )
+     SELECT (SELECT count(*)::int FROM sent) AS sent, EXISTS (${ON_COURSE_BOARD}) AS listed`,
+    [`c_${randomBytes(9).toString('base64url')}`, fromId, toId, kind, todayKey(now), now, courseId],
   );
-  if (r.rowCount) return 'ok';
-  const to = await findUserById(toId);
-  return to && isClassMember(to) ? 'already' : 'no-user';
+  const row = r.rows[0];
+  if (num(row?.sent)) return 'ok';
+  return row?.listed ? 'already' : 'no-user';
 }
 
 export async function unseenCheers(userId: string): Promise<Cheer[]> {
@@ -604,18 +718,30 @@ interface PersonActivity {
   visitDays: Set<string>;
 }
 
-/** Everyone with their word counts and the last ~13 months of activity: three queries, run in parallel. */
-async function loadEveryone(now: number) {
+/**
+ * A course's members with their word counts in it and the last ~13 months of activity: three
+ * queries, run in parallel. Activity (answers, streaks) counts all of a person's courses.
+ */
+async function loadEveryone(now: number, courseId: string) {
   const db = await getDb();
   const since = shiftDay(todayKey(now), -400);
   const [users, cards, acts] = await Promise.all([
     db.query(
-      `SELECT id, email, display_name, avatar_url, role, in_class, created_at, last_seen_at,
-              google_id IS NOT NULL AS has_google, password_hash IS NOT NULL AS has_password
-       FROM users ORDER BY created_at`,
+      `SELECT u.id, u.email, u.display_name, u.avatar_url, u.role, m.role AS course_role, m.on_board, m.joined_at,
+              u.created_at, u.last_seen_at, u.google_id IS NOT NULL AS has_google, u.password_hash IS NOT NULL AS has_password
+       FROM course_members m JOIN users u ON u.id = m.user_id WHERE m.course_id = $1 ORDER BY m.joined_at`,
+      [courseId],
     ),
-    db.query('SELECT user_id, sum(started)::int AS active, sum(mature)::int AS mature FROM cards GROUP BY user_id'),
-    db.query('SELECT user_id, day, answers, visits FROM activity WHERE day >= $1', [since]),
+    db.query(
+      `SELECT c.user_id, sum(c.started)::int AS active, sum(c.mature)::int AS mature
+       FROM cards c JOIN words w ON w.id = c.word_id WHERE w.course_id = $1 GROUP BY c.user_id`,
+      [courseId],
+    ),
+    db.query(
+      `SELECT a.user_id, a.day, a.answers, a.visits FROM activity a
+       JOIN course_members m ON m.user_id = a.user_id AND m.course_id = $2 WHERE a.day >= $1`,
+      [since, courseId],
+    ),
   ]);
   const counts = new Map(cards.rows.map((r) => [str(r.user_id), { active: num(r.active), mature: num(r.mature) }]));
   const activity = new Map<string, PersonActivity>();
@@ -640,8 +766,10 @@ async function loadEveryone(now: number) {
       hasGoogle: r.has_google === true,
       hasPassword: r.has_password === true,
       role: (r.role === 'admin' ? 'admin' : 'student') as Role,
-      inClass: r.in_class !== false,
+      teacher: r.role === 'admin' || r.course_role === 'teacher',
+      inClass: r.on_board !== false,
       createdAt: num(r.created_at),
+      joinedAt: num(r.joined_at), // joined this course
       lastSeenAt: r.last_seen_at == null ? null : num(r.last_seen_at),
       ...(counts.get(str(r.id)) ?? { active: 0, mature: 0 }),
       act: activity.get(str(r.id)) ?? empty,
@@ -651,20 +779,23 @@ async function loadEveryone(now: number) {
 
 const sumDays = (a: PersonActivity, days: string[]) => days.reduce((n, d) => n + (a.answersByDay.get(d) ?? 0), 0);
 
-/** Everyone on the leaderboard, with the numbers the Class tab shows. No email addresses: classmates never see them. */
-export async function classOverview(viewerId: string, now = Date.now()): Promise<ClassData> {
+/**
+ * Everyone on a course's leaderboard, with the numbers the Class tab shows. No email addresses:
+ * classmates never see them.
+ */
+export async function classOverview(viewerId: string, courseId: string, now = Date.now()): Promise<ClassData> {
   const today = todayKey(now);
   const week = lastDays(today, 7);
   const db = await getDb();
   const [{ users }, cheers] = await Promise.all([
-    loadEveryone(now),
+    loadEveryone(now, courseId),
     db.query('SELECT to_user FROM cheers WHERE from_user = $1 AND day = $2', [viewerId, today]),
   ]);
   const cheered = new Set(cheers.rows.map((r) => str(r.to_user)));
-  const members: ClassMember[] = users.filter(isClassMember).map((u) => ({
+  const members: ClassMember[] = users.filter((u) => u.teacher || u.inClass).map((u) => ({
     id: u.id,
     displayName: u.displayName,
-    role: u.role,
+    role: u.teacher ? 'admin' : 'student',
     activeWords: u.active,
     matureWords: u.mature,
     streak: streakFrom(u.act.studyDays, today),
@@ -681,8 +812,8 @@ export interface AdminStats {
   today: string;
   timeZone: string;
   totals: {
-    profiles: number;
-    admins: number;
+    profiles: number; // members of the course
+    admins: number; // its teachers (admins teach every course)
     newThisWeek: number;
     studiedToday: number; // daily active (answered at least one card)
     openedToday: number; // opened the app today
@@ -701,10 +832,11 @@ export interface AdminStats {
     avatarUrl: string | null;
     hasGoogle: boolean;
     hasPassword: boolean;
-    role: Role;
-    inClass: boolean; // on the leaderboard
+    role: Role; // 'admin': runs the whole app
+    teacher: boolean; // teaches this course (admins too)
+    inClass: boolean; // on this course's leaderboard
     createdAt: number;
-    joinedDay: string; // 'YYYY-MM-DD' in the center's time zone
+    joinedDay: string; // joined this course: 'YYYY-MM-DD' in the center's time zone
     lastSeenAt: number | null;
     streak: number;
     activeWords: number;
@@ -716,20 +848,21 @@ export interface AdminStats {
   decks: { deck: string; words: number }[]; // the shared decks, for picking it
 }
 
-export async function adminStats(now = Date.now()): Promise<AdminStats> {
+/** /admin for one course: its members, their activity and its lesson. */
+export async function adminStats(courseId: string, now = Date.now()): Promise<AdminStats> {
   const today = todayKey(now);
   const days = lastDays(today, 30);
   const week = lastDays(today, 7);
-  const [{ users }, classLesson, decks] = await Promise.all([loadEveryone(now), getClassLesson(), sharedDecks()]);
+  const [{ users }, classLesson, decks] = await Promise.all([loadEveryone(now, courseId), getClassLesson(courseId), sharedDecks(courseId)]);
   const studiedOn = (day: string) => users.filter((u) => u.act.studyDays.has(day)).length;
   const studiedIn = (range: string[]) => users.filter((u) => range.some((d) => u.act.studyDays.has(d))).length;
-  const createdDay = (u: (typeof users)[number]) => dayKey(u.createdAt, TIMEZONE);
+  const createdDay = (u: (typeof users)[number]) => dayKey(u.joinedAt, TIMEZONE);
   return {
     today,
     timeZone: TIMEZONE,
     totals: {
       profiles: users.length,
-      admins: users.filter((u) => u.role === 'admin').length,
+      admins: users.filter((u) => u.teacher).length,
       newThisWeek: users.filter((u) => createdDay(u) >= week[0]).length,
       studiedToday: studiedOn(today),
       openedToday: users.filter((u) => u.act.visitDays.has(today)).length,
@@ -750,6 +883,7 @@ export async function adminStats(now = Date.now()): Promise<AdminStats> {
         hasGoogle: u.hasGoogle,
         hasPassword: u.hasPassword,
         role: u.role,
+        teacher: u.teacher,
         inClass: u.inClass,
         createdAt: u.createdAt,
         joinedDay: createdDay(u),
@@ -766,11 +900,15 @@ export async function adminStats(now = Date.now()): Promise<AdminStats> {
   };
 }
 
+/** A course's students: members who neither teach it nor run the app. Uses $1 for the course. */
+const STUDENTS = `SELECT m.user_id, m.joined_at, m.on_board FROM course_members m JOIN users u ON u.id = m.user_id
+  WHERE m.course_id = $1 AND m.role = 'student' AND u.role = 'student'`;
+
 /**
- * Everything /admin/analytics shows (see lib/analytics.ts for the definitions). Six small queries
- * in parallel, each served by an index; the arithmetic happens in computeAnalytics().
+ * Everything /admin/analytics shows for one course (see lib/analytics.ts for the definitions).
+ * Six small queries in parallel, each served by an index; the arithmetic happens in computeAnalytics().
  */
-export async function analytics(period: Period, now = Date.now()): Promise<Analytics> {
+export async function analytics(period: Period, courseId: string, now = Date.now()): Promise<Analytics> {
   const db = await getDb();
   const today = todayKey(now);
   // Far enough back for the weekly charts, the retention cohorts and the funnel's period
@@ -778,34 +916,38 @@ export async function analytics(period: Period, now = Date.now()): Promise<Analy
   const since = period === 'all' ? '' : [charts, shiftDay(today, -Number(period))].sort()[0];
   const masteredSince = now - (7 * WEEKS + 2) * DAY;
   const [students, study, mastered, cheers, visitors, totals] = await Promise.all([
-    db.query(`SELECT id, created_at, in_class FROM users WHERE role = 'student'`),
+    db.query(STUDENTS, [courseId]),
     db.query(
       `SELECT a.user_id, a.day, a.answers, a.new_cards, a.reviews, a.recalled
-       FROM activity a JOIN users u ON u.id = a.user_id
-       WHERE u.role = 'student' AND a.answers > 0 AND a.day >= $1`,
-      [since],
+       FROM activity a JOIN (${STUDENTS}) s ON s.user_id = a.user_id
+       WHERE a.answers > 0 AND a.day >= $2`,
+      [courseId, since],
     ),
     db.query(
-      `SELECT c.user_id, c.mastered_at FROM cards c JOIN users u ON u.id = c.user_id
-       WHERE u.role = 'student' AND c.mastered_at >= $1`,
-      [masteredSince],
+      `SELECT c.user_id, c.mastered_at FROM cards c JOIN (${STUDENTS}) s ON s.user_id = c.user_id
+       JOIN words w ON w.id = c.word_id AND w.course_id = $1
+       WHERE c.mastered_at >= $2`,
+      [courseId, masteredSince],
     ),
-    db.query(`SELECT c.day FROM cheers c JOIN users u ON u.id = c.from_user WHERE u.role = 'student' AND c.day >= $1`, [charts]),
-    db.query('SELECT first_day, last_day, tried_day, joined_day FROM visitors WHERE first_day >= $1 OR last_day >= $2', [
+    db.query(`SELECT c.day FROM cheers c JOIN (${STUDENTS}) s ON s.user_id = c.from_user WHERE c.day >= $2`, [courseId, charts]),
+    db.query('SELECT first_day, last_day, tried_day, joined_day FROM visitors WHERE course_id = $1 AND (first_day >= $2 OR last_day >= $3)', [
+      courseId,
       since,
       shiftDay(today, -6),
     ]),
     db.query(
-      `SELECT (SELECT count(*)::int FROM cards c JOIN users u ON u.id = c.user_id
-               WHERE u.role = 'student' AND c.mastered_at IS NOT NULL) AS mastered,
-              (SELECT min(first_day) FROM visitors) AS visitors_since`,
+      `SELECT (SELECT count(*)::int FROM cards c JOIN (${STUDENTS}) s ON s.user_id = c.user_id
+               JOIN words w ON w.id = c.word_id AND w.course_id = $1
+               WHERE c.mastered_at IS NOT NULL) AS mastered,
+              (SELECT min(first_day) FROM visitors WHERE course_id = $1) AS visitors_since`,
+      [courseId],
     ),
   ]);
   const t = totals.rows[0] ?? {};
   return computeAnalytics(
     {
       today,
-      students: students.rows.map((r) => ({ id: str(r.id), joinedDay: dayKey(num(r.created_at), TIMEZONE), inClass: r.in_class !== false })),
+      students: students.rows.map((r) => ({ id: str(r.user_id), joinedDay: dayKey(num(r.joined_at), TIMEZONE), inClass: r.on_board !== false })),
       study: study.rows.map((r) => ({
         userId: str(r.user_id),
         day: str(r.day),
@@ -831,34 +973,33 @@ export async function analytics(period: Period, now = Date.now()): Promise<Analy
 
 /* ============================== the class's lesson ============================== */
 
-/** The lesson the class is on ("Lektion 10"), set by a teacher in /admin. Null: not set (book order). */
-export async function getClassLesson(): Promise<string | null> {
+/** The lesson a course's class is on ("Lektion 10"), set by a teacher in /admin. Null: not set (book order). */
+export async function getClassLesson(courseId: string): Promise<string | null> {
   const db = await getDb();
-  const r = await db.query(`SELECT value FROM settings WHERE key = 'class_lesson'`);
-  return r.rows[0]?.value ? str(r.rows[0].value) : null;
+  const r = await db.query('SELECT current_lesson FROM courses WHERE id = $1', [courseId]);
+  return r.rows[0]?.current_lesson ? str(r.rows[0].current_lesson) : null;
 }
 
-/** Set it to one of the shared decks, or clear it (null). False when no shared word has that deck. */
-export async function setClassLesson(deck: string | null): Promise<boolean> {
+/** Set it to one of the course's shared decks, or clear it (null). False when none of its shared words has that deck. */
+export async function setClassLesson(courseId: string, deck: string | null): Promise<boolean> {
   const db = await getDb();
-  if (!deck) {
-    await db.query(`DELETE FROM settings WHERE key = 'class_lesson'`);
-    return true;
-  }
   const r = await db.query(
-    `INSERT INTO settings (key, value)
-     SELECT 'class_lesson', $1 WHERE EXISTS (SELECT 1 FROM words WHERE owner_id IS NULL AND data->>'deck' = $1)
-     ON CONFLICT (key) DO UPDATE SET value = excluded.value
-     RETURNING value`,
-    [deck],
+    `UPDATE courses SET current_lesson = $2::text WHERE id = $1 AND ($2::text IS NULL OR EXISTS (
+       SELECT 1 FROM words WHERE owner_id IS NULL AND course_id = $1 AND data->>'deck' = $2::text
+     )) RETURNING id`,
+    [courseId, deck],
   );
   return r.rowCount > 0;
 }
 
-/** The shared decks with their word counts, for the admin's lesson picker. */
-export async function sharedDecks(): Promise<{ deck: string; words: number }[]> {
+/** A course's shared decks with their word counts, for the teacher's lesson picker. */
+export async function sharedDecks(courseId: string): Promise<{ deck: string; words: number }[]> {
   const db = await getDb();
-  const r = await db.query(`SELECT data->>'deck' AS deck, count(*)::int AS n FROM words WHERE owner_id IS NULL AND coalesce(data->>'deck', '') <> '' GROUP BY 1`);
+  const r = await db.query(
+    `SELECT data->>'deck' AS deck, count(*)::int AS n FROM words
+     WHERE course_id = $1 AND owner_id IS NULL AND coalesce(data->>'deck', '') <> '' GROUP BY 1`,
+    [courseId],
+  );
   const collator = new Intl.Collator('de', { numeric: true });
   return r.rows.map((row) => ({ deck: str(row.deck), words: num(row.n) })).sort((a, b) => collator.compare(a.deck, b.deck));
 }

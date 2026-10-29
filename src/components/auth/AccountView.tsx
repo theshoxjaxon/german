@@ -22,7 +22,7 @@ export function AccountView({ me }: { me: Me }) {
         <div>
           <p className="me-name">{me.displayName}</p>
           {me.email && <p className="muted small">{me.email}</p>}
-          <span className={`role-pill role-${me.role}`}>{t(me.role === 'admin' ? 'Admin · teacher' : me.inClass ? 'Student' : 'Off the leaderboard')}</span>
+          <span className={`role-pill role-${me.teacher ? 'admin' : 'student'}`}>{t(me.role === 'admin' ? 'Admin · teacher' : me.teacher ? 'Teacher' : me.inClass ? 'Student' : 'Off the leaderboard')}</span>
         </div>
       </div>
       {!me.email && <p className="hint">{t('Your email address stays private: classmates never see it.')}</p>}

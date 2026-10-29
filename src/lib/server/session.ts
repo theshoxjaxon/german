@@ -87,8 +87,11 @@ export async function requireUser(req: Request, opts: { admin?: boolean } = {}):
     if (token) jar.delete(SESSION_COOKIE); // stale cookie: clear it so /login doesn't bounce back
     return { response: json(401, 'Sign in to continue.') };
   }
-  const { user } = session;
+  let { user } = session;
   if (opts.admin && user.role !== 'admin') return { response: json(403, 'Only admins can do this.') };
+  // A profile made while an older version was still running (or whose course was deleted)
+  // joins its active course on its next request.
+  if (!user.member && (await repo.joinCourse(user.id, user.courseId, now))) user = { ...user, member: true, inClass: true };
   if (session.expiresAt - now < RENEW_BELOW) {
     const expiresAt = now + TTL;
     await repo.extendSession(token!, expiresAt);

@@ -18,7 +18,7 @@ export default function AdminPage() {
 
 async function AdminData() {
   await connection(); // everything below depends on the request and the current time
-  const r = await adminData('/admin', () => repo.adminStats());
+  const r = await adminData('/admin', (user) => repo.adminStats(user.courseId));
   if ('down' in r) return <DatabaseDown message={r.down} />;
   if ('student' in r) return <NotAdmin name={r.student} />;
   return <AdminDashboard stats={r.data} meId={r.user.id} />;

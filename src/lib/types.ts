@@ -113,8 +113,10 @@ export type Role = 'student' | 'admin';
 export interface Me {
   id: string;
   displayName: string;
-  role: Role;
-  inClass: boolean; // on the class leaderboard: everyone, unless a teacher took them off it
+  role: Role; // 'admin': runs the whole app (ADMIN_EMAILS)
+  courseId: string; // the course being studied now
+  teacher: boolean; // may change this course's lesson words and settings (its teachers, and admins)
+  inClass: boolean; // on this course's leaderboard: everyone, unless a teacher took them off it
   avatarUrl: string | null; // the Google profile photo
   /** Only admins see an email address, their own included: students never see one, not even theirs. */
   email?: string;
@@ -126,7 +128,7 @@ export interface Me {
  * On the class leaderboard: listed in the Class tab and can send cheers. Everyone who signs up
  * is (there's one class for now); a teacher can take someone off it. Admins always are.
  */
-export const isClassMember = (me: Pick<Me, 'role' | 'inClass'> | null | undefined) => !!me && (me.role === 'admin' || me.inClass);
+export const isClassMember = (me: Pick<Me, 'teacher' | 'inClass'> | null | undefined) => !!me && (me.teacher || me.inClass);
 
 export type CheerKind = 'keep-going' | 'great-streak' | 'study-together';
 export const CHEERS: Record<CheerKind, string> = {
@@ -146,7 +148,7 @@ export interface Cheer {
 export interface ClassMember {
   id: string;
   displayName: string;
-  role: Role;
+  role: Role; // 'admin': teaches this course (shown as "teacher")
   activeWords: number; // words started (learning or reviewing), not paused
   matureWords: number; // interval 21+ days
   streak: number; // days in a row with at least one answer

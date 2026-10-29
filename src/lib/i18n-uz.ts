@@ -412,6 +412,7 @@ export const UZ: Record<string, string> = {
   "Tap again to reset": "Oʻchirish uchun yana bosing",
   "Tap the card to turn it over": "Kartochkani aylantirish uchun ustiga bosing",
   "Tap to reveal": "Javobni koʻrish uchun bosing",
+  "Teacher": "Oʻqituvchi",
   "Thanks!": "Rahmat!",
   "That classmate no longer exists.": "Bu sinfdosh endi mavjud emas.",
   "That password is too long.": "Bu parol juda uzun.",

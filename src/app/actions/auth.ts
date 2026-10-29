@@ -10,6 +10,7 @@ import { redirect } from 'next/navigation';
 import { after } from 'next/server';
 import { cleanDisplayName, normalizeEmail, safeNext } from '@/lib/account-rules';
 import { changePasswordSchema, forgotSchema, formValues, loginSchema, parseForm, resetSchema, signupSchema } from '@/lib/auth-schemas';
+import { chosenCourse } from '@/lib/server/course';
 import { describeDbError } from '@/lib/server/db-health';
 import { appUrl, RESET_MINUTES, sendPasswordEmail } from '@/lib/server/mail';
 import { burnPasswordCheck, hashPassword, verifyPassword } from '@/lib/server/password';
@@ -83,6 +84,7 @@ export async function signup(_prev: FormState, form: FormData): Promise<FormStat
       displayName: name,
       passwordHash: await hashPassword(password),
       visitorId: VISITOR_RE.test(visitor) ? visitor : null,
+      courseId: await chosenCourse(),
     });
     if (user === 'taken') return { fieldErrors: { email: 'Email already registered.' }, fields };
     await startSession(user.id);

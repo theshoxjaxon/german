@@ -1,5 +1,7 @@
 import { badRequest, readJson } from '@/lib/server/http';
 import { clientIp, hit } from '@/lib/server/rate-limit';
+import { DEFAULT_COURSE } from '@/lib/courses';
+import { chosenCourse } from '@/lib/server/course';
 import * as repo from '@/lib/server/repo';
 import { VISITOR_RE } from '@/lib/text';
 
@@ -12,6 +14,6 @@ export async function POST(req: Request) {
   const id = typeof body?.id === 'string' ? body.id : '';
   if (!VISITOR_RE.test(id)) return badRequest('Send { id }.');
   if (!(await hit(`visit:${await clientIp()}`, 30, 60 * 60_000))) return new Response(null, { status: 429 });
-  await repo.recordVisitor(id, body?.tried === true);
+  await repo.recordVisitor(id, body?.tried === true, (await chosenCourse()) ?? DEFAULT_COURSE);
   return new Response(null, { status: 204 });
 }

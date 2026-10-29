@@ -1,5 +1,6 @@
 // Built-in word lists (shared lesson words). Each list is added to the database once:
 // see SEED_PACKS and src/lib/server/db.ts.
+import type { TargetLang } from './courses';
 import type { Pos, WordData } from './types';
 
 type SeedRow = [id: string, term: string, meaning: string, pos: Pos, pronunciation: string, forms: string, example: string, exampleTr: string, mnemonic: string, notes: string, tags: string[]];
@@ -700,23 +701,29 @@ const LEKTION_12: SeedRow[] = [
 /** One built-in list. `flag` is the settings key that records it was added, so it is added only once. */
 export interface SeedPack {
   flag: string;
+  course: string; // the course it belongs to (see SEED_COURSES)
   deck: string;
   rows: SeedRow[];
 }
 
+/** The built-in courses, created on the next start if they don't exist yet (a teacher's later changes stay). */
+export const SEED_COURSES: { id: string; name: string; targetLang: TargetLang; note: string; sort: number }[] = [
+  { id: 'german', name: 'German · Momente', targetLang: 'de', note: '', sort: 1 },
+];
+
 export const SEED_PACKS: SeedPack[] = [
-  { flag: 'seeded', deck: 'Lektion 3', rows: LEKTION_3 }, // the original first-start list
-  { flag: 'seeded:lektion-5', deck: 'Lektion 5', rows: LEKTION_5 },
-  { flag: 'seeded:lektion-7', deck: 'Lektion 7', rows: LEKTION_7 },
-  { flag: 'seeded:lektion-2', deck: 'Lektion 2', rows: LEKTION_2 },
-  { flag: 'seeded:lektion-4', deck: 'Lektion 4', rows: LEKTION_4 },
-  { flag: 'seeded:lektion-8', deck: 'Lektion 8', rows: LEKTION_8 },
-  { flag: 'seeded:lektion-9', deck: 'Lektion 9', rows: LEKTION_9 },
-  { flag: 'seeded:lektion-10', deck: 'Lektion 10', rows: LEKTION_10 },
-  { flag: 'seeded:lektion-1', deck: 'Lektion 1', rows: LEKTION_1 },
-  { flag: 'seeded:lektion-6', deck: 'Lektion 6', rows: LEKTION_6 },
-  { flag: 'seeded:lektion-11', deck: 'Lektion 11', rows: LEKTION_11 },
-  { flag: 'seeded:lektion-12', deck: 'Lektion 12', rows: LEKTION_12 },
+  { flag: 'seeded', course: 'german', deck: 'Lektion 3', rows: LEKTION_3 }, // the original first-start list
+  { flag: 'seeded:lektion-5', course: 'german', deck: 'Lektion 5', rows: LEKTION_5 },
+  { flag: 'seeded:lektion-7', course: 'german', deck: 'Lektion 7', rows: LEKTION_7 },
+  { flag: 'seeded:lektion-2', course: 'german', deck: 'Lektion 2', rows: LEKTION_2 },
+  { flag: 'seeded:lektion-4', course: 'german', deck: 'Lektion 4', rows: LEKTION_4 },
+  { flag: 'seeded:lektion-8', course: 'german', deck: 'Lektion 8', rows: LEKTION_8 },
+  { flag: 'seeded:lektion-9', course: 'german', deck: 'Lektion 9', rows: LEKTION_9 },
+  { flag: 'seeded:lektion-10', course: 'german', deck: 'Lektion 10', rows: LEKTION_10 },
+  { flag: 'seeded:lektion-1', course: 'german', deck: 'Lektion 1', rows: LEKTION_1 },
+  { flag: 'seeded:lektion-6', course: 'german', deck: 'Lektion 6', rows: LEKTION_6 },
+  { flag: 'seeded:lektion-11', course: 'german', deck: 'Lektion 11', rows: LEKTION_11 },
+  { flag: 'seeded:lektion-12', course: 'german', deck: 'Lektion 12', rows: LEKTION_12 },
 ];
 
 export function packWords(pack: SeedPack, now = Date.now()): Record<string, WordData & { id: string }> {

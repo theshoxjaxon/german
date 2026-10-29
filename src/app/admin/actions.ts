@@ -39,21 +39,23 @@ export async function setRoleAction(userId: string, role: Role): Promise<Result>
   return { ok: true };
 }
 
-/** Take someone off the class leaderboard or put them back. Off it, they keep studying as usual. */
+/** Take someone off the course's leaderboard or put them back. Off it, they keep studying as usual. */
 export async function setClassAction(userId: string, inClass: boolean): Promise<Result> {
-  if (!(await requireAdmin())) return denied;
+  const admin = await requireAdmin();
+  if (!admin) return denied;
   if (typeof inClass !== 'boolean') return { ok: false, error: 'Unknown choice.' };
   if (typeof userId !== 'string' || !(await repo.findUserById(userId))) return { ok: false, error: 'That profile no longer exists.' };
-  await repo.setInClass(userId, inClass);
+  await repo.setOnBoard(admin.courseId, userId, inClass);
   refresh();
   return { ok: true };
 }
 
 /** The lesson the class is on: "All decks" brings in new words from it first. '' clears it. */
 export async function setClassLessonAction(deck: string): Promise<Result> {
-  if (!(await requireAdmin())) return denied;
+  const admin = await requireAdmin();
+  if (!admin) return denied;
   if (typeof deck !== 'string' || deck.length > 100) return { ok: false, error: 'Unknown lesson.' };
-  if (!(await repo.setClassLesson(deck.trim() || null))) return { ok: false, error: 'No shared words in that deck.' };
+  if (!(await repo.setClassLesson(admin.courseId, deck.trim() || null))) return { ok: false, error: 'No shared words in that deck.' };
   refresh();
   return { ok: true };
 }

@@ -167,7 +167,7 @@ export function EmptyBox() {
       </section>
     );
   }
-  if (me.role !== 'admin') {
+  if (!me.teacher) {
     return (
       <section className="panel empty">
         <h2>{t('No words yet')}</h2>

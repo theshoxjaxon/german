@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { safeNext } from '@/lib/account-rules';
+import { chosenCourse } from '@/lib/server/course';
 import { describeDbError } from '@/lib/server/db-health';
 import { googleClientId, verifyGoogleCredential } from '@/lib/server/google';
 import { readJson } from '@/lib/server/http';
@@ -39,7 +40,7 @@ export async function POST(req: Request) {
       console.warn('Karteikasten: a Google token was refused.', (e as Error).message);
       return fail(401, 'Google sign-in failed. Try again.');
     }
-    const result = await repo.googleSignIn(profile, { visitorId: visitor });
+    const result = await repo.googleSignIn(profile, { visitorId: visitor, courseId: await chosenCourse() });
     if (result === 'unverified') return fail(403, 'Google hasn’t verified this email address, so it can’t be used here.');
     if (result === 'other-google') return fail(409, 'This email is linked to a different Google account. Log in with your password instead.');
     const user = await repo.ensureAdminRole(result.user);
