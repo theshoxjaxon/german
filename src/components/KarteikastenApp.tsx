@@ -1,9 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Activity, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { CourseLangContext } from '@/lib/client/course';
 import { tick, useLocalState } from '@/lib/client/hooks';
 import { useT } from '@/lib/client/i18n';
 import { store, useStore } from '@/lib/client/store';
+import { langOf } from '@/lib/courses';
 import { buildQueue, pickNext, type QueueItem } from '@/lib/queue';
 import { EMPTY_FILTERS, SORTS, type Sort } from '@/lib/words-view';
 import { AccountSheet, CheerSheet } from './AccountSheets';
@@ -50,6 +52,7 @@ export default function KarteikastenApp() {
     setQueryState({ q: '', filters: EMPTY_FILTERS });
   }
   const picking = status === 'ready' && guest && !course; // a guest who hasn't picked a course yet
+  const studied = langOf(course); // one object per language, so this only changes with the course
   const [sheet, setSheet] = useState<SheetSpec | null>(null);
   const [sheetClosing, setSheetClosing] = useState(false);
   const [review, setReview] = useState<{ first: QueueItem | null; startedAt: number } | null>(null);
@@ -141,61 +144,72 @@ export default function KarteikastenApp() {
     [tab, setTab, openSheet, closeSheet, sheetClosing, toast, startReview, query, layout, setLayout, sort, setSort, fields, setFields],
   );
 
+  /*
+   * Only the open tab is live. The others (and all of them while a study session covers the
+   * screen) are hidden with React's <Activity>: they keep their state and scroll position, but
+   * their updates wait until the browser is idle, so an answer never waits for the word table.
+   */
+  const view = (id: Tab) => (!picking && !review && tab === id ? 'visible' : 'hidden');
+
   return (
     <UIContext.Provider value={ui}>
-      <div className="app">
-        <header className="appbar">
-          <span className="appbar-brand">
-            <BrandMark size={26} />
-            <span className="appbar-word">Karteikasten</span>
-          </span>
-          <CoursePill />
-          {me && (
-            <button className="appbar-user" onClick={() => openSheet({ kind: 'account' })} aria-label={t('Your profile, {name}', { name: me.displayName })}>
-              <span className="appbar-name">{me.displayName.split(' ')[0]}</span>
-              <Avatar id={me.id} name={me.displayName} src={me.avatarUrl} size="sm" />
-            </button>
-          )}
-          {guest && <GuestActions />}
-        </header>
-        <main className="views">
-          {picking && <section className="view"><CoursePicker /></section>}
-          <section className="view" aria-label={t('Study')} hidden={picking || tab !== 'study'}>
-            <StudyView />
-          </section>
-          {/* Guests practise the flashcards and browse the words (read-only); Class and Progress come with a free profile. */}
-          <section className="view view-words" aria-label={t('Words')} hidden={picking || tab !== 'words'}>
-            <WordsView />
-          </section>
-          <section className="view" aria-label={t('Class')} hidden={picking || tab !== 'class'}>
-            {guest ? <LockedView feature="class" /> : <ClassView active={tab === 'class'} />}
-          </section>
-          <section className="view" aria-label={t('Progress')} hidden={picking || tab !== 'stats'}>
-            {guest ? <LockedView feature="stats" /> : <StatsView />}
-          </section>
-        </main>
-        <nav className="tabbar" aria-label={t('Sections')} hidden={picking}>
-          {TABS.map((tb) => {
-            const locked = guest && (tb.id === 'class' || tb.id === 'stats');
-            return (
-              <button key={tb.id} className="tab" aria-current={tab === tb.id ? 'page' : 'false'} onClick={() => setTab(tb.id)}
-                aria-label={locked ? t('{label} (needs a profile)', { label: t(tb.label) }) : undefined}>
-                <span className="tab-ic">
-                  <Icon name={tb.icon} />
-                  {locked && <span className="tab-lock"><Icon name="lock" /></span>}
-                </span>
-                {t(tb.label)}
+      <CourseLangContext value={studied}>
+        <div className="app">
+          <header className="appbar">
+            <span className="appbar-brand">
+              <BrandMark size={26} />
+              <span className="appbar-word">Karteikasten</span>
+            </span>
+            <CoursePill />
+            {me && (
+              <button className="appbar-user" onClick={() => openSheet({ kind: 'account' })} aria-label={t('Your profile, {name}', { name: me.displayName })}>
+                <span className="appbar-name">{me.displayName.split(' ')[0]}</span>
+                <Avatar id={me.id} name={me.displayName} src={me.avatarUrl} size="sm" />
               </button>
-            );
-          })}
-        </nav>
-      </div>
+            )}
+            {guest && <GuestActions />}
+          </header>
+          <main className="views">
+            {picking && <section className="view"><CoursePicker /></section>}
+            <Activity mode={view('study')}>
+              <section className="view" aria-label={t('Study')}><StudyView /></section>
+            </Activity>
+            {/* Guests practise the flashcards and browse the words (read-only); Class and Progress come with a free profile. */}
+            <Activity mode={view('words')}>
+              <section className="view view-words" aria-label={t('Words')}><WordsView /></section>
+            </Activity>
+            <Activity mode={view('class')}>
+              <section className="view" aria-label={t('Class')}>
+                {guest ? <LockedView feature="class" /> : <ClassView active={tab === 'class'} />}
+              </section>
+            </Activity>
+            <Activity mode={view('stats')}>
+              <section className="view" aria-label={t('Progress')}>{guest ? <LockedView feature="stats" /> : <StatsView />}</section>
+            </Activity>
+          </main>
+          <nav className="tabbar" aria-label={t('Sections')} hidden={picking}>
+            {TABS.map((tb) => {
+              const locked = guest && (tb.id === 'class' || tb.id === 'stats');
+              return (
+                <button key={tb.id} className="tab" aria-current={tab === tb.id ? 'page' : 'false'} onClick={() => setTab(tb.id)}
+                  aria-label={locked ? t('{label} (needs a profile)', { label: t(tb.label) }) : undefined}>
+                  <span className="tab-ic">
+                    <Icon name={tb.icon} />
+                    {locked && <span className="tab-lock"><Icon name="lock" /></span>}
+                  </span>
+                  {t(tb.label)}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
 
-      {review && <ReviewSession first={review.first} startedAt={review.startedAt} onClose={endReview} />}
-      {sheet && <SheetHost spec={sheet} />}
-      <div className={`toast${toastState.visible ? ' show' : ''}`} role="status" aria-live="polite">
-        {t(toastState.message)}
-      </div>
+        {review && <ReviewSession first={review.first} startedAt={review.startedAt} onClose={endReview} />}
+        {sheet && <SheetHost spec={sheet} />}
+        <div className={`toast${toastState.visible ? ' show' : ''}`} role="status" aria-live="polite">
+          {t(toastState.message)}
+        </div>
+      </CourseLangContext>
     </UIContext.Provider>
   );
 }

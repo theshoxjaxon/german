@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useEffectEvent, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useCourseLang } from '@/lib/client/course';
 import { useNow } from '@/lib/client/hooks';
 import { useT, type Translator } from '@/lib/client/i18n';
@@ -62,6 +62,9 @@ export const COLUMNS: Column[] = [
 export const DEFAULT_FIELDS = ['meaning', 'status', 'due', 'ease', 'pos', 'tags', 'pronunciation', 'example', 'mnemonic', 'deck'];
 export const isFieldList = (v: unknown) => Array.isArray(v) && v.every((k) => COLUMNS.some((c) => c.key === k));
 
+/** Rows drawn at first; more appear as you scroll, so a course of 1,300 words opens instantly. */
+const PAGE = 80;
+
 export function WordsView() {
   const data = useStore();
   const now = useNow();
@@ -70,6 +73,21 @@ export function WordsView() {
   const { q, filters } = ui.query;
   const ready = data.status === 'ready' && now > 0;
   const rows = useMemo(() => (ready ? visibleRows(data, now, q, filters, ui.sort) : []), [ready, data, now, q, filters, ui.sort]);
+  // A new search, filter, sort or layout starts again at the top with one page
+  const listKey = `${data.course?.id}|${q}|${JSON.stringify(filters)}|${ui.sort.key}:${ui.sort.dir}|${ui.layout}`;
+  const [limit, setLimit] = useState({ key: listKey, n: PAGE });
+  if (limit.key !== listKey) setLimit({ key: listKey, n: PAGE }); // React's "reset state when a value changes"
+  const shown = limit.key === listKey ? limit.n : PAGE;
+  const showMore = () => setLimit({ key: listKey, n: shown + PAGE * 2 });
+  const page = rows.length > shown ? rows.slice(0, shown) : rows;
+  // …and at the top of the list (coming back to the tab keeps your place: same key)
+  const scroller = useRef<HTMLDivElement>(null);
+  const lastKey = useRef(listKey);
+  useEffect(() => {
+    if (lastKey.current === listKey) return;
+    lastKey.current = listKey;
+    scroller.current?.scrollTo({ top: 0 });
+  }, [listKey]);
   const nf = activeFilterCount(filters);
   const total = data.words.size;
   const canAdd = !!data.me; // students add their own words, teachers add lesson words
@@ -96,7 +114,7 @@ export function WordsView() {
         </button>
       </div>
     );
-  } else body = ui.layout === 'gallery' ? <Gallery rows={rows} now={now} /> : <WordTable rows={rows} now={now} />;
+  } else body = ui.layout === 'gallery' ? <Gallery rows={page} now={now} /> : <WordTable rows={page} now={now} />;
 
   return (
     <>
@@ -168,7 +186,10 @@ export function WordsView() {
         </div>
       )}
 
-      <div className="scroller" tabIndex={-1}>{body}</div>
+      <div className="scroller" tabIndex={-1} ref={scroller}>
+        {body}
+        {ready && rows.length > shown && <LoadMore key={shown} onMore={showMore} />}
+      </div>
       {ready && canAdd && (
         <button className="fab" onClick={() => ui.openSheet({ kind: 'word', id: null })} aria-label={t('Add a word')}>
           <Icon name="plus" />
@@ -243,6 +264,29 @@ function WordTable({ rows, now }: { rows: Row[]; now: number }) {
         ))}
       </tbody>
     </table>
+  );
+}
+
+/** At the end of the drawn rows: draws the next ones when it scrolls near (or when tapped). */
+function LoadMore({ onMore }: { onMore: () => void }) {
+  const { t } = useT();
+  const ref = useRef<HTMLDivElement>(null);
+  const more = useEffectEvent(onMore);
+  // Keyed by the row count, so after each page it observes afresh and keeps going while in view
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver((entries) => entries.some((e) => e.isIntersecting) && more(), {
+      root: el.closest('.scroller'),
+      rootMargin: '600px 0px',
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  return (
+    <div ref={ref} className="load-more">
+      <button className="btn btn-sm" onClick={onMore}>{t('Show more words')}</button>
+    </div>
   );
 }
 

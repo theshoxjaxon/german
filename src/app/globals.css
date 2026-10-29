@@ -172,6 +172,7 @@ h1, h2, h3, p { margin: 0; }
 /* ---------- words (database) ---------- */
 .view-words { display: flex; flex-direction: column; overflow: hidden; }
 .view-words .vhead { padding-bottom: 10px; }
+.load-more { display: grid; place-items: center; padding: 18px 16px 96px; overflow-anchor: none; }
 .count { font-family: var(--font-mono); font-size: 13px; color: var(--ink-3); font-variant-numeric: tabular-nums; margin-left: 8px; white-space: nowrap; }
 .ro-pill { font-size: 12px; font-weight: 600; color: var(--ink-2); border: 1px solid var(--line-strong); border-radius: 999px; padding: 2px 8px; margin-left: 8px; white-space: nowrap; }
 .toolbar { display: grid; gap: 10px; padding-bottom: 10px; }
@@ -351,11 +352,11 @@ details.explain code { font-family: var(--font-mono); font-size: 13px; backgroun
 .rv-bar i { display: block; height: 100%; width: 0; background: var(--ink); transition: width .3s; }
 .rv-stage { flex: 1; min-height: 0; display: flex; padding-block: 12px; }
 .flip { position: relative; flex: 1; max-width: 560px; margin-inline: auto; perspective: 1600px; touch-action: pan-y; user-select: none; -webkit-user-select: none; cursor: pointer; outline-offset: 4px; border-radius: 18px; }
-.flip-inner { position: absolute; inset: 0; transform-style: preserve-3d; transition: transform .5s cubic-bezier(.3, .7, .2, 1); }
+.flip-inner { position: absolute; inset: 0; transform-style: preserve-3d; transition: transform .28s cubic-bezier(.3, .7, .2, 1); }
 .flip.is-flipped .flip-inner { transform: rotateY(180deg); }
 .flip.no-anim .flip-inner { transition: none; }
 .flip.dragging { transition: none !important; }
-.flip.deal { animation: deal .28s cubic-bezier(.2, .8, .2, 1); }
+.flip.deal { animation: deal .18s cubic-bezier(.2, .8, .2, 1); }
 @keyframes deal { from { transform: translateY(18px) scale(.97); opacity: .3; } }
 .face {
   position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden; border-radius: 18px;

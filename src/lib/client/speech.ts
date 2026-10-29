@@ -6,6 +6,24 @@ export const speechSupported = () =>
 
 export const useSpeechSupported = () => useClientValue(speechSupported, false);
 
+/** The voice for each language, found once (the list can be long); forgotten when the browser's voices change. */
+const voiceCache = new Map<string, SpeechSynthesisVoice | null>();
+let watchingVoices = false;
+function voiceFor(lang: string): SpeechSynthesisVoice | null {
+  const synth = window.speechSynthesis;
+  if (!watchingVoices) {
+    watchingVoices = true;
+    synth.addEventListener?.('voiceschanged', () => voiceCache.clear());
+  }
+  if (voiceCache.has(lang)) return voiceCache.get(lang)!;
+  const voices = synth.getVoices();
+  if (!voices.length) return null; // not loaded yet: ask again next time
+  const base = lang.split('-')[0].toLowerCase();
+  const voice = voices.find((v) => v.lang === lang) || voices.find((v) => (v.lang || '').toLowerCase().startsWith(base)) || null;
+  voiceCache.set(lang, voice);
+  return voice;
+}
+
 /** Read `text` aloud; `slow` for beginners who want to hear every sound. */
 export function speak(text: string | undefined, lang = 'de-DE', slow = false) {
   if (!text || !speechSupported()) return;
@@ -15,9 +33,7 @@ export function speak(text: string | undefined, lang = 'de-DE', slow = false) {
     const u = new SpeechSynthesisUtterance(text.replace(/…/g, ''));
     u.lang = lang;
     u.rate = slow ? 0.6 : 0.88;
-    const base = lang.split('-')[0].toLowerCase();
-    const voices = synth.getVoices();
-    const voice = voices.find((v) => v.lang === lang) || voices.find((v) => (v.lang || '').toLowerCase().startsWith(base));
+    const voice = voiceFor(lang);
     if (voice) u.voice = voice;
     synth.speak(u);
   } catch {

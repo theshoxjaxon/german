@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Fragment, useEffect, useEffectEvent, useRef, useState, type PointerEvent } from 'react';
+import { Fragment, useEffect, useEffectEvent, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { useCourseLang } from '@/lib/client/course';
 import { useNow } from '@/lib/client/hooks';
 import { useT } from '@/lib/client/i18n';
@@ -177,7 +177,8 @@ export function ReviewSession({ first, startedAt, onClose }: { first: QueueItem 
     };
   }, []);
 
-  const counts = now ? buildQueue(data, now).counts : { fresh: 0, learning: 0, review: 0 };
+  // Only when the cards or the clock change: flipping a card doesn't rebuild the queue
+  const counts = useMemo(() => (now ? buildQueue(data, now).counts : { fresh: 0, learning: 0, review: 0 }), [data, now]);
   const left = counts.fresh + counts.learning + counts.review;
   const progress = tally.answered + left ? (tally.answered / (tally.answered + left)) * 100 : 100;
   const kind = !current ? '' : !current.s || current.s.type === 'new' ? 'new' : current.s.type === 'review' ? 'due' : 'learn';

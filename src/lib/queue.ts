@@ -30,7 +30,17 @@ export function compareSource(a: Word, b: Word): number {
   return collator.compare(a.deck || '', b.deck || '') || (a.order ?? 0) - (b.order ?? 0) || (a.createdAt || 0) - (b.createdAt || 0);
 }
 
-export const sortedWords = (words: Map<string, Word>) => [...words.values()].filter((w) => w && w.term).sort(compareSource);
+/**
+ * The words in list order. Sorting a course's thousand-plus words is the slow part of building a
+ * queue, so the result is kept per words map: the store replaces the map whenever a word changes,
+ * while answers only change the cards. Read-only: callers make their own arrays (filter, slice).
+ */
+const sorted = new WeakMap<Map<string, Word>, readonly Word[]>();
+export function sortedWords(words: Map<string, Word>): readonly Word[] {
+  let list = sorted.get(words);
+  if (!list) sorted.set(words, (list = [...words.values()].filter((w) => w && w.term).sort(compareSource)));
+  return list;
+}
 
 export function deckCounts(words: Map<string, Word>): [string, number][] {
   const m = new Map<string, number>();

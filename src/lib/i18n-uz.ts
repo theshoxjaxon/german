@@ -389,6 +389,7 @@ export const UZ: Record<string, string> = {
   "Set a password": "Parol oʻrnatish",
   "Show": "Koʻrsatish",
   "Show answer": "Javobni koʻrsatish",
+  "Show more words": "Koʻproq soʻz koʻrsatish",
   "Show password": "Parolni koʻrsatish",
   "Show {n} word": "{n} ta soʻzni koʻrsatish",
   "Show {n} words": "{n} ta soʻzni koʻrsatish",

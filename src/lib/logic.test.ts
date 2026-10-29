@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { langOf, LANGS, voiceFor } from './courses';
 import { parseList, suggestDeck } from './import-parser';
-import { buildQueue, lessonNumber, orderNewWords, pickNext, quizArticle } from './queue';
+import { buildQueue, lessonNumber, orderNewWords, pickNext, quizArticle, sortedWords } from './queue';
 import { packWords, SEED_PACKS } from './seed';
 import { answer } from './srs';
 import { cleanTerm, guessPos, highlightParts, norm, splitTerm } from './text';
@@ -112,6 +112,18 @@ describe('study queue', () => {
     expect(pickNext(q, NOW)?.word.term).toBe('die Mutter');
     // 10 minutes later the learning card is due again and comes first
     expect(pickNext(buildQueue(data({ 'l3-familie': { f, r: null, suspended: false, updatedAt: NOW } }), NOW + 10 * 60_000), NOW + 10 * 60_000)?.word.term).toBe('die Familie');
+  });
+
+  it('sorts the words once per word list, not once per answer', () => {
+    const d = data();
+    const first = sortedWords(d.words);
+    expect(sortedWords(d.words)).toBe(first); // same words: the sorted list is reused
+    const words = new Map(d.words);
+    const w = words.get('l3-familie')!;
+    words.set(w.id, { ...w, order: 999 }); // a changed word comes as a new map, like the store does
+    const again = sortedWords(words);
+    expect(again).not.toBe(first);
+    expect(again.at(-1)?.id).toBe('l3-familie');
   });
 
   it('skips paused words', () => {
