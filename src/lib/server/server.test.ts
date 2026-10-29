@@ -13,7 +13,7 @@ import { hashPassword, temporaryPassword, verifyPassword } from './password';
 
 let repo: typeof import('./repo');
 const G = 'german'; // the course everyone from before courses is in
-const ENGLISH_WORDS = 375 + 327 + 304; // A1 + A2 + B1
+const ENGLISH_WORDS = 375 + 327 + 304 + 300; // A1, A2, B1, B2
 let close = async () => {};
 
 beforeAll(async () => {
@@ -77,7 +77,7 @@ describe('database', () => {
 
   it('seeds the English course with its own decks', async () => {
     const english = Object.values(await repo.listWords(null, 'english'));
-    expect(['A1', 'A2', 'B1'].map((deck) => english.filter((w) => w.deck === deck).length)).toEqual([375, 327, 304]);
+    expect(['A1', 'A2', 'B1', 'B2'].map((deck) => english.filter((w) => w.deck === deck).length)).toEqual([375, 327, 304, 300]);
     expect(english).toHaveLength(ENGLISH_WORDS);
     expect(english.every((w) => w.id.startsWith('en-') && /^\/.+\/$/.test(w.pronunciation) && w.meaning && w.example && w.exampleTr)).toBe(true);
     expect(new Set(english.map((w) => w.term.toLowerCase())).size).toBe(english.length);

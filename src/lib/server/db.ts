@@ -22,7 +22,7 @@ export interface Db {
 }
 
 /** Bump when the schema or the built-in word lists change: every database then runs migrate() once more. */
-const SCHEMA_VERSION = '12';
+const SCHEMA_VERSION = '13';
 
 /*
  * Times are milliseconds since 1970 (JavaScript's Date.now()) in BIGINT columns; days are
