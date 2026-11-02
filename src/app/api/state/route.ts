@@ -4,6 +4,11 @@ import { chosenCourse } from '@/lib/server/course';
 import { ok } from '@/lib/server/http';
 import * as repo from '@/lib/server/repo';
 import { requireUser } from '@/lib/server/session';
+import { testsFor } from '@/lib/server/tests';
+import type { Course } from '@/lib/courses';
+
+/** A course as the app gets it: with how many mock tests it has (the Tests tab shows when there are any). */
+const withTests = (c: Course): Course => ({ ...c, tests: testsFor(c.id).length });
 
 /**
  * GET /api/state → you, your course (and the list of courses), its shared words and your own
@@ -16,7 +21,8 @@ export async function GET(req: Request) {
   const auth = await requireUser(req);
   if (auth.response) {
     if (auth.response.status !== 401) return auth.response;
-    const [courses, chosen] = await Promise.all([repo.listCourses(), chosenCourse()]);
+    const [all, chosen] = await Promise.all([repo.listCourses(), chosenCourse()]);
+    const courses = all.map(withTests);
     const course = courses.find((c) => c.id === chosen) ?? (courses.length === 1 ? courses[0] : null);
     const words = course ? await repo.listWords(null, course.id) : {};
     return ok({ me: null, words, classLesson: course?.currentLesson ?? null, course, courses });
@@ -28,7 +34,7 @@ export async function GET(req: Request) {
     repo.getPrefs(user.id),
     repo.unseenCheers(user.id),
     repo.myStreak(user.id),
-    repo.listCourses(),
+    repo.listCourses().then((all) => all.map(withTests)),
   ]);
   const course = courses.find((c) => c.id === user.courseId) ?? courses.find((c) => c.id === DEFAULT_COURSE) ?? courses[0];
   // Everyone signed in gets the AI helper (it has an hourly limit per person, since each use costs money).

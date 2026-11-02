@@ -11,6 +11,8 @@ import { UZ } from './i18n-uz';
 import { LANGS } from './courses';
 import { CHEERS, MAX_OWN_WORDS, POS_OPTIONS, RATING_LABEL } from './types';
 import { FILTER_LABEL, SORTS, STATUS_OPTS } from './words-view';
+import { TESTS } from './server/tests';
+import { SECTIONS } from './tests/types';
 
 const SRC = join(__dirname, '..');
 const read = (p: string) => readFileSync(join(SRC, p), 'utf8');
@@ -107,6 +109,9 @@ function wanted(): Set<string> {
     [l.name, ...Object.values(l.text)].forEach(add);
     l.voices.forEach(([, label]) => add(label));
   }
+  // The mock tests' section names and topics (the questions themselves are German, like the exam)
+  SECTIONS.forEach((s) => add(s.label));
+  TESTS.forEach((test) => add(test.topics));
   for (const line of read('components/StatsView.tsx').match(/FACH_RANGE = \[([^\]]*)\]/)![1].split(',')) add(literals(line)[0]);
   for (const m of read('components/ui.tsx').match(/STATUS_LABEL = \{([^}]*)\}/)![1].matchAll(/'([^']+)'/g)) add(m[1]);
   // Messages that come from the server or shared rules and are shown through t()
@@ -114,6 +119,7 @@ function wanted(): Set<string> {
     'app/actions/auth.ts', 'lib/account-rules.ts', 'lib/auth-schemas.ts', 'lib/server/ai.ts', 'lib/client/ai.ts',
     'app/api/ai/words/route.ts', 'app/api/auth/google/route.ts', 'app/api/class/route.ts', 'app/api/cheers/route.ts',
     'app/api/words/[id]/route.ts', 'app/api/cards/[id]/route.ts',
+    'app/api/tests/[id]/route.ts', 'app/api/tests/[id]/submit/route.ts', 'app/api/tests/attempts/[id]/route.ts',
   ];
   for (const f of messageFiles) {
     for (const s of literals(withoutComments(read(f)))) if (/^[A-Z][^{}]*[a-z][^{}]*[.!?]$/.test(s) && s.includes(' ')) add(s);

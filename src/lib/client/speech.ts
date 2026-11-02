@@ -44,3 +44,38 @@ export function speak(text: string | undefined, lang = 'de-DE', slow = false) {
 export function stopSpeech() {
   if (speechSupported()) window.speechSynthesis.cancel();
 }
+
+/**
+ * Play a listening script: line after line, each speaker with their own voice where the device
+ * has several, and a different pitch otherwise (a: a woman, b: a man, n: an announcer).
+ * Returns stop(); `onEnd` runs once the last line was spoken (not after stop()).
+ */
+export function playScript(lines: { who: 'a' | 'b' | 'n'; text: string }[], lang = 'de-DE', onEnd?: () => void): () => void {
+  if (!speechSupported() || !lines.length) {
+    onEnd?.();
+    return () => {};
+  }
+  const synth = window.speechSynthesis;
+  synth.cancel();
+  const base = lang.split('-')[0].toLowerCase();
+  const voices = synth.getVoices().filter((v) => (v.lang || '').toLowerCase().startsWith(base));
+  const voice = { a: voices[0], b: voices[1] ?? voices[0], n: voices[2] ?? voices[0] };
+  const pitch = { a: 1.15, b: voices.length > 1 ? 0.95 : 0.7, n: 1 };
+  let stopped = false;
+  lines.forEach((line, i) => {
+    const u = new SpeechSynthesisUtterance(line.text);
+    u.lang = lang;
+    u.rate = 0.9; // A1: a little slower than normal speech
+    u.pitch = pitch[line.who];
+    if (voice[line.who]) u.voice = voice[line.who];
+    if (i === lines.length - 1) {
+      u.onend = () => !stopped && onEnd?.();
+      u.onerror = () => !stopped && onEnd?.();
+    }
+    synth.speak(u);
+  });
+  return () => {
+    stopped = true;
+    synth.cancel();
+  };
+}

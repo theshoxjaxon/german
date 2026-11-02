@@ -17,6 +17,7 @@ export interface Course {
   note: string; // shown with the decks, e.g. "More words coming soon"; '' for none
   currentLesson: string | null; // the deck the class is on (set by a teacher)
   words: number; // shared lesson words
+  tests?: number; // mock tests (from /api/state)
 }
 
 /**

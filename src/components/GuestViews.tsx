@@ -16,7 +16,12 @@ export function GuestActions() {
   );
 }
 
-const LOCKED: Record<'class' | 'stats', { icon: IconName; title: string; text: string }> = {
+const LOCKED: Record<'class' | 'stats' | 'tests', { icon: IconName; title: string; text: string }> = {
+  tests: {
+    icon: 'clipboard',
+    title: 'Practise for the exam',
+    text: 'Mock tests like the Goethe A1 exam: listening, reading, grammar, writing and speaking, with your score and feedback.',
+  },
   class: {
     icon: 'people',
     title: 'Study together with your class',

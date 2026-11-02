@@ -3,7 +3,7 @@
 import { createContext, useContext } from 'react';
 import type { Filters, Sort } from '@/lib/words-view';
 
-export type Tab = 'study' | 'words' | 'class' | 'stats';
+export type Tab = 'study' | 'words' | 'tests' | 'class' | 'stats';
 export type Layout = 'table' | 'gallery';
 
 /** Which bottom sheet is open. Only one at a time. */

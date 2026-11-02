@@ -16,6 +16,7 @@ import { CoursePicker, CoursePill, CourseSheet } from './CourseViews';
 import { GuestActions, LockedView } from './GuestViews';
 import { ReviewSession } from './ReviewSession';
 import { SettingsSheet } from './SettingsSheet';
+import { TestsView } from './tests/TestsView';
 import { StatsView } from './StatsView';
 import { StudyView } from './StudyView';
 import { Avatar, Icon, type IconName } from './ui';
@@ -28,11 +29,12 @@ import { WordSheet } from './WordSheet';
 const TABS: { id: Tab; label: string; icon: IconName }[] = [
   { id: 'study', label: 'Study', icon: 'cards' },
   { id: 'words', label: 'Words', icon: 'table' },
+  { id: 'tests', label: 'Tests', icon: 'clipboard' },
   { id: 'class', label: 'Class', icon: 'people' },
   { id: 'stats', label: 'Progress', icon: 'chart' },
 ];
 const DEFAULT_SORT: Sort = { key: 'source', dir: 'asc' };
-const isTab = (v: unknown) => v === 'study' || v === 'words' || v === 'class' || v === 'stats';
+const isTab = (v: unknown) => v === 'study' || v === 'words' || v === 'tests' || v === 'class' || v === 'stats';
 const isLayout = (v: unknown) => v === 'table' || v === 'gallery';
 const isSort = (v: unknown) =>
   !!v && typeof v === 'object' && (v as Sort).key in SORTS && ((v as Sort).dir === 'asc' || (v as Sort).dir === 'desc');
@@ -40,7 +42,7 @@ const isSort = (v: unknown) =>
 export default function KarteikastenApp() {
   const { me, guest, status, course } = useStore();
   const { t, lang } = useT();
-  const [tab, setTab] = useLocalState<Tab>('kk.tab', 'study', isTab);
+  const [savedTab, setTab] = useLocalState<Tab>('kk.tab', 'study', isTab);
   const [layout, setLayout] = useLocalState<Layout>('kk.layout', 'table', isLayout);
   const [sort, setSort] = useLocalState<Sort>('kk.sort', DEFAULT_SORT, isSort);
   const [fields, setFields] = useLocalState<string[]>('kk.fields', DEFAULT_FIELDS, isFieldList);
@@ -52,6 +54,8 @@ export default function KarteikastenApp() {
     setQueryState({ q: '', filters: EMPTY_FILTERS });
   }
   const picking = status === 'ready' && guest && !course; // a guest who hasn't picked a course yet
+  const hasTests = (course?.tests ?? 0) > 0; // the Tests tab is there only for courses with mock tests
+  const tab: Tab = savedTab === 'tests' && !hasTests ? 'study' : savedTab;
   const studied = langOf(course); // one object per language, so this only changes with the course
   const [sheet, setSheet] = useState<SheetSpec | null>(null);
   const [sheetClosing, setSheetClosing] = useState(false);
@@ -178,6 +182,11 @@ export default function KarteikastenApp() {
             <Activity mode={view('words')}>
               <section className="view view-words" aria-label={t('Words')}><WordsView /></section>
             </Activity>
+            {hasTests && (
+              <Activity mode={view('tests')}>
+                <section className="view" aria-label={t('Tests')}>{guest ? <LockedView feature="tests" /> : <TestsView active={tab === 'tests'} />}</section>
+              </Activity>
+            )}
             <Activity mode={view('class')}>
               <section className="view" aria-label={t('Class')}>
                 {guest ? <LockedView feature="class" /> : <ClassView active={tab === 'class'} />}
@@ -188,8 +197,8 @@ export default function KarteikastenApp() {
             </Activity>
           </main>
           <nav className="tabbar" aria-label={t('Sections')} hidden={picking}>
-            {TABS.map((tb) => {
-              const locked = guest && (tb.id === 'class' || tb.id === 'stats');
+            {TABS.filter((tb) => tb.id !== 'tests' || hasTests).map((tb) => {
+              const locked = guest && (tb.id === 'class' || tb.id === 'stats' || tb.id === 'tests');
               return (
                 <button key={tb.id} className="tab" aria-current={tab === tb.id ? 'page' : 'false'} onClick={() => setTab(tb.id)}
                   aria-label={locked ? t('{label} (needs a profile)', { label: t(tb.label) }) : undefined}>
