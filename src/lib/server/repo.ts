@@ -10,6 +10,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { COHORTS, computeAnalytics, WEEKS, type Analytics, type Period } from '../analytics';
 import { DEFAULT_COURSE, isTargetLang, type Course, type TargetLang } from '../courses';
+import type { Answers, AttemptSummary, TestResult } from '../tests/types';
 import { cardFlags, dayKey, diffActivity, isRecalled, lastDays, masteredAt, safeTimeZone, shiftDay, streakFrom } from '../stats';
 import {
   DEFAULT_PREFS, MAX_OWN_WORDS,
@@ -1029,4 +1030,115 @@ export async function sharedDecks(courseId: string): Promise<{ deck: string; wor
   );
   const collator = new Intl.Collator('de', { numeric: true });
   return r.rows.map((row) => ({ deck: str(row.deck), words: num(row.n) })).sort((a, b) => collator.compare(a.deck, b.deck));
+}
+
+/* ============================== mock tests ============================== */
+
+export interface AttemptRow {
+  id: string;
+  userId: string;
+  courseId: string;
+  testId: string;
+  answers: Answers;
+  result: TestResult;
+  score: number;
+  complete: boolean;
+  aiError: string | null;
+  startedAt: number | null;
+  submittedAt: number;
+}
+
+function toAttempt(r: Row): AttemptRow {
+  return {
+    id: str(r.id),
+    userId: str(r.user_id),
+    courseId: str(r.course_id),
+    testId: str(r.test_id),
+    answers: parse<Answers>(r.answers) ?? {},
+    result: parse<TestResult>(r.result)!,
+    score: num(r.score),
+    complete: r.complete === true,
+    aiError: r.ai_error == null ? null : str(r.ai_error),
+    startedAt: r.started_at == null ? null : num(r.started_at),
+    submittedAt: num(r.submitted_at),
+  };
+}
+
+/** The short form for lists (no answers or item-by-item results). */
+export const attemptSummary = (a: Pick<AttemptRow, 'id' | 'testId' | 'result' | 'submittedAt'>): AttemptSummary => ({
+  id: a.id,
+  testId: a.testId,
+  score: a.result.score,
+  complete: a.result.complete,
+  grade: a.result.grade,
+  sections: a.result.sections,
+  submittedAt: a.submittedAt,
+});
+
+/** Save a submitted attempt. Returns its id. */
+export async function saveAttempt(
+  a: { userId: string; courseId: string; testId: string; answers: Answers; result: TestResult; startedAt: number | null },
+  now = Date.now(),
+): Promise<string> {
+  const db = await getDb();
+  const id = `t_${randomBytes(9).toString('base64url')}`;
+  await db.query(
+    `INSERT INTO test_attempts (id, user_id, course_id, test_id, answers, result, score, complete, started_at, submitted_at)
+     VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8, $9, $10)`,
+    [id, a.userId, a.courseId, a.testId, JSON.stringify(a.answers), JSON.stringify(a.result), a.result.score, a.result.complete, a.startedAt, now],
+  );
+  return id;
+}
+
+export async function getAttempt(id: string): Promise<AttemptRow | null> {
+  const db = await getDb();
+  const r = await db.query('SELECT * FROM test_attempts WHERE id = $1', [id]);
+  return r.rows[0] ? toAttempt(r.rows[0]) : null;
+}
+
+/** After the AI has scored the writing and speaking (or couldn't: `aiError`). */
+export async function updateAttemptResult(id: string, result: TestResult, aiError: string | null, now = Date.now()): Promise<void> {
+  const db = await getDb();
+  await db.query(
+    'UPDATE test_attempts SET result = $2::jsonb, score = $3, complete = $4, ai_error = $5, graded_at = $6 WHERE id = $1',
+    [id, JSON.stringify(result), result.score, result.complete, aiError, now],
+  );
+}
+
+/** Your attempts in a course, newest first. */
+export async function listAttempts(userId: string, courseId: string): Promise<AttemptSummary[]> {
+  const db = await getDb();
+  const r = await db.query(
+    'SELECT id, test_id, result, submitted_at FROM test_attempts WHERE user_id = $1 AND course_id = $2 ORDER BY submitted_at DESC LIMIT 200',
+    [userId, courseId],
+  );
+  return r.rows.map((row) => attemptSummary({ id: str(row.id), testId: str(row.test_id), result: parse<TestResult>(row.result)!, submittedAt: num(row.submitted_at) }));
+}
+
+/** For /admin/tests: everyone in the course and all their attempts (no email addresses). */
+export async function courseTestResults(courseId: string): Promise<{
+  people: { id: string; displayName: string; avatarUrl: string | null }[];
+  attempts: (AttemptSummary & { userId: string })[];
+}> {
+  const db = await getDb();
+  const [people, attempts] = await Promise.all([
+    db.query(
+      `SELECT u.id, u.display_name, u.avatar_url FROM course_members m JOIN users u ON u.id = m.user_id
+       WHERE m.course_id = $1 ORDER BY u.display_name`,
+      [courseId],
+    ),
+    db.query(
+      `SELECT a.id, a.user_id, a.test_id, a.result, a.submitted_at FROM test_attempts a
+       JOIN course_members m ON m.user_id = a.user_id AND m.course_id = a.course_id
+       WHERE a.course_id = $1 ORDER BY a.submitted_at DESC LIMIT 5000`,
+      [courseId],
+    ),
+  ]);
+  return {
+    people: people.rows.map((r) => ({ id: str(r.id), displayName: str(r.display_name), avatarUrl: r.avatar_url == null ? null : str(r.avatar_url) })),
+    attempts: attempts.rows.map((r) => ({
+      ...attemptSummary({ id: str(r.id), testId: str(r.test_id), result: parse<TestResult>(r.result)!, submittedAt: num(r.submitted_at) }),
+      userId: str(r.user_id),
+    })),
+  };
 }

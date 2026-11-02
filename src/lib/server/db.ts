@@ -22,7 +22,7 @@ export interface Db {
 }
 
 /** Bump when the schema or the built-in word lists change: every database then runs migrate() once more. */
-const SCHEMA_VERSION = '13';
+const SCHEMA_VERSION = '14';
 
 /*
  * Times are milliseconds since 1970 (JavaScript's Date.now()) in BIGINT columns; days are
@@ -210,6 +210,25 @@ WITH once AS (
 )
 UPDATE users SET course_id = 'german' WHERE course_id IS NULL AND EXISTS (SELECT 1 FROM once);
 
+-- Schema 14: mock tests. Each attempt keeps the answers and the result (automatic scores, and
+-- the AI's scores for writing and speaking once they arrive). Retakes are new rows.
+CREATE TABLE IF NOT EXISTS test_attempts (
+  id           text PRIMARY KEY,
+  user_id      text NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  course_id    text NOT NULL REFERENCES courses (id) ON DELETE CASCADE,
+  test_id      text NOT NULL,
+  answers      jsonb NOT NULL,
+  result       jsonb NOT NULL,
+  score        real NOT NULL,             -- out of 100 (so far, while writing or speaking is pending)
+  complete     boolean NOT NULL DEFAULT false,
+  ai_error     text,                      -- why writing and speaking couldn't be scored
+  started_at   bigint,
+  submitted_at bigint NOT NULL,
+  graded_at    bigint
+);
+CREATE INDEX IF NOT EXISTS test_attempts_user_idx ON test_attempts (user_id, test_id, submitted_at DESC);
+CREATE INDEX IF NOT EXISTS test_attempts_course_idx ON test_attempts (course_id, test_id);
+
 -- Supabase also publishes the public schema through its REST API. Row Level Security with no
 -- policies closes that door: only this server (connecting as the table owner) reads the data.
 ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
@@ -225,6 +244,7 @@ ALTER TABLE password_reset_tokens ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rate_limits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE courses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE course_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE test_attempts ENABLE ROW LEVEL SECURITY;
 
 INSERT INTO settings (key, value) VALUES ('schema_version', '${SCHEMA_VERSION}')
   ON CONFLICT (key) DO UPDATE SET value = excluded.value;

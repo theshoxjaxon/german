@@ -492,6 +492,7 @@ describe('courses', () => {
     // Make it look like schema 8: one class, its lesson in settings, the leaderboard on users, no English
     await conn.query(`DELETE FROM words WHERE course_id <> 'german'`);
     await conn.query(`DELETE FROM settings WHERE key LIKE 'seeded:english-%'`);
+    await conn.query('DROP TABLE test_attempts'); // schema 14, comes back on the same start
     await conn.query('DROP TABLE course_members');
     await conn.query('ALTER TABLE words DROP COLUMN course_id');
     await conn.query('ALTER TABLE users DROP COLUMN course_id');
@@ -593,5 +594,44 @@ describe('courses', () => {
     await repo.deleteAllCards(nodira.id, 'english');
     expect(await repo.listCards(nodira.id, 'english')).toEqual({});
     expect(Object.keys(await repo.listCards(nodira.id, G))).toEqual(['l3-familie']);
+  });
+});
+
+describe('mock tests', () => {
+  it('saves attempts per person and course, and fills in the AI scores later', async () => {
+    const { findTest } = await import('./tests');
+    const { scoreAttempt } = await import('../tests/score');
+    const test = findTest('a1-test-1')!;
+    const nodira = await byEmail('nodira@example.com');
+    const jasur = await byEmail('jasur@example.com');
+    await repo.joinCourse(nodira.id, G);
+    await repo.joinCourse(jasur.id, G);
+
+    const answers = { 't1-h1-1': 1, 't1-g1-1': 'heisse', 't1-s2-1': 'Liebe Lena, ich heiße Nodira …' };
+    const result = scoreAttempt(test, answers);
+    expect(result.complete).toBe(false); // writing and speaking wait for the AI
+    const id = await repo.saveAttempt({ userId: nodira.id, courseId: G, testId: test.id, answers, result, startedAt: Date.now() - 60_000 });
+    const saved = (await repo.getAttempt(id))!;
+    expect(saved).toMatchObject({ userId: nodira.id, courseId: G, testId: test.id, answers, complete: false });
+    expect(saved.result.items['t1-h1-1'].ok).toBe(true);
+
+    const open = Object.fromEntries(
+      ['t1-s2-1', 't1-p1-1', 't1-p2-1', 't1-p3-1'].map((k) => [k, { points: 2, max: 10, summary: 'ok', corrections: [], tip: '' }]),
+    );
+    const graded = scoreAttempt(test, answers, open);
+    await repo.updateAttemptResult(id, graded, null);
+    expect(await repo.getAttempt(id)).toMatchObject({ complete: true, score: graded.score, aiError: null });
+
+    // Each person sees only their own attempts
+    expect((await repo.listAttempts(nodira.id, G)).map((a) => a.id)).toEqual([id]);
+    expect(await repo.listAttempts(jasur.id, G)).toEqual([]);
+    expect(await repo.listAttempts(nodira.id, 'english')).toEqual([]);
+
+    // The course's teachers see everyone's, with names and no email addresses
+    const all = await repo.courseTestResults(G);
+    expect(all.attempts.map((a) => [a.userId, a.testId])).toEqual([[nodira.id, test.id]]);
+    expect(all.people.map((p) => p.displayName)).toEqual(expect.arrayContaining(['Nodira', 'Jasur']));
+    expect(JSON.stringify(all)).not.toContain('@');
+    expect((await repo.courseTestResults('english')).attempts).toEqual([]);
   });
 });
