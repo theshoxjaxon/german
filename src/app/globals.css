@@ -1107,3 +1107,14 @@ details.advanced[open] > summary { margin-bottom: 10px; }
 .member-row { flex-wrap: wrap; }
 .report-form { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .report-form select { min-height: 34px; border-radius: 10px; padding: 0 8px; }
+
+/* the teachers' heatmap */
+.heat-grid .sg-day { cursor: default; display: grid; place-items: center; }
+.heat-grid .sg-hour { display: grid; align-items: center; justify-content: end; }
+.sg-cell.heat {
+  background: color-mix(in srgb, var(--mark) calc(var(--heat, 0) * 100%), var(--surface-2));
+  font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: var(--ink);
+}
+.report-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.report-list li { display: grid; gap: 2px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.admin .club-list li .grow { flex: 1; min-width: 0; }

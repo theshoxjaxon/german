@@ -12,6 +12,7 @@ import { isCourseId, isTargetLang } from '@/lib/courses';
 import { hashPassword, temporaryPassword } from '@/lib/server/password';
 import * as repo from '@/lib/server/repo';
 import { currentUser } from '@/lib/server/session';
+import { createClub, deleteClub } from '@/lib/server/study';
 import type { Role } from '@/lib/types';
 
 type Result = { ok: true; password?: string } | { ok: false; error: string };
@@ -89,6 +90,34 @@ export async function updateCourseAction(courseId: string, name: string, note: s
   const n = cleanText(name, 60);
   if (!n) return { ok: false, error: 'Give the course a name.' };
   await repo.updateCourse(courseId, { name: n, note: cleanText(note, 80) });
+  refresh();
+  return { ok: true };
+}
+
+/**
+ * A speaking club for the course's students: a time, and a room or an https link. Shown on their
+ * study page with "I'll come".
+ */
+export async function createClubAction(courseId: string, startsAt: number, place: string): Promise<Result> {
+  const user = await requireTeacher(courseId);
+  if (!user) return notTeacher;
+  const now = Date.now();
+  if (!Number.isFinite(startsAt) || startsAt < now - 60 * 60_000 || startsAt > now + 90 * 24 * 60 * 60_000) {
+    return { ok: false, error: 'Pick a time in the next 90 days.' };
+  }
+  const where = cleanText(place, 200);
+  // Shown as a link only when it is one https address; anything else is plain text
+  if (/:\/\//.test(where) && !/^https:\/\/\S+$/i.test(where)) {
+    return { ok: false, error: 'A link must start with https:// (or write a room, e.g. Room 204).' };
+  }
+  await createClub(courseId, Math.round(startsAt), where, user.id);
+  refresh();
+  return { ok: true };
+}
+
+export async function deleteClubAction(courseId: string, clubId: string): Promise<Result> {
+  if (!(await requireTeacher(courseId))) return notTeacher;
+  if (typeof clubId !== 'string' || !(await deleteClub(courseId, clubId))) return { ok: false, error: 'That club no longer exists.' };
   refresh();
   return { ok: true };
 }

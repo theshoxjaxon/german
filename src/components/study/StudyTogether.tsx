@@ -364,7 +364,7 @@ function GroupChat({ group, onBack, onLeft }: { group: StudyGroupView; onBack: (
       <div className="rv-top">
         <button className="icon-btn" onClick={onBack} aria-label={t('Back')}><Icon name="back" /></button>
         <div className="runner-title">
-          <b>{others.map((m) => m.name).join(', ')}</b>
+          <b>{others.filter((m) => !m.left).map((m) => m.name).join(', ') || t('Your group')}</b>
           <span className="muted small">{weekRange(group.week)}</span>
         </div>
         <span />
