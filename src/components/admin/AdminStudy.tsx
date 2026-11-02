@@ -7,6 +7,8 @@ import type { Course } from '@/lib/courses';
 import { useClientValue } from '@/lib/client/hooks';
 import { REASON_LABEL, type StudyAdminView } from '@/lib/study/types';
 import { cityOf, DAYS, FIRST_HOUR, LAST_HOUR, slotStart } from '@/lib/study/week';
+
+const MIN_SIGNUPS = 3; // as on the server (study.ts): the heatmap waits for 3 sign-ups
 import { DAY_NAMES } from '../study/StudyTogether';
 import { ConfirmButton } from '../ui';
 import { CourseBar } from './CourseBar';
@@ -68,10 +70,12 @@ export function AdminStudy({ course, courses, admin, view }: { course: Course; c
 
         <section className="panel" aria-labelledby="heat-h">
           <div className="panel-h"><h2 id="heat-h">Best times next week</h2><span className="muted">{weekRange(view.week)} · {cityOf(view.timeZone)} time</span></div>
-          {best.length ? (
+          {view.signups < MIN_SIGNUPS ? (
+            <p className="muted small">The heatmap appears once {MIN_SIGNUPS} students have signed up ({view.signups} so far), so nobody’s hours can be told apart.</p>
+          ) : best.length ? (
             <p className="small">Most free: {best.map(([s, n]) => `${label(Number(s))} (${n})`).join(' · ')}. Tap an hour to plan a speaking club then.</p>
           ) : (
-            <p className="muted small">Nobody has marked free hours for next week yet.</p>
+            <p className="muted small">No hour is shared by 2 or more students yet.</p>
           )}
           <div className="study-grid heat-grid" role="grid" aria-label="How many students are free at each hour next week">
             <span />
@@ -80,7 +84,7 @@ export function AdminStudy({ course, courses, admin, view }: { course: Course; c
               <Row key={h} hour={h} heat={view.heat} max={max} onPick={(slot) => setAt(localInput(slotStart(view.week, slot, view.timeZone)))} />
             ))}
           </div>
-          <p className="hint">Counts only: who is free stays private. Students in groups are matched on Sunday at 18:00.</p>
+          <p className="hint">Counts only, and only hours at least 2 students share: who is free stays private. Groups are made on Sunday at 18:00.</p>
         </section>
 
         <section className="panel" aria-labelledby="clubs-h">
@@ -122,7 +126,7 @@ export function AdminStudy({ course, courses, admin, view }: { course: Course; c
           )}
           <p className="hint">Messages are never shown, here or anywhere: talk to the students. Reporting also means they’re never grouped together again.</p>
         </section>
-        <p className="hint center">Study chats are private to their groups. Teachers and admins can’t read them; they are deleted 14 days after their week.</p>
+        <p className="hint center">Study chats are private to their groups: no page in the app shows them to teachers or admins. They are deleted 14 days after their week.</p>
       </div>
     </main>
   );

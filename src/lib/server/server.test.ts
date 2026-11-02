@@ -731,10 +731,13 @@ describe('study together', () => {
     // Next week: the two who blocked are never grouped, people taken off the board aren't grouped
     const W2 = '2026-11-16';
     const AFTER2 = AFTER + 7 * 24 * 3600_000;
-    for (const p of [a, mate]) await study.saveSignup(p.id, G, W2, [10], AFTER);
-    await study.saveSignup(iroda.id, G, W2, [10], AFTER);
+    for (const p of [a, mate]) await study.saveSignup(p.id, G, W2, [10, 12], AFTER);
+    expect((await study.studyAdmin(G, AFTER)).heat).toEqual({}); // fewer than 3 signed up: nothing shown
+    await study.saveSignup(iroda.id, G, W2, [10, 11], AFTER);
+    const heat = (await study.studyAdmin(G, AFTER)).heat;
+    expect(heat).toEqual({ 10: 3, 12: 2 }); // counts only; an hour only one marked (11) stays hidden
     await repo.setOnBoard(G, iroda.id, false);
-    expect((await study.studyAdmin(G, AFTER)).heat).toEqual({ 10: 2 }); // counts only, eligible only
+    expect((await study.studyAdmin(G, AFTER)).heat).toEqual(heat); // a teacher's switch can't single anyone out
     const [one, two] = await Promise.all([study.runMatching(course, W2, AFTER2), study.runMatching(course, W2, AFTER2)]);
     expect([one, two].filter((x) => x !== null)).toEqual([0]); // one run wins; nobody can be grouped
     await repo.setOnBoard(G, iroda.id, true);

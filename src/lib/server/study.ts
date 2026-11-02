@@ -360,11 +360,17 @@ export async function deleteClub(courseId: string, id: string): Promise<boolean>
 
 /* ---------- what a teacher sees: counts and reports, never a chat ---------- */
 
+/** The heatmap waits for this many sign-ups, and shows only hours at least MIN_SHARED of them marked. */
+export const MIN_SIGNUPS = 3;
+export const MIN_SHARED = 2;
+
 export async function studyAdmin(courseId: string, now = Date.now()): Promise<StudyAdminView> {
   const db = await getDb();
   const week = signupWeek(now, TIMEZONE);
   const current = weekOf(now, TIMEZONE);
-  const eligible = `JOIN course_members m ON m.course_id = s.course_id AND m.user_id = s.user_id AND m.role = 'student' AND m.on_board`;
+  // Every sign-up of the course's students, whatever a teacher switches (the class board): counts a
+  // teacher could change one student at a time would tell that student's hours apart
+  const eligible = `JOIN users u ON u.id = s.user_id AND u.role <> 'admin'`;
   const [heat, signups, groups, clubs, reports] = await Promise.all([
     db.query(`SELECT x.slot, count(*)::int AS n FROM study_signups s ${eligible}, unnest(s.slots) AS x (slot) WHERE s.course_id = $1 AND s.week = $2 GROUP BY x.slot`, [courseId, week]),
     db.query(`SELECT s.week, count(*)::int AS n FROM study_signups s ${eligible} WHERE s.course_id = $1 AND s.week = ANY($2) GROUP BY s.week`, [courseId, [week, current]]),
@@ -386,7 +392,8 @@ export async function studyAdmin(courseId: string, now = Date.now()): Promise<St
     timeZone: TIMEZONE,
     week,
     deadline: deadline(week, TIMEZONE),
-    heat: Object.fromEntries(heat.rows.map((r) => [num(r.slot), num(r.n)])),
+    // Only once enough have signed up, and only hours several share: no one's hours on their own
+    heat: count(week) < MIN_SIGNUPS ? {} : Object.fromEntries(heat.rows.filter((r) => num(r.n) >= MIN_SHARED).map((r) => [num(r.slot), num(r.n)])),
     signups: count(week),
     thisWeek: { week: current, signups: count(current), groups: num(groups.rows[0]?.groups), grouped: num(groups.rows[0]?.grouped) },
     clubs,
