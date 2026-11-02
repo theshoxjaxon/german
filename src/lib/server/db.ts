@@ -22,7 +22,7 @@ export interface Db {
 }
 
 /** Bump when the schema or the built-in word lists change: every database then runs migrate() once more. */
-const SCHEMA_VERSION = '14';
+const SCHEMA_VERSION = '15';
 
 /*
  * Times are milliseconds since 1970 (JavaScript's Date.now()) in BIGINT columns; days are
@@ -229,6 +229,83 @@ CREATE TABLE IF NOT EXISTS test_attempts (
 CREATE INDEX IF NOT EXISTS test_attempts_user_idx ON test_attempts (user_id, test_id, submitted_at DESC);
 CREATE INDEX IF NOT EXISTS test_attempts_course_idx ON test_attempts (course_id, test_id);
 
+-- Schema 15: "Let's study together". Students mark free hours for a week (slots: day × 24 + hour);
+-- on the Sunday before it, groups of 3 who share an hour are made, each with a private chat.
+-- Only a group's members ever read its messages: no query for teachers or admins exists.
+CREATE TABLE IF NOT EXISTS study_signups (
+  course_id  text NOT NULL REFERENCES courses (id) ON DELETE CASCADE,
+  week       text NOT NULL,              -- its Monday, 'YYYY-MM-DD' in APP_TIMEZONE
+  user_id    text NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  slots      smallint[] NOT NULL,
+  updated_at bigint NOT NULL,
+  PRIMARY KEY (course_id, week, user_id)
+);
+CREATE TABLE IF NOT EXISTS study_runs (     -- the groups of a course and week were made (once)
+  course_id text NOT NULL REFERENCES courses (id) ON DELETE CASCADE,
+  week      text NOT NULL,
+  ran_at    bigint NOT NULL,
+  PRIMARY KEY (course_id, week)
+);
+CREATE TABLE IF NOT EXISTS study_groups (
+  id         text PRIMARY KEY,               -- 128 random bits
+  course_id  text NOT NULL REFERENCES courses (id) ON DELETE CASCADE,
+  week       text NOT NULL,
+  slot       smallint,                       -- the suggested hour
+  slots      smallint[] NOT NULL,            -- every hour they share
+  task       jsonb NOT NULL,
+  created_at bigint NOT NULL,
+  ends_at    bigint NOT NULL,                -- read-only from then
+  expires_at bigint NOT NULL                 -- deleted then, with members and messages
+);
+CREATE INDEX IF NOT EXISTS study_groups_course_idx ON study_groups (course_id, week);
+CREATE INDEX IF NOT EXISTS study_groups_expires_idx ON study_groups (expires_at);
+CREATE TABLE IF NOT EXISTS study_members (
+  group_id     text NOT NULL REFERENCES study_groups (id) ON DELETE CASCADE,
+  user_id      text NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  member_key   text NOT NULL,                -- what the other members see instead of the user id
+  left_at      bigint,
+  last_read_id bigint NOT NULL DEFAULT 0,
+  PRIMARY KEY (group_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS study_members_user_idx ON study_members (user_id);
+CREATE TABLE IF NOT EXISTS study_messages (
+  id         bigserial PRIMARY KEY,
+  group_id   text NOT NULL REFERENCES study_groups (id) ON DELETE CASCADE,
+  user_id    text NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  body       text NOT NULL CHECK (char_length(body) BETWEEN 1 AND 500),
+  created_at bigint NOT NULL
+);
+CREATE INDEX IF NOT EXISTS study_messages_group_idx ON study_messages (group_id, id);
+CREATE TABLE IF NOT EXISTS study_blocks (   -- never in a group together again (either way)
+  user_id    text NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  blocked_id text NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  created_at bigint NOT NULL,
+  PRIMARY KEY (user_id, blocked_id)
+);
+CREATE TABLE IF NOT EXISTS study_reports (  -- who reported whom and why; never what was written
+  id          text PRIMARY KEY,
+  course_id   text NOT NULL REFERENCES courses (id) ON DELETE CASCADE,
+  reporter_id text NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  reported_id text NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  reason      text NOT NULL CHECK (reason IN ('rude', 'bullying', 'spam', 'inappropriate', 'other')),
+  created_at  bigint NOT NULL
+);
+CREATE INDEX IF NOT EXISTS study_reports_course_idx ON study_reports (course_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS study_clubs (    -- a speaking session a teacher planned for the course
+  id         text PRIMARY KEY,
+  course_id  text NOT NULL REFERENCES courses (id) ON DELETE CASCADE,
+  starts_at  bigint NOT NULL,
+  place      text NOT NULL DEFAULT '',
+  created_by text REFERENCES users (id) ON DELETE SET NULL,
+  created_at bigint NOT NULL
+);
+CREATE INDEX IF NOT EXISTS study_clubs_course_idx ON study_clubs (course_id, starts_at);
+CREATE TABLE IF NOT EXISTS study_club_rsvps (
+  club_id text NOT NULL REFERENCES study_clubs (id) ON DELETE CASCADE,
+  user_id text NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  PRIMARY KEY (club_id, user_id)
+);
+
 -- Supabase also publishes the public schema through its REST API. Row Level Security with no
 -- policies closes that door: only this server (connecting as the table owner) reads the data.
 ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
@@ -245,6 +322,15 @@ ALTER TABLE rate_limits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE courses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE course_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE test_attempts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE study_signups ENABLE ROW LEVEL SECURITY;
+ALTER TABLE study_runs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE study_groups ENABLE ROW LEVEL SECURITY;
+ALTER TABLE study_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE study_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE study_blocks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE study_reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE study_clubs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE study_club_rsvps ENABLE ROW LEVEL SECURITY;
 
 INSERT INTO settings (key, value) VALUES ('schema_version', '${SCHEMA_VERSION}')
   ON CONFLICT (key) DO UPDATE SET value = excluded.value;

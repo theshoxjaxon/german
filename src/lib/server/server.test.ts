@@ -493,6 +493,10 @@ describe('courses', () => {
     await conn.query(`DELETE FROM words WHERE course_id <> 'german'`);
     await conn.query(`DELETE FROM settings WHERE key LIKE 'seeded:english-%'`);
     await conn.query('DROP TABLE test_attempts'); // schema 14, comes back on the same start
+    // schema 15 (children first)
+    for (const t of ['study_club_rsvps', 'study_clubs', 'study_reports', 'study_blocks', 'study_messages', 'study_members', 'study_groups', 'study_runs', 'study_signups']) {
+      await conn.query(`DROP TABLE ${t}`);
+    }
     await conn.query('DROP TABLE course_members');
     await conn.query('ALTER TABLE words DROP COLUMN course_id');
     await conn.query('ALTER TABLE users DROP COLUMN course_id');
@@ -642,5 +646,120 @@ describe('mock tests', () => {
     expect(all.people.map((p) => p.displayName)).toEqual(expect.arrayContaining(['Nodira', 'Jasur']));
     expect(JSON.stringify(all)).not.toContain('@');
     expect((await repo.courseTestResults('english')).attempts).toEqual([]);
+  });
+});
+
+describe('study together', () => {
+  const NOW = Date.parse('2026-11-04T10:00:00Z'); // a Wednesday in Tashkent
+  const W = '2026-11-09'; // next week
+  const AFTER = Date.parse('2026-11-08T13:01:00Z'); // Sunday 18:01 in Tashkent: sign-ups closed
+  const TUE_19 = 24 + 19;
+
+  it('makes groups once, keeps chats to their members, and shows teachers counts and reports only', async () => {
+    const study = await import('./study');
+    const course = { id: G, targetLang: 'de' as const };
+    const names = ['Aziza', 'Bekzod', 'Dilnoza', 'Farrux', 'Gulnora', 'Hasan', 'Iroda'];
+    const people = [];
+    for (const n of names) people.push(await profile(`study-${n.toLowerCase()}@example.com`, n, { courseId: G }));
+    const [a, b, c, d, e, f, iroda] = people;
+    const teacher = await profile('study-teacher@example.com', 'Ustoz', { courseId: G });
+    await repo.setCourseRole(G, teacher.id, 'teacher');
+    const admin = await profile('study-admin@example.com', 'Admin', { courseId: G });
+    await repo.setRole(admin.id, 'admin');
+    const user = async (id: string) => (await repo.findUserById(id))!;
+    expect(study.canStudy(await user(a.id))).toBe(true);
+    expect(study.canStudy(await user(teacher.id))).toBe(false);
+    expect(study.canStudy(await user(admin.id))).toBe(false);
+
+    // Six share Tuesday 19:00, Iroda is only free on Monday morning
+    for (const p of [a, b, c, d, e, f]) await study.saveSignup(p.id, G, W, [TUE_19, TUE_19 + 1], NOW);
+    await study.saveSignup(iroda.id, G, W, [8], NOW);
+    expect(await study.matchDue([course], NOW)).toBe(0); // not before Sunday 18:00
+
+    expect(await study.matchDue([course], AFTER)).toBe(2);
+    expect(await study.matchDue([course], AFTER)).toBe(0); // once
+    expect(await study.coursesToMatch(AFTER)).toEqual([]);
+
+    const stateA = await study.studyState(await user(a.id), AFTER);
+    expect(stateA.groups).toHaveLength(1);
+    const group = stateA.groups[0];
+    expect(group).toMatchObject({ week: W, slot: TUE_19, slots: [TUE_19, TUE_19 + 1], open: true, unread: 0 });
+    expect(group.members).toHaveLength(3);
+    expect(group.task.cards.length).toBeGreaterThan(0);
+    const json = JSON.stringify(stateA);
+    for (const p of [...people, teacher, admin]) expect(json).not.toContain(p.id); // no user ids…
+    expect(json).not.toContain('@'); // …and no emails
+    expect((await study.studyState(await user(iroda.id), AFTER)).noGroup).toBe(W);
+    expect((await study.studyState(await user(a.id), AFTER)).week).toBe('2026-11-16'); // sign-ups moved on
+
+    const inGroup = new Set(group.members.map((m) => m.name));
+    const mate = people.find((p) => p.id !== a.id && inGroup.has(p.displayName))!;
+    const third = people.find((p) => p.id !== a.id && p.id !== mate.id && inGroup.has(p.displayName))!;
+    const outsider = people.find((p) => p.id !== iroda.id && !inGroup.has(p.displayName))!;
+
+    // Members post and read; nobody else can, not even a teacher or an admin
+    const msg = await study.addMessage(group.id, a.id, 'Hallo! Dienstag um 19 Uhr?', AFTER);
+    expect(msg).toMatchObject({ mine: true, body: 'Hallo! Dienstag um 19 Uhr?' });
+    expect((await study.studyState(await user(mate.id), AFTER)).groups[0].unread).toBe(1);
+    const seen = await study.listMessages(group.id, mate.id, 0, AFTER);
+    expect(seen).toEqual([expect.objectContaining({ body: 'Hallo! Dienstag um 19 Uhr?', mine: false, key: group.members.find((m) => m.me)!.key })]);
+    expect((await study.studyState(await user(mate.id), AFTER)).groups[0].unread).toBe(0);
+    for (const who of [outsider, iroda, teacher, admin]) {
+      expect(await study.memberGroup(group.id, who.id, AFTER)).toBeNull();
+      expect(await study.listMessages(group.id, who.id, 0, AFTER)).toBeNull();
+      expect(await study.addMessage(group.id, who.id, 'hi', AFTER)).toBeNull();
+      expect(await study.leaveGroup(group.id, who.id, AFTER)).toBe(false);
+      expect(await study.blockMember(group.id, who.id, group.members[0].key, AFTER)).toBe(false);
+      expect(await study.reportMember(group.id, who.id, group.members[0].key, 'rude', AFTER)).toBe(false);
+    }
+
+    // Leaving ends access; the others see that you left
+    expect(await study.leaveGroup(group.id, third.id, AFTER)).toBe(true);
+    expect(await study.listMessages(group.id, third.id, 0, AFTER)).toBeNull();
+    expect((await study.studyState(await user(third.id), AFTER)).groups).toEqual([]);
+    expect((await study.studyState(await user(a.id), AFTER)).groups[0].members.find((m) => m.name === third.displayName)?.left).toBe(true);
+
+    // Report (also blocks): the teacher sees who, whom and why, never the chat
+    const mateKey = group.members.find((m) => m.name === mate.displayName)!.key;
+    expect(await study.reportMember(group.id, a.id, mateKey, 'rude', AFTER)).toBe(true);
+    expect(await study.reportMember(group.id, a.id, group.members.find((m) => m.me)!.key, 'rude', AFTER)).toBe(false); // not yourself
+    const view = await study.studyAdmin(G, AFTER);
+    expect(view.reports).toEqual([expect.objectContaining({ reporter: a.displayName, reported: mate.displayName, reason: 'rude' })]);
+    expect(view.thisWeek).toMatchObject({ week: '2026-11-02' });
+    expect(JSON.stringify(view)).not.toContain('Dienstag');
+
+    // Next week: the two who blocked are never grouped, people taken off the board aren't grouped
+    const W2 = '2026-11-16';
+    const AFTER2 = AFTER + 7 * 24 * 3600_000;
+    for (const p of [a, mate]) await study.saveSignup(p.id, G, W2, [10], AFTER);
+    await study.saveSignup(iroda.id, G, W2, [10], AFTER);
+    await repo.setOnBoard(G, iroda.id, false);
+    expect((await study.studyAdmin(G, AFTER)).heat).toEqual({ 10: 2 }); // counts only, eligible only
+    const [one, two] = await Promise.all([study.runMatching(course, W2, AFTER2), study.runMatching(course, W2, AFTER2)]);
+    expect([one, two].filter((x) => x !== null)).toEqual([0]); // one run wins; nobody can be grouped
+    await repo.setOnBoard(G, iroda.id, true);
+
+    // A finished week is read-only, then deleted with its chat
+    const end = Date.parse('2026-11-15T19:00:00Z');
+    expect(await study.addMessage(group.id, mate.id, 'zu spät', end + 1)).toBeNull();
+    expect(await study.listMessages(group.id, mate.id, 0, end + 1)).toHaveLength(1);
+    const expired = end + 14 * 24 * 3600_000;
+    await study.purgeStudy(expired + 1);
+    expect(await study.memberGroup(group.id, mate.id, NOW)).toBeNull(); // gone, whatever the clock says
+  });
+
+  it('lets students answer speaking clubs of their own course only', async () => {
+    const study = await import('./study');
+    const s = await profile('study-club@example.com', 'Club', { courseId: G });
+    const start = Date.parse('2026-11-10T14:00:00Z');
+    const club = await study.createClub(G, start, 'Raum 204', s.id, NOW);
+    const other = await study.createClub('english', start, '', s.id, NOW);
+    expect(await study.rsvpClub(club, s.id, G, true, NOW)).toBe(true);
+    expect(await study.rsvpClub(other, s.id, G, true, NOW)).toBe(false);
+    expect(await study.upcomingClubs(G, s.id, NOW)).toEqual([expect.objectContaining({ id: club, place: 'Raum 204', going: 1, me: true })]);
+    expect(await study.rsvpClub(club, s.id, G, false, NOW)).toBe(true);
+    expect((await study.upcomingClubs(G, s.id, NOW))[0]).toMatchObject({ going: 0, me: false });
+    expect(await study.deleteClub('english', club)).toBe(false);
+    expect(await study.deleteClub(G, club)).toBe(true);
   });
 });
