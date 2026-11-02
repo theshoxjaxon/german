@@ -618,8 +618,17 @@ describe('mock tests', () => {
     const open = Object.fromEntries(
       ['t1-s2-1', 't1-p1-1', 't1-p2-1', 't1-p3-1'].map((k) => [k, { points: 2, max: 10, summary: 'ok', corrections: [], tip: '' }]),
     );
+    // One AI check at a time; a failed one can be retried at once
+    expect(await repo.claimAttemptGrading(id)).toBe(true);
+    expect(await repo.claimAttemptGrading(id)).toBe(false);
+    expect(await repo.claimAttemptGrading(id, Date.now() + 3 * 60_000)).toBe(true); // a stuck check expires
+    await repo.updateAttemptResult(id, result, 'The AI is busy right now. Try again in a minute.');
+    expect(await repo.getAttempt(id)).toMatchObject({ complete: false, aiError: 'The AI is busy right now. Try again in a minute.' });
+    expect(await repo.claimAttemptGrading(id)).toBe(true);
+
     const graded = scoreAttempt(test, answers, open);
     await repo.updateAttemptResult(id, graded, null);
+    expect(await repo.claimAttemptGrading(id)).toBe(false); // complete: nothing to check
     expect(await repo.getAttempt(id)).toMatchObject({ complete: true, score: graded.score, aiError: null });
 
     // Each person sees only their own attempts

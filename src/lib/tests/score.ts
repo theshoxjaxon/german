@@ -86,6 +86,16 @@ export function scoreAttempt(test: Test, answers: Answers, open: Record<string, 
   return { testId: test.id, items, open, sections, score, complete, grade: complete ? grade(score) : null };
 }
 
+/** Writing and speaking left empty: 0 points straight away, nothing for the AI to check. */
+export function emptyOpen(test: Test, answers: Answers): Record<string, OpenFeedback> {
+  const out: Record<string, OpenFeedback> = {};
+  for (const item of allItems(test)) {
+    const v = answers[item.id];
+    if (isOpen(item) && !(typeof v === 'string' && v.trim())) out[item.id] = { points: 0, max: itemMax(item), summary: '', corrections: [], tip: '' };
+  }
+  return out;
+}
+
 /** A copy of `obj` without `key`. */
 export const omit = <T extends object, K extends keyof T>(obj: T, key: K) =>
   Object.fromEntries(Object.entries(obj).filter(([k]) => k !== key)) as Omit<T, K>;

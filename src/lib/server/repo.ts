@@ -1099,10 +1099,24 @@ export async function getAttempt(id: string): Promise<AttemptRow | null> {
 /** After the AI has scored the writing and speaking (or couldn't: `aiError`). */
 export async function updateAttemptResult(id: string, result: TestResult, aiError: string | null, now = Date.now()): Promise<void> {
   const db = await getDb();
+  // graded_at stays empty until the result is complete, so a failed check can be retried at once
   await db.query(
     'UPDATE test_attempts SET result = $2::jsonb, score = $3, complete = $4, ai_error = $5, graded_at = $6 WHERE id = $1',
-    [id, JSON.stringify(result), result.score, result.complete, aiError, now],
+    [id, JSON.stringify(result), result.score, result.complete, aiError, result.complete ? now : null],
   );
+}
+
+/**
+ * Start the AI check of an attempt, unless one is already running (for up to 2 minutes): two
+ * open result screens, or a double tap, then cost one AI request instead of two.
+ */
+export async function claimAttemptGrading(id: string, now = Date.now()): Promise<boolean> {
+  const db = await getDb();
+  const r = await db.query(
+    'UPDATE test_attempts SET graded_at = $2 WHERE id = $1 AND NOT complete AND (graded_at IS NULL OR graded_at < $3) RETURNING id',
+    [id, now, now - 2 * 60_000],
+  );
+  return r.rows.length > 0;
 }
 
 /** Your attempts in a course, newest first. */

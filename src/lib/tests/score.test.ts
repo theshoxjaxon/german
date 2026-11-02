@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TESTS } from '../server/tests';
-import { allItems, cleanAnswers, grade, normalize, publicTest, scoreAttempt } from './score';
+import { allItems, cleanAnswers, emptyOpen, grade, normalize, publicTest, scoreAttempt } from './score';
 import { isOpen, SECTIONS, type Test } from './types';
 
 const FIXTURE: Test = {
@@ -59,6 +59,12 @@ describe('scoring a mock test', () => {
     expect(sec.schreiben).toMatchObject({ raw: 10, score: 18, pending: false });
     expect(sec.sprechen).toMatchObject({ raw: 3, score: 20, pending: false });
     expect(done).toMatchObject({ complete: true, score: 78, grade: 'befriedigend' });
+  });
+
+  it('scores writing and speaking left empty as 0 straight away', () => {
+    expect(emptyOpen(FIXTURE, { s2: 'Liebe Lena', p1: '   ' })).toEqual({ p1: { points: 0, max: 3, summary: '', corrections: [], tip: '' } });
+    const r = scoreAttempt(FIXTURE, {}, emptyOpen(FIXTURE, {}));
+    expect(r).toMatchObject({ complete: true, score: 0, grade: 'nicht bestanden' });
   });
 
   it('grades like the Goethe exam: 60 points pass', () => {

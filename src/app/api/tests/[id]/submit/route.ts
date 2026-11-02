@@ -5,11 +5,12 @@ import * as repo from '@/lib/server/repo';
 import { requireUser } from '@/lib/server/session';
 import { attemptDetail, findTest } from '@/lib/server/tests';
 import { HOUR } from '@/lib/time';
-import { cleanAnswers, scoreAttempt } from '@/lib/tests/score';
+import { cleanAnswers, emptyOpen, scoreAttempt } from '@/lib/tests/score';
 
 /**
  * POST /api/tests/:id/submit { answers, startedAt } → the attempt, scored: everything but the
- * writing and speaking right away (those come from POST /api/tests/attempts/:id/feedback).
+ * writing and speaking right away (those come from POST /api/tests/attempts/:id/feedback;
+ * left empty, they score 0 here).
  * The answer key is only ever used here, on the server.
  */
 export async function POST(req: Request, ctx: RouteContext<'/api/tests/[id]/submit'>) {
@@ -25,7 +26,7 @@ export async function POST(req: Request, ctx: RouteContext<'/api/tests/[id]/subm
   const answers = cleanAnswers(test, body?.answers);
   const now = Date.now();
   const startedAt = typeof body?.startedAt === 'number' && body.startedAt > now - 6 * HOUR && body.startedAt <= now ? body.startedAt : null;
-  const result = scoreAttempt(test, answers);
+  const result = scoreAttempt(test, answers, emptyOpen(test, answers));
   const id = await repo.saveAttempt({ userId: user.id, courseId: user.courseId, testId: test.id, answers, result, startedAt }, now);
   const attempt = (await repo.getAttempt(id))!;
   return ok({ attempt: attemptDetail(attempt, test), ai: aiEnabled() });

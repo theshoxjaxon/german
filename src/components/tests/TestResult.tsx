@@ -172,17 +172,18 @@ function SectionBar({ s, title, label }: { s: SectionResult; title: string; labe
 
 function OpenReview({ item, text, feedback }: { item: OpenItem; text: string | number | boolean | undefined; feedback?: OpenFeedback }) {
   const { t } = useT();
+  const answered = typeof text === 'string' && !!text.trim();
   return (
     <div className="open-review">
       <p className="rev-q" lang="de">{item.prompt}</p>
       {item.type === 'writing' && <ul className="points" lang="de">{item.points.map((p) => <li key={p}>{p}</li>)}</ul>}
       {item.type === 'speaking' && <div className="cards-row" lang="de">{item.cards.map((c) => <span key={c} className="word-card">{c}</span>)}</div>}
       <p className="label">{t(item.type === 'writing' ? 'Your text' : 'What you said')}</p>
-      <p className="your-text" lang="de">{typeof text === 'string' && text ? text : '—'}</p>
+      <p className="your-text" lang="de">{answered ? text : '—'}</p>
       {feedback && (
         <div className="feedback">
           <p className="fb-points"><b>{feedback.points}</b> / {feedback.max} {t('points')}</p>
-          <p>{feedback.summary}</p>
+          {!answered ? <p>{t('No answer, so no points.')}</p> : feedback.summary && <p>{feedback.summary}</p>}
           {feedback.corrections.length > 0 && (
             <ul className="corrections">
               {feedback.corrections.map((c, i) => (
@@ -194,6 +195,7 @@ function OpenReview({ item, text, feedback }: { item: OpenItem; text: string | n
             </ul>
           )}
           {feedback.tip && <p className="tip"><Icon name="star" /> {feedback.tip}</p>}
+          {item.type === 'speaking' && answered && <p className="muted small">{t('Pronunciation isn’t scored: the AI only sees the words.')}</p>}
         </div>
       )}
       <details className="transcript">

@@ -16,7 +16,7 @@ import { sanitizeWord } from './validate';
 /** Override with AI_MODEL in .env.local. */
 export const AI_MODEL = process.env.AI_MODEL?.trim() || 'claude-opus-5-5';
 /** Models that accept server-side refusal fallbacks (fallbacks: "default"). */
-const FALLBACK_MODELS = new Set(['claude-fable-5-1', 'claude-opus-5-5', 'claude-opus-5', 'claude-sonnet-5-5']);
+export const FALLBACK_MODELS = new Set(['claude-fable-5-1', 'claude-opus-5-5', 'claude-opus-5', 'claude-sonnet-5-5']);
 const MAX_WORDS = 100;
 
 /** On when the server has credentials. AI_ENABLED=false switches it off; =true forces it on (e.g. an `ant auth login` profile). */
@@ -28,7 +28,7 @@ export function aiEnabled(): boolean {
 }
 
 const g = globalThis as typeof globalThis & { __kkAnthropic?: Anthropic };
-function client(): Anthropic {
+export function client(): Anthropic {
   // Reads ANTHROPIC_API_KEY (and ANTHROPIC_BASE_URL) from the environment.
   g.__kkAnthropic ??= new Anthropic({ timeout: 120_000, maxRetries: 2 });
   return g.__kkAnthropic;
@@ -193,7 +193,7 @@ export async function makeWords(req: AiRequest, target: TargetLang = 'de'): Prom
   return parseResult(text);
 }
 
-function toAiError(e: unknown): AiError {
+export function toAiError(e: unknown): AiError {
   if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError) {
     console.error('Karteikasten AI: the API key was rejected.', e.message);
     return new AiError(503, 'The AI helper isn’t set up correctly on this server. Ask your teacher to check the API key.');
