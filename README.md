@@ -11,6 +11,7 @@ A mobile-first vocabulary app for learning centers. Students study German or Eng
 - **Words**: an Airtable-style table and card gallery: search, filter, sort. Teachers manage the shared lesson words; every student can also add **their own words**, which only they see and study.
 - **AI word helper** (optional): take a photo of a word list (textbook page, worksheet, whiteboard, notes) or type words, and Claude turns them into finished flashcards in the course's language: meaning, IPA, forms (German: with the article), an example sentence and a memory hook. You tick the ones to keep and pick the topic. In the word form, **Fill in the rest with AI** completes a single word.
 - **Mock tests** (German course): four unit tests (Lektion 1–3, 4–6, 7–9, 10–12) and a 75-minute final exam in the format of the **Goethe-Zertifikat A1: Start Deutsch 1**: listening (read aloud by the phone, twice), reading, vocabulary and grammar, writing and speaking, 20 points each, 60 of 100 to pass. Everything but writing and speaking is scored the moment you hand in, with every answer and the right one; the AI then scores the writing and speaking like an examiner and explains each mistake in Uzbek or English. Teachers see every student's results at `/admin/tests`.
+- **Let's study together**: students mark the hours they're free next week and press **I want to study**. Every Sunday at 18:00 the app makes **groups of 3** who share a free hour, each with a suggested time, a speaking task and a **private chat** that only the group can read. Teachers see when the class is free (counts only), plan speaking clubs, and see reports, never chats. Share it as `/lets-study-together`.
 - **Admin dashboard** at `/admin`, per course: members, new sign-ups, daily / weekly / monthly active students, 30-day charts, a member table, the course's invite link, its name and note, and **which lesson the class is on**. Admins also see emails, reset passwords, make teachers and start new courses.
 
 **German · Momente** comes with all twelve Momente lessons, German → Uzbek, 653 words in all, each with IPA, an example sentence, plural or verb forms and a memory hook:
@@ -124,6 +125,18 @@ The German course has five tests in a **Tests** tab (courses without tests don't
 - **Teachers**: `/admin/tests` shows each student's best score per test, the average and pass rate per test, and the latest attempts with their five section scores; any score opens the whole attempt with the student's text and the AI feedback. Names only, no emails.
 - **Adding a test**: write it in `src/lib/server/tests/` (see `german-a1.ts`; `npm test` checks every test: unique ids, valid answers, a perfect attempt scores 100) and add it to `TESTS`.
 
+## Let's study together
+
+A card at the top of the **Class** tab (or the link `/lets-study-together`) opens it.
+
+- **Students** tap the hours they're free next week (Monday to Sunday, 8:00–22:00, in `APP_TIMEZONE`) and press **I want to study**. Hours can change until **Sunday 18:00**; after that, sign-ups count for the week after.
+- **Sunday 18:00**: groups of 3 are made at random among students who share at least one free hour (2 or 4 when the numbers don't divide evenly). People who blocked each other are never grouped. Each group gets the earliest shared hour as its suggested time, a speaking task (the speaking cards of the mock tests for German, a short list for English) and a chat. Nobody free at the same time as anyone else gets "no group", with a tip to pick more hours.
+- **The chat**: plain text, 500 characters; **no links, email addresses, phone numbers or usernames**, so nobody is lured elsewhere or contacted privately. New messages show within about 3 seconds while it's open. A student can **leave**, **block** a member (never grouped together again) or **report** one with a reason (this also blocks). The chat is read-only once its week ends and deleted, with the group, **14 days later**.
+- **Teachers** (`/admin/study`): next week's best times as a heatmap (how many are free each hour, never who), sign-up and group counts, **speaking clubs** (pick an hour, a room or an https link; students tap *I'll come*), and **reports**: who reported whom and why. **Teachers and admins can't read any chat**: no page, route or query exists for it. Teachers are never put in groups.
+- **How it's kept private**: every group route checks membership in the same SQL query that reads or writes, and answers anyone else (other students, former members, teachers, admins) with the same 404. Group ids are 128-bit random. Members see each other as a name and a key that only means something inside that group, never a user id or email. All the tables have row-level security, like the rest.
+- **When the groups are made**: Vercel Cron calls `/api/cron/study` on Sunday at 13:00 UTC (18:00 in Tashkent; `vercel.json`) with your `CRON_SECRET`. If that hasn't happened, the first visit after 18:00 makes them. Either way it happens once per course and week (the claim and all groups are written in one statement). If you change `APP_TIMEZONE`, change the hour in `vercel.json` too.
+- Limits: 20 messages a minute and 300 a day per student, 10 reports a day.
+
 ## Sign in with Google
 
 1. [Google Cloud Console](https://console.cloud.google.com) → pick or create a project → **APIs & Services → OAuth consent screen**: app name *Karteikasten*, your support email; audience **External**; publish it (*In production*) so anyone can sign in. The app only asks for the basic scopes (`openid`, `email`, `profile`), which need no Google review.
@@ -157,7 +170,8 @@ Copy `.env.example` to `.env.local`. Only `DATABASE_URL` is required.
 | `RESEND_API_KEY` | – | Sends the password emails. Secret. Without it, development prints the link in the terminal. |
 | `EMAIL_FROM` | `Karteikasten <onboarding@resend.dev>` | The sender of password emails; its domain must be verified in Resend. |
 | `APP_URL` | Vercel's production domain | The site's address for links in emails. |
-| `APP_TIMEZONE` | `Asia/Tashkent` | When a "day" starts for streaks and daily active users. |
+| `APP_TIMEZONE` | `Asia/Tashkent` | When a "day" starts for streaks and daily active users, and the hours of *Let's study together*. |
+| `CRON_SECRET` | – | Any long random value. Vercel sends it to `/api/cron/study`, the Sunday job that makes the study groups. Without it the groups are made on the first visit after Sunday 18:00. |
 | `COOKIE_SECURE` | auto | Force `true`/`false`. By default the session cookie is Secure whenever the site is on HTTPS. |
 
 ## Roles and privacy
@@ -175,6 +189,9 @@ Copy `.env.example` to `.env.local`. Only `DATABASE_URL` is required.
 | Add, edit, import, delete the shared lesson words | – | – | their course | every course |
 | Take mock tests, see your own results | – | ✓ | ✓ | ✓ |
 | `/admin/tests`: everyone's mock-test results and answers | – | – | their course | every course |
+| Study groups: sign up, chat in your own group, leave, block, report | – | ✓ (on the class board) | – | – |
+| Read a study group's chat | – | its members only | – | – |
+| `/admin/study`: free-time heatmap (counts), speaking clubs, reports (no messages) | – | – | their course | every course |
 | `/admin` and `/admin/analytics`: stats, the class lesson, the course's name and note, take people off the leaderboard | – | – | their course | every course |
 | Reset passwords, make teachers and admins, delete profiles, start new courses | – | – | – | ✓ |
 
@@ -255,9 +272,11 @@ src/proxy.ts       /admin, /account without a session cookie → /login?next=…
 src/app/api/*      requireUser() on every route: valid session, role, same-origin
 src/lib/server/    repo.ts (all SQL) · db.ts (pool, schema, seed) · session.ts · password.ts · rate-limit.ts
                    google.ts · mail.ts · admins.ts · ai.ts · ai-grade.ts (AI examiner) · tests/ (mock tests with their answer keys)
+                   study.ts (study groups: matching, chats, clubs, reports)
 src/lib/           auth-schemas.ts (zod: the same rules in the browser and on the server) · tests/ (test types and scoring)
 Postgres/Supabase  courses · course_members · users · sessions · password_reset_tokens · rate_limits · words · cards · prefs
-                   · activity · cheers · visitors · settings · test_attempts
+                   · activity · cheers · visitors · settings · test_attempts · study_* (sign-ups, groups, members,
+                   messages, blocks, reports, clubs, runs)
 ```
 
 | Endpoint | Who | Purpose |
@@ -276,6 +295,12 @@ Postgres/Supabase  courses · course_members · users · sessions · password_re
 | `POST /api/tests/:id/submit` | signed in | `{ answers, startedAt }` → scored and saved (30 an hour) |
 | `GET /api/tests/attempts/:id` | signed in | One attempt with the answer key: yours, or your course's as its teacher |
 | `POST /api/tests/attempts/:id/feedback` | signed in | `{ lang }` → the AI scores the writing and speaking of your attempt (8 an hour) |
+| `GET /api/study` | signed in | Your study week: sign-up, groups (names only), clubs; makes due groups first |
+| `PUT/DELETE /api/study/signup` | students | `{ slots }` → your free hours for next week, or withdraw |
+| `GET/POST /api/study/groups/:id/messages` | group members | Read newer messages (`?after=`), or post `{ body }`; anyone else gets 404 |
+| `POST /api/study/groups/:id/leave` · `/block` · `/report` | group members | Leave; `{ member }` block; `{ member, reason }` report (and block) |
+| `POST /api/study/clubs/:id/rsvp` | course members | `{ going }` for a speaking club of your course |
+| `GET /api/cron/study` | Vercel Cron (`CRON_SECRET`) | Makes the due study groups, deletes expired ones |
 | `POST /api/logout` | signed in | Sign out; a plain form post, so the full page reload clears the old profile from memory |
 | `PUT/DELETE /api/words/:id`, `POST /api/words` | signed in | Add, edit, delete, import words in your course: its teachers the shared lesson words, everyone else their own |
 | `PUT/DELETE /api/cards/:wordId`, `DELETE /api/cards` | signed in | Save or reset **your** progress (reset: this course only) |
@@ -318,7 +343,7 @@ Nothing extra is tracked for students: mastery and recall come from the review h
 
 1. Create the Supabase project (see [Supabase](#supabase)) and copy the **Transaction pooler** connection string (port 6543). Not the "Direct connection": that one is IPv6-only and Vercel can't reach it.
 2. Import this GitHub repo on [vercel.com](https://vercel.com). Set the function region to the one closest to your Supabase project (Project Settings → Functions).
-3. In Vercel → Project → **Settings → Environment Variables**, add `DATABASE_URL` (the pooler string with your password, no quotes, for the **Production** environment), `ADMIN_EMAILS`, `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, `RESEND_API_KEY`, `EMAIL_FROM`, `APP_TIMEZONE` and, for the AI helper, `ANTHROPIC_API_KEY` (and `APP_URL` if you use your own domain). `.env.local` is never uploaded, so this step is required.
+3. In Vercel → Project → **Settings → Environment Variables**, add `DATABASE_URL` (the pooler string with your password, no quotes, for the **Production** environment), `ADMIN_EMAILS`, `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, `RESEND_API_KEY`, `EMAIL_FROM`, `APP_TIMEZONE`, `CRON_SECRET` (for the Sunday study groups) and, for the AI helper, `ANTHROPIC_API_KEY` (and `APP_URL` if you use your own domain). `.env.local` is never uploaded, so this step is required.
 4. **Redeploy** (Deployments → ⋯ → Redeploy): environment variables only reach new deployments, and `NEXT_PUBLIC_GOOGLE_CLIENT_ID` is built into the page.
 5. Open `https://<your-app>/api/health`. It should say `"ok": true`. Then **Continue with Google** with your `ADMIN_EMAILS` address, and `/admin` opens.
 
