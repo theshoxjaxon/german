@@ -123,6 +123,7 @@ export function TestResultView({ attempt: start, ai, onClose, onRetry, onChange,
                   ) : (
                     <div key={item.id} className={`rev-item${result.items[item.id]?.ok ? ' is-ok' : ' is-wrong'}`}>
                       {item.audio && <Transcript lines={item.audio} />}
+                      {item.text && <ReadTextView text={item.text} />}
                       <p className="rev-q" lang="de">{item.type === 'form' ? item.label : item.prompt}</p>
                       <p className="rev-a">
                         <Icon name={result.items[item.id]?.ok ? 'check' : 'x'} />
