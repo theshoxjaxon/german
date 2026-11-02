@@ -2,7 +2,7 @@
  * Small client-only hooks built on useSyncExternalStore, so the first client render
  * matches the server HTML and the browser-only value arrives right after hydration.
  */
-import { useCallback, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useEffectEvent, useSyncExternalStore } from 'react';
 
 /* ---------- a clock that ticks every 15 s ---------- */
 let now = 0;
@@ -77,3 +77,44 @@ export function useLocalState<T>(key: string, fallback: T, valid: (v: unknown) =
 /* ---------- browser feature checks ---------- */
 const noopSubscribe = () => () => {};
 export const useClientValue = <T,>(get: () => T, serverValue: T) => useSyncExternalStore(noopSubscribe, get, () => serverValue);
+
+/* ---------- polling ---------- */
+
+/**
+ * Run `fn` now and then every `ms` while `active` and the page is visible; right away again when
+ * the page comes back. One run at a time; errors are the caller's to show (they don't stop it).
+ */
+export function usePoll(fn: () => unknown, ms: number, active: boolean) {
+  const run = useEffectEvent(fn);
+  useEffect(() => {
+    if (!active) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let busy = false;
+    let stopped = false;
+    const tick = async () => {
+      clearTimeout(timer);
+      if (stopped || busy) return;
+      if (!document.hidden) {
+        busy = true;
+        try {
+          await run();
+        } catch {
+          // shown by the caller; keep polling
+        } finally {
+          busy = false;
+        }
+      }
+      if (!stopped) timer = setTimeout(tick, ms);
+    };
+    const onVisible = () => {
+      if (!document.hidden) void tick();
+    };
+    void tick();
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [active, ms]);
+}

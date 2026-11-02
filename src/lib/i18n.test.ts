@@ -13,6 +13,7 @@ import { CHEERS, MAX_OWN_WORDS, POS_OPTIONS, RATING_LABEL } from './types';
 import { FILTER_LABEL, SORTS, STATUS_OPTS } from './words-view';
 import { TESTS } from './server/tests';
 import { SECTIONS } from './tests/types';
+import { REASON_LABEL } from './study/types';
 
 const SRC = join(__dirname, '..');
 const read = (p: string) => readFileSync(join(SRC, p), 'utf8');
@@ -111,6 +112,7 @@ function wanted(): Set<string> {
   }
   // The mock tests' section names and topics (the questions themselves are German, like the exam)
   SECTIONS.forEach((s) => add(s.label));
+  Object.values(REASON_LABEL).forEach(add); // study-chat report reasons
   TESTS.forEach((test) => add(test.topics));
   for (const line of read('components/StatsView.tsx').match(/FACH_RANGE = \[([^\]]*)\]/)![1].split(',')) add(literals(line)[0]);
   for (const m of read('components/ui.tsx').match(/STATUS_LABEL = \{([^}]*)\}/)![1].matchAll(/'([^']+)'/g)) add(m[1]);

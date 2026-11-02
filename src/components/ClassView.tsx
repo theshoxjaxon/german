@@ -5,6 +5,7 @@ import { useLocalState } from '@/lib/client/hooks';
 import { useT } from '@/lib/client/i18n';
 import { store, useStore } from '@/lib/client/store';
 import { CHEERS, isClassMember, type CheerKind, type ClassMember } from '@/lib/types';
+import { StudyCard } from './study/StudyTogether';
 import { Avatar, Icon, type IconName } from './ui';
 import { useUI } from './ui-context';
 
@@ -99,6 +100,7 @@ export function ClassView({ active }: { active: boolean }) {
     <div className="page">
       {head}
       <CheersBanner />
+      {data.me && <StudyCard active={active} teacher={data.me.teacher} />}
       {data.me && !member && (
         <p className="notice" role="status">{t('Your teacher has taken you off the leaderboard. Your study works as usual.')}</p>
       )}

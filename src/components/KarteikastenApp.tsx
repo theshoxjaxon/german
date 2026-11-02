@@ -117,6 +117,11 @@ export default function KarteikastenApp() {
     };
   }, [toast]);
 
+  // /lets-study-together arrives as /#study: open the Class tab (its study card opens the page)
+  useEffect(() => {
+    if (window.location.hash === '#study') setTab('class');
+  }, [setTab]);
+
   // Screen readers and the browser's spell checking follow the interface language.
   useEffect(() => {
     document.documentElement.lang = lang;
