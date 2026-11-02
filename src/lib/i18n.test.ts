@@ -121,6 +121,8 @@ function wanted(): Set<string> {
     'app/api/words/[id]/route.ts', 'app/api/cards/[id]/route.ts',
     'app/api/tests/[id]/route.ts', 'app/api/tests/[id]/submit/route.ts', 'app/api/tests/attempts/[id]/route.ts',
     'app/api/tests/attempts/[id]/feedback/route.ts', 'lib/server/ai-grade.ts',
+    'app/api/study/signup/route.ts', 'app/api/study/groups/[id]/messages/route.ts', 'app/api/study/groups/[id]/report/route.ts',
+    'app/api/study/clubs/[id]/rsvp/route.ts', 'lib/server/study-route.ts', 'lib/study/text.ts',
   ];
   for (const f of messageFiles) {
     for (const s of literals(withoutComments(read(f)))) if (/^[A-Z][^{}]*[a-z][^{}]*[.!?]$/.test(s) && s.includes(' ')) add(s);
