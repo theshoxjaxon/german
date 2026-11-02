@@ -6,6 +6,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 const PAGES = [
   { href: '/admin', label: 'Dashboard' },
   { href: '/admin/analytics', label: 'Analytics' },
+  { href: '/admin/tests', label: 'Tests' },
 ] as const;
 
 /** Switch between the admin pages, staying on the same course. */

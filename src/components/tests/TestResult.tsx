@@ -23,15 +23,17 @@ function given(item: Item, v: string | number | boolean | undefined): string {
 /**
  * The result of an attempt: the score and grade, each section, and every answer with the right
  * one. Writing and speaking get the AI's feedback; when it is still missing it is asked for here.
- * Teachers open the same view from /admin/tests (`asTeacher`: no "try again", no new AI request).
+ * Teachers open the same view from /admin/tests (`asTeacher`: no "try again", no new AI request;
+ * `who` is the student's name).
  */
-export function TestResultView({ attempt: start, ai, onClose, onRetry, onChange, asTeacher = false }: {
+export function TestResultView({ attempt: start, ai, onClose, onRetry, onChange, asTeacher = false, who }: {
   attempt: AttemptDetail | string;
   ai: boolean;
   onClose: () => void;
   onRetry?: (testId: string) => void;
   onChange?: () => void;
   asTeacher?: boolean;
+  who?: string;
 }) {
   const { t, lang } = useT();
   const [attempt, setAttempt] = useState<AttemptDetail | null>(typeof start === 'string' ? null : start);
@@ -80,7 +82,7 @@ export function TestResultView({ attempt: start, ai, onClose, onRetry, onChange,
   const { result, test } = attempt;
   const passed = result.complete && result.score >= PASS_SCORE;
   return (
-    <Shell title={`${test.title} · ${test.subtitle}`} onClose={onClose}>
+    <Shell title={`${who ? `${who} · ` : ''}${test.title} · ${test.subtitle}`} onClose={onClose}>
       <section className={`result-hero${result.complete ? (passed ? ' is-pass' : ' is-fail') : ''}`} aria-live="polite">
         <p className="result-score"><b>{result.score}</b><span> / 100</span></p>
         {result.complete ? (
@@ -99,7 +101,8 @@ export function TestResultView({ attempt: start, ai, onClose, onRetry, onChange,
 
       {pending && !grading && (
         <div className="callout">
-          <p>{t(attempt.aiError || error || (ai ? 'The AI couldn’t check your writing and speaking just now.' : 'The AI helper isn’t switched on, so writing and speaking aren’t scored. Compare your answers with the model answers below.'))}</p>
+          <p>{t(asTeacher ? 'Writing and speaking aren’t scored yet: the AI checks them when the student opens the result.'
+            : attempt.aiError || error || (ai ? 'The AI couldn’t check your writing and speaking just now.' : 'The AI helper isn’t switched on, so writing and speaking aren’t scored. Compare your answers with the model answers below.'))}</p>
           {ai && !asTeacher && <button className="btn" onClick={() => void grade()}>{t('Check again')}</button>}
         </div>
       )}

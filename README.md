@@ -10,6 +10,7 @@ A mobile-first vocabulary app for learning centers. Students study German or Eng
 - **Class**: Snapchat-style daily streaks, each classmate's active-word count, a leaderboard per course, and cheers you can send each other.
 - **Words**: an Airtable-style table and card gallery: search, filter, sort. Teachers manage the shared lesson words; every student can also add **their own words**, which only they see and study.
 - **AI word helper** (optional): take a photo of a word list (textbook page, worksheet, whiteboard, notes) or type words, and Claude turns them into finished flashcards in the course's language: meaning, IPA, forms (German: with the article), an example sentence and a memory hook. You tick the ones to keep and pick the topic. In the word form, **Fill in the rest with AI** completes a single word.
+- **Mock tests** (German course): four unit tests (Lektion 1–3, 4–6, 7–9, 10–12) and a 75-minute final exam in the format of the **Goethe-Zertifikat A1: Start Deutsch 1**: listening (read aloud by the phone, twice), reading, vocabulary and grammar, writing and speaking, 20 points each, 60 of 100 to pass. Everything but writing and speaking is scored the moment you hand in, with every answer and the right one; the AI then scores the writing and speaking like an examiner and explains each mistake in Uzbek or English. Teachers see every student's results at `/admin/tests`.
 - **Admin dashboard** at `/admin`, per course: members, new sign-ups, daily / weekly / monthly active students, 30-day charts, a member table, the course's invite link, its name and note, and **which lesson the class is on**. Admins also see emails, reset passwords, make teachers and start new courses.
 
 **German · Momente** comes with all twelve Momente lessons, German → Uzbek, 653 words in all, each with IPA, an example sentence, plural or verb forms and a memory hook:
@@ -105,6 +106,24 @@ Set `ANTHROPIC_API_KEY` in `.env.local` (create a key at [console.anthropic.com]
 
 How it works: `src/lib/server/ai.ts` makes one streamed request with the image (or list), a system prompt describing a good flashcard, and a JSON schema the answer must follow (`output_config.format`). If Claude's safety checks decline a request, `fallbacks: "default"` lets the API retry it on its recommended fallback model. The answer is validated like any user input before the client sees it.
 
+## Mock tests
+
+The German course has five tests in a **Tests** tab (courses without tests don't show the tab; guests see it locked). Each copies the Goethe A1 exam: instructions in German with an Uzbek translation underneath, five sections of 20 points, grades *sehr gut* (90+), *gut* (80+), *befriedigend* (70+), *ausreichend* (60+), *nicht bestanden*.
+
+| Test | Lessons | Grammar |
+| --- | --- | --- |
+| Test 1 | 1–3 | verb endings, *sein*, *haben*, W- and yes/no questions, verb second, *mein / dein / Ihr* |
+| Test 2 | 4–6 | *der / die / das*, *ein / kein*, Akkusativ, plural, the time, *am / um / von … bis*, Sie-imperative |
+| Test 3 | 7–9 | *können*, *möchten*, *mögen*, separable verbs, vowel-change verbs, *gern / lieber*, *am / um / im* |
+| Test 4 | 10–12 | Perfekt, *war / hatte*, du- and ihr-imperative, *müssen / dürfen*, dates, *nach / zum / zur*, *ihn* |
+| Abschlusstest | 1–12 | all of it, with three listening and three reading parts, 26 grammar items and five speaking tasks |
+
+- **Taking a test**: one section at a time, a timer (no cut-off), answers kept on the device until handed in, so closing the test or losing the connection loses nothing. Recordings play at most twice; without a German voice the text is shown instead. Speaking uses the phone's speech recognition, or typing.
+- **Scoring**: the answer key never leaves the server (`src/lib/server/tests/`); the browser gets the questions only. Typed answers forgive case, spaces, a final dot and *ae / oe / ue / ss* for *ä / ö / ü / ß*. Writing and speaking left empty score 0.
+- **AI examiner** (needs `ANTHROPIC_API_KEY`, like the word helper): one request per attempt scores writing (3 points per content point + 1 for greeting and closing) and speaking (by the Goethe rubric, from the words only, not pronunciation), with corrections, a short explanation in the student's interface language and a tip. 8 checks per hour per student, one at a time per attempt; roughly 3–6 US cents per attempt with Claude Opus 5.5 (check real spend in the Anthropic Console). Without a key, the result shows the model answers and those two sections stay unscored.
+- **Teachers**: `/admin/tests` shows each student's best score per test, the average and pass rate per test, and the latest attempts with their five section scores; any score opens the whole attempt with the student's text and the AI feedback. Names only, no emails.
+- **Adding a test**: write it in `src/lib/server/tests/` (see `german-a1.ts`; `npm test` checks every test: unique ids, valid answers, a perfect attempt scores 100) and add it to `TESTS`.
+
 ## Sign in with Google
 
 1. [Google Cloud Console](https://console.cloud.google.com) → pick or create a project → **APIs & Services → OAuth consent screen**: app name *Karteikasten*, your support email; audience **External**; publish it (*In production*) so anyone can sign in. The app only asks for the basic scopes (`openid`, `email`, `profile`), which need no Google review.
@@ -130,7 +149,7 @@ Copy `.env.example` to `.env.local`. Only `DATABASE_URL` is required.
 | `DATABASE_URL` | – (required) | Postgres connection string (Supabase → Connect). |
 | `DATABASE_CA_CERT` | – | Supabase's CA certificate, to also verify the server's identity. Without it the connection is still encrypted. |
 | `DATABASE_POOL_MAX` | `5` | Database connections per server process. |
-| `ANTHROPIC_API_KEY` | – | Turns on the AI word helper. Without it the AI buttons don't appear. |
+| `ANTHROPIC_API_KEY` | – | Turns on the AI word helper and the AI examiner for mock tests. Without it the AI buttons don't appear. |
 | `AI_MODEL` | `claude-opus-5-5` | The Claude model the AI helper uses. |
 | `AI_ENABLED` | auto | `false` hides the AI helper even with a key; `true` turns it on with other Anthropic credentials (e.g. `ant auth login`). |
 | `ADMIN_EMAILS` | – | Your email (comma-separated for several). It becomes admin once proven: via Google, or a password reset link. |
@@ -154,6 +173,8 @@ Copy `.env.example` to `.env.local`. Only `DATABASE_URL` is required.
 | See email addresses (anyone's, or your own) | – | – | – | ✓ |
 | See anyone else's cards | – | – | – | – |
 | Add, edit, import, delete the shared lesson words | – | – | their course | every course |
+| Take mock tests, see your own results | – | ✓ | ✓ | ✓ |
+| `/admin/tests`: everyone's mock-test results and answers | – | – | their course | every course |
 | `/admin` and `/admin/analytics`: stats, the class lesson, the course's name and note, take people off the leaderboard | – | – | their course | every course |
 | Reset passwords, make teachers and admins, delete profiles, start new courses | – | – | – | ✓ |
 
@@ -233,10 +254,10 @@ Browser
 src/proxy.ts       /admin, /account without a session cookie → /login?next=… (fast first check only)
 src/app/api/*      requireUser() on every route: valid session, role, same-origin
 src/lib/server/    repo.ts (all SQL) · db.ts (pool, schema, seed) · session.ts · password.ts · rate-limit.ts
-                   google.ts · mail.ts · admins.ts
-src/lib/           auth-schemas.ts (zod: the same rules in the browser and on the server)
+                   google.ts · mail.ts · admins.ts · ai.ts · ai-grade.ts (AI examiner) · tests/ (mock tests with their answer keys)
+src/lib/           auth-schemas.ts (zod: the same rules in the browser and on the server) · tests/ (test types and scoring)
 Postgres/Supabase  courses · course_members · users · sessions · password_reset_tokens · rate_limits · words · cards · prefs
-                   · activity · cheers · visitors · settings
+                   · activity · cheers · visitors · settings · test_attempts
 ```
 
 | Endpoint | Who | Purpose |
@@ -250,6 +271,11 @@ Postgres/Supabase  courses · course_members · users · sessions · password_re
 | `GET /api/health` | anyone | Is the database reachable, and if not, why (no secrets shown) |
 | `POST /api/visit` | anyone | Anonymous guest count for the funnel: `{ id, tried, course }`, at most once a day per browser (rate limited) |
 | `POST /api/ai/words` | signed in | AI word helper: photo or typed list → suggested flashcards (nothing is saved) |
+| `GET /api/tests` | signed in | Your course's mock tests and your attempts |
+| `GET /api/tests/:id` | signed in | A test's questions, without the answers |
+| `POST /api/tests/:id/submit` | signed in | `{ answers, startedAt }` → scored and saved (30 an hour) |
+| `GET /api/tests/attempts/:id` | signed in | One attempt with the answer key: yours, or your course's as its teacher |
+| `POST /api/tests/attempts/:id/feedback` | signed in | `{ lang }` → the AI scores the writing and speaking of your attempt (8 an hour) |
 | `POST /api/logout` | signed in | Sign out; a plain form post, so the full page reload clears the old profile from memory |
 | `PUT/DELETE /api/words/:id`, `POST /api/words` | signed in | Add, edit, delete, import words in your course: its teachers the shared lesson words, everyone else their own |
 | `PUT/DELETE /api/cards/:wordId`, `DELETE /api/cards` | signed in | Save or reset **your** progress (reset: this course only) |

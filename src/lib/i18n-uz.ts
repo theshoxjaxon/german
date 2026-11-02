@@ -584,6 +584,7 @@ export const UZ: Record<string, string> = {
   "Words you keep forgetting. A memory hook helps most here.": "Tez-tez unutiladigan soʻzlar. Bunda eslab qolish usuli eng koʻp yordam beradi.",
   "Write your text here…": "Matningizni shu yerga yozing…",
   "Writing": "Yozish",
+  "Writing and speaking aren’t scored yet: the AI checks them when the student opens the result.": "Yozish va gapirish hali baholanmagan: talaba natijani ochganda AI ularni tekshiradi.",
   "Wrong email or password.": "Elektron pochta yoki parol notoʻgʻri.",
   "Wrong username or password.": "Foydalanuvchi nomi yoki parol notoʻgʻri.",
   "You": "Siz",
