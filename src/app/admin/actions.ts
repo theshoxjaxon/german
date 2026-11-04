@@ -9,10 +9,13 @@
  */
 import { refresh } from 'next/cache';
 import { isCourseId, isTargetLang, RESERVED_COURSE_IDS } from '@/lib/courses';
+import { appUrl } from '@/lib/server/mail';
 import { hashPassword, temporaryPassword } from '@/lib/server/password';
+import { sendTestReminder } from '@/lib/server/reminders';
 import * as repo from '@/lib/server/repo';
 import { currentUser } from '@/lib/server/session';
 import { createClub, deleteClub } from '@/lib/server/study';
+import { botConfig, call as callTelegram, settingProblems } from '@/lib/server/telegram';
 import type { Role } from '@/lib/types';
 
 type Result = { ok: true; password?: string } | { ok: false; error: string };
@@ -145,4 +148,39 @@ export async function deleteUserAction(userId: string): Promise<Result> {
   await repo.deleteUser(String(userId));
   refresh();
   return { ok: true };
+}
+
+/* ---------- Telegram reminders (admins only) ---------- */
+
+type Said = { ok: true; message: string } | { ok: false; error: string };
+
+/**
+ * "Connect the bot": checks the token, points the bot's webhook at this site (with the secret
+ * Telegram must send back), and sets its /start and /stop commands. Safe to press again.
+ */
+export async function telegramSetupAction(): Promise<Said> {
+  if (!(await requireAdmin())) return { ok: false, error: 'Only admins can do this.' };
+  const cfg = botConfig();
+  if (!cfg) return { ok: false, error: `Missing in the environment: ${settingProblems().join(', ')}.` };
+  const me = await callTelegram<{ username?: string }>('getMe', {}, cfg);
+  if (!me.ok) return { ok: false, error: `Telegram didn’t accept the token: ${me.description}` };
+  if (me.result.username?.toLowerCase() !== cfg.username.toLowerCase()) {
+    return { ok: false, error: `That token belongs to @${me.result.username}. Set TELEGRAM_BOT_USERNAME to ${me.result.username} and redeploy.` };
+  }
+  const url = `${await appUrl()}/api/telegram/webhook`;
+  if (!url.startsWith('https://') && !process.env.TELEGRAM_API_BASE) return { ok: false, error: `Telegram needs an https:// address, not ${url}. Set APP_URL.` };
+  const hook = await callTelegram('setWebhook', { url, secret_token: cfg.secret, allowed_updates: ['message', 'callback_query'], drop_pending_updates: true }, cfg);
+  if (!hook.ok) return { ok: false, error: `Telegram didn’t accept the webhook: ${hook.description}` };
+  await callTelegram('setMyCommands', {
+    commands: [{ command: 'start', description: 'Eslatmalarni yoqish' }, { command: 'stop', description: 'Eslatmalarni toʻxtatish' }],
+  }, cfg);
+  return { ok: true, message: `@${cfg.username} is connected. Students can now connect from Settings → Telegram.` };
+}
+
+/** "Send me a test reminder": today's reminder, to the admin's own connected Telegram. */
+export async function telegramTestAction(): Promise<Said> {
+  const user = await requireAdmin();
+  if (!user) return { ok: false, error: 'Only admins can do this.' };
+  const r = await sendTestReminder(user.id, await appUrl());
+  return r.ok ? { ok: true, message: 'Sent. Look in your Telegram.' } : r;
 }

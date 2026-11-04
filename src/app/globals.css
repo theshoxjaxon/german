@@ -1222,3 +1222,16 @@ details.advanced[open] > summary { margin-bottom: 10px; }
 @media (prefers-reduced-motion: reduce) {
   .wel *, .wel *::before, .wel *::after { animation: none !important; transition: none !important; }
 }
+
+/* ---------- Telegram (admin setup, Settings, home card) ---------- */
+.tg-setup, .tg-admin { display: grid; gap: 12px; }
+.tg-admin + p, .tg-setup + p { margin-top: 12px; }
+.steps { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.tg-setup code { font-family: var(--font-mono); font-size: 13px; background: var(--surface-2); padding: 1px 5px; border-radius: 6px; overflow-wrap: anywhere; }
+.tg-section .btn { justify-self: start; text-decoration: none; }
+.tg-card { display: flex; gap: 12px; padding: 14px 16px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); }
+.tg-card-ic { display: grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--easy-soft); color: var(--easy); }
+.tg-card-body { display: grid; gap: 8px; min-width: 0; flex: 1; }
+.tg-card h2 { font-size: 16px; font-weight: 700; }
+.tg-card p { color: var(--ink-2); font-size: 14.5px; text-wrap: pretty; }
+.tg-card .btn { text-decoration: none; }

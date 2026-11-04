@@ -5,7 +5,7 @@
  * install. To run them against a Postgres server instead, set TEST_DATABASE_URL to an EMPTY
  * database you can throw away (the tests create tables and users in it).
  */
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { answer } from '../srs';
 import type { CardDoc, WordData } from '../types';
 import type { GoogleProfile } from './repo';
@@ -765,5 +765,141 @@ describe('study together', () => {
     expect((await study.upcomingClubs(G, s.id, NOW))[0]).toMatchObject({ going: 0, me: false });
     expect(await study.deleteClub('english', club)).toBe(false);
     expect(await study.deleteClub(G, club)).toBe(true);
+  });
+});
+
+describe('Telegram reminders', () => {
+  const NOW = Date.parse('2026-11-04T14:00:00Z'); // 19:00 in Tashkent
+  const DAY_MS = 86_400_000;
+  const APP = 'https://app.example';
+  type Call = { method: string; body: Record<string, unknown> & { text?: string; chat_id?: number; reply_markup?: { inline_keyboard: { url?: string }[][] } } };
+  let calls: Call[] = [];
+  let reply: (method: string) => Record<string, unknown> = () => ({ ok: true, result: {} });
+  const sent = () => calls.filter((c) => c.method === 'sendMessage');
+  const codeOf = (url: string) => new URL(url).searchParams.get('start')!;
+  const msg = (chatId: number, text: string, type = 'private') => ({ message: { text, chat: { id: chatId, type }, from: { id: chatId } } });
+  let tg: typeof import('./reminders');
+  let cfg: import('./telegram').BotConfig;
+
+  beforeAll(async () => {
+    process.env.TELEGRAM_BOT_TOKEN = '123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw';
+    process.env.TELEGRAM_BOT_USERNAME = 'KarteikastenBot';
+    process.env.TELEGRAM_WEBHOOK_SECRET = 'a-long-random-webhook-secret_123';
+    // Telegram's API, faked: every call is recorded and answered by `reply`
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      const method = String(url).split('/').pop()!;
+      calls.push({ method, body: JSON.parse(String(init.body)) });
+      return new Response(JSON.stringify(reply(method)));
+    });
+    tg = await import('./reminders');
+    cfg = (await import('./telegram')).botConfig()!;
+  });
+  afterAll(() => {
+    vi.unstubAllGlobals();
+    for (const k of ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_BOT_USERNAME', 'TELEGRAM_WEBHOOK_SECRET']) delete process.env[k];
+  });
+
+  it('connects a chat with a one-time code that expires, and moves a chat to whoever connected it last', async () => {
+    const a = await profile('tg-a@example.com', 'Aziza');
+    const url = await tg.createLink(a.id, cfg, NOW);
+    expect(url).toMatch(/^https:\/\/t\.me\/KarteikastenBot\?start=[A-Za-z0-9_-]{43}$/);
+    expect(await tg.telegramState(a.id)).toEqual({ available: true, linked: false, reminders: false });
+
+    await tg.handleUpdate(msg(1001, `/start ${codeOf(url)}`), APP, NOW + 1000);
+    expect(await tg.telegramState(a.id)).toEqual({ available: true, linked: true, reminders: true });
+    expect(sent().at(-1)?.body).toMatchObject({ chat_id: 1001, text: expect.stringContaining('Ulandi') });
+
+    // Each code works once, and only for LINK_MINUTES
+    await tg.handleUpdate(msg(2002, `/start ${codeOf(url)}`), APP, NOW + 2000);
+    expect(sent().at(-1)?.body).toMatchObject({ chat_id: 2002, text: expect.stringContaining('eskirgan') });
+    const late = await tg.createLink(a.id, cfg, NOW);
+    expect(await tg.redeemLink(codeOf(late), 3003, NOW + 16 * 60_000)).toBeNull();
+    // A new link replaces the older code
+    const older = await tg.createLink(a.id, cfg, NOW);
+    const newer = await tg.createLink(a.id, cfg, NOW);
+    expect(await tg.redeemLink(codeOf(older), 3003, NOW)).toBeNull();
+    expect(await tg.redeemLink(codeOf(newer), 1001, NOW)).toBe(a.id);
+    expect(await tg.redeemLink('not a code at all', 3003, NOW)).toBeNull();
+
+    // The same Telegram connected from another profile: it moves there
+    const b = await profile('tg-b@example.com', 'Bek');
+    expect(await tg.redeemLink(codeOf(await tg.createLink(b.id, cfg, NOW)), 1001, NOW)).toBe(b.id);
+    expect((await tg.telegramState(a.id)).linked).toBe(false);
+    expect((await tg.telegramState(b.id)).linked).toBe(true);
+
+    // Disconnecting forgets the chat
+    await tg.unlink(b.id);
+    expect((await tg.telegramState(b.id)).linked).toBe(false);
+    expect(await tg.setReminders(b.id, true)).toBe(false); // nothing to switch
+    expect(await tg.redeemLink(codeOf(await tg.createLink(b.id, cfg, NOW)), 1001, NOW)).toBe(b.id);
+  });
+
+  it('switches reminders from the chat: /stop, the Stop button and /start', async () => {
+    const b = await byEmail('tg-b@example.com');
+    calls = [];
+    await tg.handleUpdate(msg(1001, '/stop'), APP, NOW);
+    expect(await tg.telegramState(b.id)).toMatchObject({ reminders: false });
+    expect(sent().at(-1)?.body.text).toContain('toʻxtatildi');
+
+    await tg.handleUpdate(msg(1001, '/start'), APP, NOW);
+    expect(await tg.telegramState(b.id)).toMatchObject({ reminders: true });
+    expect(sent().at(-1)?.body.text).toContain('yoqildi');
+
+    await tg.handleUpdate({ callback_query: { id: 'q1', data: 'stop', from: { id: 1001 }, message: { chat: { id: 1001, type: 'private' } } } }, APP, NOW);
+    expect(await tg.telegramState(b.id)).toMatchObject({ reminders: false });
+    expect(calls.some((c) => c.method === 'answerCallbackQuery' && c.body.callback_query_id === 'q1')).toBe(true);
+
+    // A stranger gets the hello; groups are ignored; nothing anyone writes is repeated back
+    await tg.handleUpdate(msg(5005, '/start'), APP, NOW);
+    expect(sent().at(-1)?.body).toMatchObject({ chat_id: 5005, text: expect.stringContaining('Salom!') });
+    await tg.handleUpdate(msg(5005, 'mening parolim: secret123'), APP, NOW);
+    expect(sent().at(-1)?.body.text).not.toContain('secret123');
+    const before = calls.length;
+    await tg.handleUpdate(msg(-100, '/start', 'group'), APP, NOW);
+    expect(calls.length).toBe(before);
+  });
+
+  it('sends one evening reminder to those who have not studied today, and stops for blocked chats', async () => {
+    const db = await (await import('./db')).getDb();
+    const [c, d, e] = await Promise.all(['tg-c', 'tg-d', 'tg-e'].map((n) => profile(`${n}@example.com`, n)));
+    for (const [u, chat] of [[c, 4001], [d, 4002], [e, 4003]] as const) {
+      expect(await tg.redeemLink(codeOf(await tg.createLink(u.id, cfg, NOW)), chat, NOW)).toBe(u.id);
+    }
+    await db.query( // d studied today
+      'INSERT INTO activity (user_id, day, answers) VALUES ($1, $2, 5) ON CONFLICT (user_id, day) DO UPDATE SET answers = 5',
+      [d.id, repo.todayKey(NOW)],
+    );
+    await tg.setReminders(e.id, false); // e turned them off
+
+    calls = [];
+    expect(await tg.sendDailyReminders(APP, NOW)).toEqual({ sent: 1, nothingToDo: 0, failed: 0 });
+    expect(sent()).toHaveLength(1);
+    expect(sent()[0].body.chat_id).toBe(4001);
+    expect(sent()[0].body.text).toMatch(/^👋 Bugun hali mashq qilmadingiz\.\nNemis tili: \d+ ta yangi soʻz sizni kutmoqda\.\n5 daqiqa yetadi\.$/);
+    expect(sent()[0].body.reply_markup?.inline_keyboard[0][0].url).toBe(`${APP}/app`);
+
+    // Once a day: a second run sends nothing
+    calls = [];
+    expect(await tg.sendDailyReminders(APP, NOW + 60_000)).toEqual({ sent: 0, nothingToDo: 0, failed: 0 });
+    expect(calls).toHaveLength(0);
+
+    // The next day c and d are due again; both have blocked the bot, so their reminders go off
+    reply = (m) => (m === 'sendMessage' ? { ok: false, error_code: 403, description: 'Forbidden: bot was blocked by the user' } : { ok: true, result: {} });
+    expect(await tg.sendDailyReminders(APP, NOW + DAY_MS)).toEqual({ sent: 0, nothingToDo: 0, failed: 2 });
+    reply = () => ({ ok: true, result: {} });
+    expect(await tg.telegramState(c.id)).toMatchObject({ linked: true, reminders: false });
+    expect(await tg.telegramState(d.id)).toMatchObject({ linked: true, reminders: false });
+    const counts = await tg.telegramCounts(NOW + DAY_MS);
+    expect(counts).toMatchObject({ remindersOn: 0, sentToday: 2 }); // c and d were claimed before Telegram refused
+    expect(counts.linked).toBeGreaterThanOrEqual(3);
+  });
+
+  it('sends an admin a test reminder only to their own connected chat', async () => {
+    const admin = await profile('ustoz.tg@markaz.uz', 'Ustoz');
+    expect(await tg.sendTestReminder(admin.id, APP, NOW)).toEqual({ ok: false, error: expect.stringContaining('Connect your own Telegram') });
+    await tg.redeemLink(codeOf(await tg.createLink(admin.id, cfg, NOW)), 6006, NOW);
+    calls = [];
+    expect(await tg.sendTestReminder(admin.id, APP, NOW)).toEqual({ ok: true });
+    expect(sent()).toEqual([expect.objectContaining({ body: expect.objectContaining({ chat_id: 6006, text: expect.stringMatching(/^\(Sinov xabari\)\n/) }) })]);
   });
 });

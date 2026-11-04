@@ -12,6 +12,7 @@ A mobile-first vocabulary app for learning centers. Students study German or Eng
 - **AI word helper** (optional): take a photo of a word list (textbook page, worksheet, whiteboard, notes) or type words, and Claude turns them into finished flashcards in the course's language: meaning, IPA, forms (German: with the article), an example sentence and a memory hook. You tick the ones to keep and pick the topic. In the word form, **Fill in the rest with AI** completes a single word.
 - **Mock tests** (German course), by level (A1.1 open, the later levels "opens soon"): a **Wiederholungstest** for each Modul (Grammatik 25 + Lesen 5 = 30 points, like the class's paper tests) and the **Abschlusstest** (Grammatik, Lesen, Schreiben, Sprechen, 25 points each; passed with 18 in every part). Automatic parts are scored the moment you hand in; the AI scores writing and speaking and explains each mistake in Uzbek or English. Teachers see every student's results at `/admin/tests`.
 - **Let's study together**: students mark the hours they're free next week and press **I want to study**. Every Sunday at 18:00 the app makes **groups of 3** who share a free hour, each with a suggested time, a speaking task and a **private chat** that only the group can read. Teachers see when the class is free (counts only), plan speaking clubs, and see reports, never chats. Share it as `/lets-study-together`.
+- **Telegram reminder** (optional): students connect Telegram from **Settings → Telegram** (or the card on the home screen after their first session). Each evening, if they haven't practised that day, the bot sends one message: their streak and how many cards wait, with an **Open** button. `/stop` or the Stop button turns it off.
 - **Admin dashboard** at `/admin`, per course: members, new sign-ups, daily / weekly / monthly active students, 30-day charts, a member table, the course's invite link, its name and note, and **which lesson the class is on**. Admins also see emails, reset passwords, make teachers and start new courses.
 
 **German · Momente** comes with all twelve Momente lessons, German → Uzbek, 653 words in all, each with IPA, an example sentence, plural or verb forms and a memory hook:
@@ -140,6 +141,20 @@ A card at the top of the **Class** tab (or the link `/lets-study-together`) open
 - **When the groups are made**: Vercel Cron calls `/api/cron/study` on Sunday at 13:00 UTC (18:00 in Tashkent; `vercel.json`) with your `CRON_SECRET`. If that hasn't happened, the first visit after 18:00 makes them. Either way it happens once per course and week (the claim and all groups are written in one statement). If you change `APP_TIMEZONE`, change the hour in `vercel.json` too.
 - Limits: 20 messages a minute and 300 a day per student, 10 reports a day.
 
+## Telegram reminder
+
+The app only reaches students who open it. The Telegram bot reaches the ones who forgot: one message in the evening, only on days they haven't practised.
+
+**Set it up (5 minutes):**
+1. In Telegram, open **@BotFather**, send `/newbot` and follow the steps. It gives you a token like `123456789:AA…`.
+2. In Vercel → Project → **Settings → Environment Variables**, add `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME` (the bot's name without @) and `TELEGRAM_WEBHOOK_SECRET` (any 20+ letters, digits, `_` or `-`; e.g. `openssl rand -hex 24`). `CRON_SECRET` must be set too. Redeploy.
+3. Open `/admin` → **Telegram reminders** → **Connect the bot**. That checks the token, points the bot at `/api/telegram/webhook` with your secret, and sets its `/start` and `/stop` commands. Then connect your own Telegram from Settings and press **Send me a test reminder**.
+
+**How it works:**
+- **Connecting**: Settings makes a one-time link `t.me/<bot>?start=<code>` (256 random bits, 15 minutes, used once; only its SHA-256 is stored). Pressing **Start** in Telegram ties that chat to the profile; the Settings page notices within a few seconds. One Telegram chat belongs to one profile: connecting it from another profile moves it there.
+- **The evening job**: Vercel Cron calls `/api/cron/daily` at 14:00 UTC (19:00 in Tashkent; on the Hobby plan it runs some time in that hour). Everyone with reminders on who hasn't answered a card that day gets one message, in their interface language: their streak and how many reviews and new words wait in their current course, counted exactly like the home screen. Nobody gets two in a day: the day is claimed before sending. If Telegram says someone blocked the bot, their reminders go off.
+- **Privacy**: the webhook only accepts requests carrying `TELEGRAM_WEBHOOK_SECRET` (Telegram sends it back with every update). The bot never repeats what anyone writes and ignores groups and channels. No page shows a chat id, admins included; `/admin` shows counts only. Disconnecting, or deleting the profile, deletes the link.
+
 ## Sign in with Google
 
 1. [Google Cloud Console](https://console.cloud.google.com) → pick or create a project → **APIs & Services → OAuth consent screen**: app name *Karteikasten*, your support email; audience **External**; publish it (*In production*) so anyone can sign in. The app only asks for the basic scopes (`openid`, `email`, `profile`), which need no Google review.
@@ -174,7 +189,10 @@ Copy `.env.example` to `.env.local`. Only `DATABASE_URL` is required.
 | `EMAIL_FROM` | `Karteikasten <onboarding@resend.dev>` | The sender of password emails; its domain must be verified in Resend. |
 | `APP_URL` | Vercel's production domain | The site's address for links in emails. |
 | `APP_TIMEZONE` | `Asia/Tashkent` | When a "day" starts for streaks and daily active users, and the hours of *Let's study together*. |
-| `CRON_SECRET` | – | Any long random value. Vercel sends it to `/api/cron/study`, the Sunday job that makes the study groups. Without it the groups are made on the first visit after Sunday 18:00. |
+| `CRON_SECRET` | – | Any long random value. Vercel sends it to `/api/cron/study`, the Sunday job that makes the study groups, and `/api/cron/daily`, the evening Telegram reminders. Without it the groups are made on the first visit after Sunday 18:00, and no reminders go out. |
+| `TELEGRAM_BOT_TOKEN` | – | From @BotFather. Turns on the Telegram reminder (with the two below). Never sent to the browser. |
+| `TELEGRAM_BOT_USERNAME` | – | The bot's name, without @, for `t.me` links |
+| `TELEGRAM_WEBHOOK_SECRET` | – | 20+ letters, digits, `_` or `-`. Telegram sends it back with every update, so forged updates are refused. |
 | `COOKIE_SECURE` | auto | Force `true`/`false`. By default the session cookie is Secure whenever the site is on HTTPS. |
 
 ## Roles and privacy
@@ -307,6 +325,9 @@ Postgres/Supabase  courses · course_members · users · sessions · password_re
 | `POST /api/study/groups/:id/leave` · `/block` · `/report` | group members | Leave; `{ member }` block; `{ member, reason }` report (and block) |
 | `POST /api/study/clubs/:id/rsvp` | course members | `{ going }` for a speaking club of your course |
 | `GET /api/cron/study` | Vercel Cron (`CRON_SECRET`) | Makes the due study groups, deletes expired ones |
+| `GET /api/cron/daily` | Vercel Cron (`CRON_SECRET`) | Sends the evening Telegram reminders |
+| `GET/POST/DELETE /api/telegram` | signed in | Your reminder state; `{ action: 'link' }` → a one-time t.me link (10 an hour); `{ reminders }` on/off; DELETE disconnects |
+| `POST /api/telegram/webhook` | Telegram (`TELEGRAM_WEBHOOK_SECRET`) | The bot's updates: `/start <code>` connects, `/start` and `/stop` switch reminders |
 | `POST /api/logout` | signed in | Sign out; a plain form post, so the full page reload clears the old profile from memory |
 | `PUT/DELETE /api/words/:id`, `POST /api/words` | signed in | Add, edit, delete, import words in your course: its teachers the shared lesson words, everyone else their own |
 | `PUT/DELETE /api/cards/:wordId`, `DELETE /api/cards` | signed in | Save or reset **your** progress (reset: this course only) |

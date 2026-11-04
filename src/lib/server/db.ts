@@ -22,7 +22,7 @@ export interface Db {
 }
 
 /** Bump when the schema or the built-in word lists change: every database then runs migrate() once more. */
-const SCHEMA_VERSION = '15';
+const SCHEMA_VERSION = '16';
 
 /*
  * Times are milliseconds since 1970 (JavaScript's Date.now()) in BIGINT columns; days are
@@ -306,6 +306,25 @@ CREATE TABLE IF NOT EXISTS study_club_rsvps (
   PRIMARY KEY (club_id, user_id)
 );
 
+-- Schema 16: a daily reminder on Telegram. You connect from Settings: the app makes a one-time
+-- link (t.me/<bot>?start=<token>; only its SHA-256 is stored, like password links), and pressing
+-- Start in Telegram ties that chat to your profile. Nobody else, admins included, sees the chat id.
+CREATE TABLE IF NOT EXISTS telegram_links (
+  user_id       text PRIMARY KEY REFERENCES users (id) ON DELETE CASCADE,
+  chat_id       bigint NOT NULL UNIQUE,      -- one profile per Telegram chat
+  reminders     boolean NOT NULL DEFAULT true,
+  linked_at     bigint NOT NULL,
+  last_sent_day text                         -- 'YYYY-MM-DD' (APP_TIMEZONE) of the last reminder: one a day
+);
+CREATE TABLE IF NOT EXISTS telegram_link_tokens (
+  token_hash text PRIMARY KEY,
+  user_id    text NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  created_at bigint NOT NULL,
+  expires_at bigint NOT NULL,
+  used_at    bigint
+);
+CREATE INDEX IF NOT EXISTS telegram_link_tokens_user_idx ON telegram_link_tokens (user_id);
+
 -- Supabase also publishes the public schema through its REST API. Row Level Security with no
 -- policies closes that door: only this server (connecting as the table owner) reads the data.
 ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
@@ -331,6 +350,8 @@ ALTER TABLE study_blocks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE study_reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE study_clubs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE study_club_rsvps ENABLE ROW LEVEL SECURITY;
+ALTER TABLE telegram_links ENABLE ROW LEVEL SECURITY;
+ALTER TABLE telegram_link_tokens ENABLE ROW LEVEL SECURITY;
 
 INSERT INTO settings (key, value) VALUES ('schema_version', '${SCHEMA_VERSION}')
   ON CONFLICT (key) DO UPDATE SET value = excluded.value;

@@ -8,6 +8,7 @@ import { store, useStore } from '@/lib/client/store';
 import { voiceFor } from '@/lib/courses';
 import type { Prefs, UiLang } from '@/lib/types';
 import { BottomSheet } from './BottomSheet';
+import { TelegramSection } from './TelegramViews';
 import { ConfirmButton, Icon, SyncNote } from './ui';
 import { useUI } from './ui-context';
 
@@ -34,7 +35,7 @@ function Stepper({ label, sub, value, min, max, step, onChange }: {
 }
 
 export function SettingsSheet() {
-  const { prefs } = useStore();
+  const { prefs, me } = useStore();
   const ui = useUI();
   const { t, lang } = useT();
   const studied = useCourseLang(); // the language of the course: its voices and card hints
@@ -82,6 +83,8 @@ export function SettingsSheet() {
           <Stepper label={t('New cards per day')} sub={t('Words seen for the first time')} value={prefs.newPerDay} min={0} max={200} step={5}
             onChange={(v) => store.setPrefs({ newPerDay: v })} />
         </div>
+
+        {me && <TelegramSection />}
 
         <div className="settings-group">
           <p className="section-title">{t('Card types')}</p>

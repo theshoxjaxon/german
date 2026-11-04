@@ -13,6 +13,7 @@ import { DAY, plural } from '@/lib/time';
 import { BottomSheet } from '../BottomSheet';
 import { Streak } from '../ClassView';
 import { Avatar, ConfirmButton, Icon } from '../ui';
+import { AdminTelegram, type TelegramAdminStatus } from './AdminTelegram';
 import { ColumnChart } from './charts';
 import { CourseBar } from './CourseBar';
 
@@ -39,8 +40,8 @@ function DayChart({ days, ...chart }: Omit<Parameters<typeof ColumnChart>[0], 'l
  * /admin for one course. `admin`: the person runs the whole app (sees email addresses, resets
  * passwords, makes teachers); a course's teachers see names and run their course's class.
  */
-export function AdminDashboard({ stats, meId, admin, course, courses }: {
-  stats: AdminStats; meId: string; admin: boolean; course: Course; courses: Course[];
+export function AdminDashboard({ stats, meId, admin, course, courses, telegram }: {
+  stats: AdminStats; meId: string; admin: boolean; course: Course; courses: Course[]; telegram: TelegramAdminStatus | null;
 }) {
   const now = useNow();
   const [managing, setManaging] = useState<Person | null>(null);
@@ -119,6 +120,8 @@ export function AdminDashboard({ stats, meId, admin, course, courses }: {
         </section>
 
         <CoursePanel key={course.id} course={course} onDone={setNotice} />
+
+        {telegram && <AdminTelegram status={telegram} onDone={setNotice} />}
 
         <section className="panel people-panel" aria-labelledby="people-h">
           <div className="panel-h"><h2 id="people-h">Members</h2><span className="muted">sorted by last active</span></div>

@@ -3,6 +3,8 @@ import { connection } from 'next/server';
 import { Suspense } from 'react';
 import { AdminDashboard } from '@/components/admin/AdminDashboard';
 import * as repo from '@/lib/server/repo';
+import { telegramCounts } from '@/lib/server/reminders';
+import { settingProblems } from '@/lib/server/telegram';
 import { adminData, DatabaseDown, NotAdmin } from './guard';
 
 export const metadata: Metadata = { title: 'Admin · Karteikasten' };
@@ -21,6 +23,8 @@ async function AdminData({ searchParams }: Pick<PageProps<'/admin'>, 'searchPara
   const r = await adminData('/admin', (await searchParams).course, (c) => repo.adminStats(c.course.id, c.admin));
   if ('down' in r) return <DatabaseDown message={r.down} />;
   if ('student' in r) return <NotAdmin name={r.student} />;
+  // The Telegram bot is the whole site's, so only admins see it (counts only)
+  const telegram = r.admin ? { problems: settingProblems(), cron: !!process.env.CRON_SECRET, ...(await telegramCounts()) } : null;
   // Keyed by course: notices and open sheets don't carry over to another course
-  return <AdminDashboard key={r.course.id} stats={r.data} meId={r.user.id} admin={r.admin} course={r.course} courses={r.courses} />;
+  return <AdminDashboard key={r.course.id} stats={r.data} meId={r.user.id} admin={r.admin} course={r.course} courses={r.courses} telegram={telegram} />;
 }

@@ -10,6 +10,7 @@ import { dayIndex, dayLong, studyDayTitle, weekday } from '@/lib/time';
 import { EMPTY_FILTERS } from '@/lib/words-view';
 import { CheersBanner } from './ClassView';
 import { GuestImportBanner, GuestNote } from './GuestViews';
+import { TelegramCard } from './TelegramViews';
 import { EmptyBox, Icon, LoadError, SyncNote } from './ui';
 import { useUI } from './ui-context';
 
@@ -83,6 +84,7 @@ export function StudyView() {
 
   const q = buildQueue(data, now);
   const c = q.counts;
+  const doneToday = answersToday(data.cards.values(), now);
   const total = c.fresh + c.learning + c.review;
   const deck = currentDeck(data);
   const decks = deckCounts(data.words);
@@ -125,8 +127,9 @@ export function StudyView() {
       {head}
       <CheersBanner />
       <GuestImportBanner />
-      <TodayGoal done={answersToday(data.cards.values(), now)} goal={data.prefs.dailyGoal} guest={data.guest}
+      <TodayGoal done={doneToday} goal={data.prefs.dailyGoal} guest={data.guest}
         streak={shownStreak(data.streak, data.cards.values(), now)} />
+      {data.me && doneToday > 0 && <TelegramCard />}
       {decks.some(([d]) => d) && (
         <div className="decks" role="radiogroup" aria-label={t('Deck')}>
           <button className="chip" role="radio" aria-checked={deck === 'all'} onClick={() => store.setPrefs({ studyDeck: 'all' })}>
