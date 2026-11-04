@@ -2,7 +2,7 @@
 
 A mobile-first vocabulary app for learning centers. Students study German or English words with spaced-repetition flashcards, each with their own private progress, and see how their classmates are doing. Teachers manage their course's words and see who is active on an admin dashboard.
 
-- **Courses**: one app, several courses: **German · Momente** and **English** (A1–B2) are built in, and an admin can start more. Each course has its own words, class, leaderboard, teachers and current lesson; one login works for all of them, and progress in each course is kept. A center shares its course's link (`/c/english`): whoever opens it studies that course, and signing up puts them in its class. Switch courses from the pill in the top bar.
+- **Courses**: one app, several courses: **German · Momente** and **English** (A1–B2) are built in, and an admin can start more. Each course has its own words, class, leaderboard, teachers and current lesson; one login works for all of them, and progress in each course is kept. Each course has its own address, `/german` and `/english`: whoever opens it studies that course, and signing up puts them in its class (old `/c/<course>` links still work). Switch courses from the pill in the top bar; the address follows. The front page `/` greets visitors (*Hallo! Hello! Salom!*) and lets them pick a course, with **Continue** for the one they already study; the home-screen icon and logins open `/app`, which goes straight to your course.
 - **Try it without an account**: anyone can open the app, practise the flashcards and browse the word list as a guest. Progress is kept in that browser, and moves into their profile when they sign up.
 - **Accounts**: sign up free with **Continue with Google** or with name, email and password. Forgot your password? An emailed link (via Resend) lets you choose a new one. Everyone who signs up is in their course's class and on its leaderboard (no class code for now). Email addresses are private: students never see one, not even their own; only the admin does.
 - **Study**: Anki-style flashcards (SM-2): tap to flip, swipe or tap Again / Hard / Good / Easy (keys: Space, 1–4, Z to undo). For German nouns, a **der / die / das quiz** comes first. A **daily goal** ring and your **streak** sit on the home screen; ending a session early shows what you did first. Every student's progress is private.
@@ -198,7 +198,7 @@ Copy `.env.example` to `.env.local`. Only `DATABASE_URL` is required.
 | `/admin` and `/admin/analytics`: stats, the class lesson, the course's name and note, take people off the leaderboard | – | – | their course | every course |
 | Reset passwords, make teachers and admins, delete profiles, start new courses | – | – | – | ✓ |
 
-**Courses.** Each course is its own class: its words, members, leaderboard, cheers, teachers and current lesson. Everyone joins a course when they sign up (the one whose link they followed, else the one they picked as a guest, else German) and can join more from the course pill; their progress, own words and lesson choice in each course stay. Answers, streaks and the daily goal count all of a person's courses together. A new guest sees *What are you learning?* first; a course link such as `/c/english` skips that. An admin starts a course in `/admin` → **New course** (name, link, language studied, note for students); its words come from the importer, the AI helper or a built-in list.
+**Courses.** Each course is its own class: its words, members, leaderboard, cheers, teachers and current lesson. Everyone joins a course when they sign up (the one whose link they followed, else the one they picked as a guest, else German) and can join more from the course pill; their progress, own words and lesson choice in each course stay. Answers, streaks and the daily goal count all of a person's courses together. A new guest picks a course on the welcome page at `/`; a course's own address such as `/english` skips that. An admin starts a course in `/admin` → **New course** (name, link, language studied, note for students); its words come from the importer, the AI helper or a built-in list.
 
 **Cards follow the course's language.** German has the der/die/das quiz, gender colours and German voices; English has none of that, British (or American) voices, and English dates on the study page. The AI helper writes cards for the course's language, and "All decks" understands both *Lektion N* / *Unit N* and levels (*A1* … *C2*) when a class lesson is set.
 
@@ -286,7 +286,10 @@ Postgres/Supabase  courses · course_members · users · sessions · password_re
 | --- | --- | --- |
 | `GET /api/state` | anyone | Signed in: you, your course and the list of courses, its words, your progress, settings, new cheers. Guest: `{ me: null, words, course }` (no course yet: `course: null`, no words) |
 | `POST /api/course` | anyone | `{ id }` switches course: signed in, you join it; guests: remembered in this browser |
-| `GET /c/:course` | anyone | A course's invite link: opens the app in that course (signed in: join it) |
+| `GET /api/courses` | anyone | The courses for the welcome page (name, language, word and test counts), the one you study now (`current`) and `signedIn` |
+| `GET /:course` | anyone | A course's page (`/german`, `/english`): the app in that course (signed in: join it) |
+| `GET /app` | anyone | Goes to the course you study, else the welcome page `/` |
+| `GET /c/:course` | anyone | Old invite link: redirects to `/:course` |
 | `GET /api/me` | signed in | Who you are: name, photo, role, how you log in (email for admins only); 401 when signed out |
 | `POST /api/auth/google` | anyone | `{ credential }` from the Google button → verifies it, signs in (creates or links the profile) |
 | `POST /api/cards/import` | signed in | Add progress made as a guest (never overwrites existing progress) |

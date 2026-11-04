@@ -154,10 +154,17 @@ class Store {
   }
 
   /** Fetch your data from the server. Also used to pick up changes made on another device. */
-  load(): Promise<void> {
+  /**
+   * Load your data. `course` (from the address, /english) is made your course first, so the app
+   * opens straight in it; an unknown course is ignored and the app shows your current one.
+   */
+  load(course?: string): Promise<void> {
     if (this.loading) return this.loading;
     this.loading = (async () => {
       try {
+        if (course && course !== this.snap.course?.id) {
+          await fetch('/api/course', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ id: course }) }).catch(() => null);
+        }
         if (await this.fetchState()) await this.checkGuestProgress();
       } catch (e) {
         if (this.snap.status === 'loading' && !(e instanceof HttpError && e.status === 401)) {

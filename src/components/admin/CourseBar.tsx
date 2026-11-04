@@ -41,7 +41,7 @@ export function CourseBar({ course, courses, admin }: { course: Course; courses:
   );
 }
 
-/** Admins: a new course. Its link (/c/<id>) is what students open to join it. */
+/** Admins: a new course. Its page (/<id>) is what students open to join it. */
 function NewCourseSheet({ closing, onClose, onCreated }: { closing: boolean; onClose: () => void; onCreated: (id: string) => void }) {
   const [error, setError] = useState('');
   const [pending, startTransition] = useTransition();
@@ -71,7 +71,7 @@ function NewCourseSheet({ closing, onClose, onCreated }: { closing: boolean; onC
           <label htmlFor="nc-id">Link</label>
           <input id="nc-id" value={id} required maxLength={30} autoCapitalize="off" spellCheck={false}
             onChange={(e) => { setIdTouched(true); setId(slug(e.target.value)); }} />
-          <p className="hint">Students join with <b>/c/{id || 'your-link'}</b>. It can’t be changed later.</p>
+          <p className="hint">Students join with <b>/{id || 'your-link'}</b>. It can’t be changed later.</p>
         </div>
         <div className="field">
           <label htmlFor="nc-lang">Language studied</label>

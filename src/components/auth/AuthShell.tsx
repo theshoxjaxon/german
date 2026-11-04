@@ -19,7 +19,7 @@ export function AuthShell({ title, lede, children, guest = true }: { title: stri
   return (
     <main className="auth">
       <div className="auth-top">
-        <Link className="auth-back" href="/"><Icon name="back" />{t('Back to the flashcards')}</Link>
+        <Link className="auth-back" href="/app"><Icon name="back" />{t('Back to the flashcards')}</Link>
         <span className="lang-switch" role="group" aria-label="Language · Til">
           {LANGS.map(([code, name]) => (
             <button key={code} type="button" lang={code} aria-pressed={lang === code} onClick={() => rememberLang(code)}>{name}</button>

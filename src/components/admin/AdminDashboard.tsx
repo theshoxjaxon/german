@@ -46,7 +46,7 @@ export function AdminDashboard({ stats, meId, admin, course, courses }: {
   const [managing, setManaging] = useState<Person | null>(null);
   const [closing, setClosing] = useState(false);
   const [notice, setNotice] = useState('');
-  const inviteLink = useClientValue(() => `${window.location.origin}/c/${course.id}`, `/c/${course.id}`);
+  const inviteLink = useClientValue(() => `${window.location.origin}/${course.id}`, `/${course.id}`);
   const t = stats.totals;
 
   const close = () => {
@@ -68,7 +68,7 @@ export function AdminDashboard({ stats, meId, admin, course, courses }: {
             <p className="eyebrow">{course.name} · {dayLong(stats.today)}</p>
             <h1>Dashboard</h1>
           </div>
-          <Link className="btn" href="/">Open the app</Link>
+          <Link className="btn" href={`/${course.id}`}>Open the app</Link>
         </header>
         <CourseBar course={course} courses={courses} admin={admin} />
         {notice && <p className="notice" role="status">{notice}</p>}

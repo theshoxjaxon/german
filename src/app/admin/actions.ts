@@ -8,7 +8,7 @@
  *   a course's teachers     that course: its leaderboard, its lesson, its name and note
  */
 import { refresh } from 'next/cache';
-import { isCourseId, isTargetLang } from '@/lib/courses';
+import { isCourseId, isTargetLang, RESERVED_COURSE_IDS } from '@/lib/courses';
 import { hashPassword, temporaryPassword } from '@/lib/server/password';
 import * as repo from '@/lib/server/repo';
 import { currentUser } from '@/lib/server/session';
@@ -129,6 +129,7 @@ export async function createCourseAction(input: { id: string; name: string; targ
   const name = cleanText(input?.name, 60);
   if (!name) return { ok: false, error: 'Give the course a name.' };
   if (!isCourseId(id)) return { ok: false, error: 'The link may use a–z, 0–9 and dashes (2 to 30 characters), e.g. english-b1.' };
+  if (RESERVED_COURSE_IDS.has(id)) return { ok: false, error: 'That link is already used by the site. Pick another one.' };
   if (!isTargetLang(input?.targetLang)) return { ok: false, error: 'Pick the language studied.' };
   if ((await repo.createCourse({ id, name, targetLang: input.targetLang, note: cleanText(input?.note, 80) })) === 'taken') {
     return { ok: false, error: 'A course with that link already exists.' };

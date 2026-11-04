@@ -78,7 +78,7 @@ export function CourseSheet() {
   );
 }
 
-/** A guest's first screen when there are several courses. Links like /c/english skip it. */
+/** A guest's first screen in the app when there are several courses (the welcome page and /english skip it). */
 export function CoursePicker() {
   const { courses } = useStore();
   const { t } = useT();

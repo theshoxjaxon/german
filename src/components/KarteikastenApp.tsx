@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { Activity, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CourseLangContext } from '@/lib/client/course';
 import { tick, useLocalState } from '@/lib/client/hooks';
@@ -39,8 +40,11 @@ const isLayout = (v: unknown) => v === 'table' || v === 'gallery';
 const isSort = (v: unknown) =>
   !!v && typeof v === 'object' && (v as Sort).key in SORTS && ((v as Sort).dir === 'asc' || (v as Sort).dir === 'desc');
 
-export default function KarteikastenApp() {
+/** The app, on a course's page (/german, /english): `urlCourse` is the course in the address. */
+export default function KarteikastenApp({ urlCourse }: { urlCourse?: string }) {
   const { me, guest, status, course } = useStore();
+  const router = useRouter();
+  const [opened, setOpened] = useState(false); // the address's course has been loaded
   const { t, lang } = useT();
   const [savedTab, setTab] = useLocalState<Tab>('kk.tab', 'study', isTab);
   const [layout, setLayout] = useLocalState<Layout>('kk.layout', 'table', isLayout);
@@ -102,7 +106,8 @@ export default function KarteikastenApp() {
   // (so progress made on your phone shows up on your laptop and the other way round).
   useEffect(() => {
     store.setErrorHandler(toast);
-    store.load();
+    let live = true;
+    void store.load(urlCourse).then(() => live && setOpened(true));
     const refresh = () => {
       if (document.hidden) return;
       tick();
@@ -112,12 +117,31 @@ export default function KarteikastenApp() {
     document.addEventListener('visibilitychange', refresh);
     window.addEventListener('focus', refresh);
     return () => {
+      live = false;
       document.removeEventListener('visibilitychange', refresh);
       window.removeEventListener('focus', refresh);
     };
-  }, [toast]);
+  }, [toast, urlCourse]);
 
-  // /lets-study-together arrives as /#study: open the Class tab (its study card opens the page)
+  // The address follows the course: switching to English in the app shows /english (no reload)
+  const courseId = course?.id;
+  useEffect(() => {
+    if (!opened || !courseId || !urlCourse) return;
+    const want = `/${courseId}`;
+    if (window.location.pathname !== want) window.history.replaceState(null, '', want + window.location.search + window.location.hash);
+  }, [opened, courseId, urlCourse]);
+  // …and so does the tab's title ("Nemis tili · Karteikasten"), in the interface language
+  const courseName = course && t(langOf(course).name);
+  useEffect(() => {
+    if (opened && courseName && urlCourse) document.title = `${courseName} · Karteikasten`;
+  }, [opened, courseName, urlCourse]);
+
+  // A guest without a course (the address named one that doesn't exist): pick one on the welcome page
+  useEffect(() => {
+    if (opened && picking && urlCourse) router.replace('/');
+  }, [opened, picking, urlCourse, router]);
+
+  // /lets-study-together arrives as /german#study: open the Class tab (its study card opens the page)
   useEffect(() => {
     if (window.location.hash === '#study') setTab('class');
   }, [setTab]);

@@ -15,9 +15,10 @@ export const PASSWORD_MAX_BYTES = 72;
 export const passwordBytes = (password: string) => new TextEncoder().encode(password.normalize('NFKC')).length;
 
 /** Only allow redirects to paths on this site ("/admin"), never "//evil.com" or "https://…". */
+/** Where to go after logging in: a path on this site, else (and for the welcome page) your course. */
 export function safeNext(v: unknown): string {
   const s = String(v ?? '');
-  return s.startsWith('/') && !s.startsWith('//') && !s.startsWith('/\\') ? s : '/';
+  return s.startsWith('/') && !s.startsWith('//') && !s.startsWith('/\\') && s !== '/' ? s : '/app';
 }
 
 /** "Sardor Aliyev" → "SA", "malika" → "M" */

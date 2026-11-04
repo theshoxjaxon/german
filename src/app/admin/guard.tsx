@@ -61,7 +61,7 @@ export function NotAdmin({ name }: { name: string }) {
             <b> Forgot password</b> and open the emailed link. Signing up with email and password alone never makes an account admin,
             so nobody can take it by signing up with your address first. An admin can also make others admin, or a course’s teacher, under Manage.
           </p>
-          <p><Link className="btn" href="/">Back to the app</Link></p>
+          <p><Link className="btn" href="/app">Back to the app</Link></p>
         </div>
       </div>
     </div>
@@ -75,7 +75,11 @@ export function DatabaseDown({ message }: { message: string }) {
         <div className="panel" role="alert">
           <h2>The database isn’t reachable</h2>
           <p className="err">{message}</p>
-          <p className="hint">After fixing it, reload this page or open <a href="/api/health">/api/health</a> to check.</p>
+          <p className="hint">
+            After fixing it, reload this page or open{' '}
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- an API route (JSON), not a page */}
+            <a href="/api/health">/api/health</a> to check.
+          </p>
         </div>
       </div>
     </div>

@@ -93,7 +93,7 @@ export async function signup(_prev: FormState, form: FormData): Promise<FormStat
   } catch (e) {
     return unavailable(e, fields);
   }
-  redirect('/');
+  redirect('/app'); // into the course they signed up for
 }
 
 export async function changePassword(_prev: FormState, form: FormData): Promise<FormState> {

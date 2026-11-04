@@ -12,10 +12,12 @@ describe('account rules', () => {
   });
   it('never redirects to another site after login', () => {
     expect(safeNext('/admin')).toBe('/admin');
-    expect(safeNext('//evil.example')).toBe('/');
-    expect(safeNext('https://evil.example')).toBe('/');
-    expect(safeNext('/\\evil.example')).toBe('/');
-    expect(safeNext(null)).toBe('/');
+    expect(safeNext('//evil.example')).toBe('/app');
+    expect(safeNext('https://evil.example')).toBe('/app');
+    expect(safeNext('/\\evil.example')).toBe('/app');
+    expect(safeNext('/')).toBe('/app'); // the welcome page: go to your course instead
+    expect(safeNext(undefined)).toBe('/app');
+    expect(safeNext(null)).toBe('/app');
   });
   it('makes initials', () => {
     expect(initials('Sardor Aliyev')).toBe('SA');

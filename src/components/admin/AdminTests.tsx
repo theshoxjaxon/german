@@ -56,7 +56,7 @@ export function AdminTests({ course, courses, admin, tests, people, attempts }: 
             <p className="eyebrow">{course.name}</p>
             <h1>Mock tests</h1>
           </div>
-          <Link className="btn" href="/">Open the app</Link>
+          <Link className="btn" href={`/${course.id}`}>Open the app</Link>
         </header>
         <CourseBar course={course} courses={courses} admin={admin} />
 

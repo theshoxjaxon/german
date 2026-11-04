@@ -55,13 +55,13 @@ export function GoogleButton() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           credential,
-          next: new URLSearchParams(window.location.search).get('next') ?? '/',
+          next: new URLSearchParams(window.location.search).get('next') ?? '/app',
           visitor: visitorId() ?? undefined, // links this browser's guest visits to a new profile
         }),
       });
       const data = (await res.json().catch(() => ({}))) as { next?: string; error?: string };
       if (res.ok) {
-        window.location.assign(data.next || '/'); // a full load, like the email login
+        window.location.assign(data.next || '/app'); // a full load, like the email login
         return;
       }
       setError(data.error || 'Google sign-in failed. Try again.');

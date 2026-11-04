@@ -57,7 +57,7 @@ export function AdminStudy({ course, courses, admin, view }: { course: Course; c
             <p className="eyebrow">{course.name}</p>
             <h1>Study together</h1>
           </div>
-          <Link className="btn" href="/">Open the app</Link>
+          <Link className="btn" href={`/${course.id}`}>Open the app</Link>
         </header>
         <CourseBar course={course} courses={courses} admin={admin} />
         {notice && <p className="notice" role="status">{notice}</p>}

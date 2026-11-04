@@ -121,6 +121,11 @@ export const DEFAULT_COURSE = 'german';
 /** Course ids are short and safe in a link: "english", "german-b1". */
 export const COURSE_ID_RE = /^[a-z0-9][a-z0-9-]{1,29}$/;
 export const isCourseId = (v: unknown): v is string => typeof v === 'string' && COURSE_ID_RE.test(v);
+/** Addresses the site already uses: a course can't take one (its page is /<id>). */
+export const RESERVED_COURSE_IDS = new Set([
+  'app', 'c', 'api', 'admin', 'login', 'signup', 'account', 'forgot-password', 'reset-password', 'lets-study-together',
+  'opengraph-image', 'manifest', 'icon', 'apple-icon', 'favicon', '_next',
+]);
 
 /** The cookie that remembers a guest's course (and the course a link like /c/english picked). */
 export const COURSE_COOKIE = 'kk_course';
