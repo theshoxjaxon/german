@@ -10,7 +10,7 @@ A mobile-first vocabulary app for learning centers. Students study German or Eng
 - **Class**: Snapchat-style daily streaks, each classmate's active-word count, a leaderboard per course, and cheers you can send each other.
 - **Words**: an Airtable-style table and card gallery: search, filter, sort. Teachers manage the shared lesson words; every student can also add **their own words**, which only they see and study.
 - **AI word helper** (optional): take a photo of a word list (textbook page, worksheet, whiteboard, notes) or type words, and Claude turns them into finished flashcards in the course's language: meaning, IPA, forms (German: with the article), an example sentence and a memory hook. You tick the ones to keep and pick the topic. In the word form, **Fill in the rest with AI** completes a single word.
-- **Mock tests** (German course): four unit tests (Lektion 1–3, 4–6, 7–9, 10–12) and a 75-minute final exam in the format of the **Goethe-Zertifikat A1: Start Deutsch 1**: listening (read aloud by the phone, twice), reading, vocabulary and grammar, writing and speaking, 20 points each, 60 of 100 to pass. Everything but writing and speaking is scored the moment you hand in, with every answer and the right one; the AI then scores the writing and speaking like an examiner and explains each mistake in Uzbek or English. Teachers see every student's results at `/admin/tests`.
+- **Mock tests** (German course), by level (A1.1 open, the later levels "opens soon"): a **Wiederholungstest** for each Modul (Grammatik 25 + Lesen 5 = 30 points, like the class's paper tests) and the **Abschlusstest** (Grammatik, Lesen, Schreiben, Sprechen, 25 points each; passed with 18 in every part). Automatic parts are scored the moment you hand in; the AI scores writing and speaking and explains each mistake in Uzbek or English. Teachers see every student's results at `/admin/tests`.
 - **Let's study together**: students mark the hours they're free next week and press **I want to study**. Every Sunday at 18:00 the app makes **groups of 3** who share a free hour, each with a suggested time, a speaking task and a **private chat** that only the group can read. Teachers see when the class is free (counts only), plan speaking clubs, and see reports, never chats. Share it as `/lets-study-together`.
 - **Admin dashboard** at `/admin`, per course: members, new sign-ups, daily / weekly / monthly active students, 30-day charts, a member table, the course's invite link, its name and note, and **which lesson the class is on**. Admins also see emails, reset passwords, make teachers and start new courses.
 
@@ -109,21 +109,23 @@ How it works: `src/lib/server/ai.ts` makes one streamed request with the image (
 
 ## Mock tests
 
-The German course has five tests in a **Tests** tab (courses without tests don't show the tab; guests see it locked). Each copies the Goethe A1 exam: instructions in German with an Uzbek translation underneath, five sections of 20 points, grades *sehr gut* (90+), *gut* (80+), *befriedigend* (70+), *ausreichend* (60+), *nicht bestanden*.
+The German course has its tests in a **Tests** tab, by level: **A1.1** is open (Momente A1, Lektion 1–12); A1.2, A2.1, A2.2, B1.1, B1.2, B2.1, B2.2, C1.1, C1.2, C2.1 and C2.2 show as "opens soon". Courses without tests don't show the tab; guests see it locked. The format is the class's own:
 
-| Test | Lessons | Grammar |
-| --- | --- | --- |
-| Test 1 | 1–3 | verb endings, *sein*, *haben*, W- and yes/no questions, verb second, *mein / dein / Ihr* |
-| Test 2 | 4–6 | *der / die / das*, *ein / kein*, Akkusativ, plural, the time, *am / um / von … bis*, Sie-imperative |
-| Test 3 | 7–9 | *können*, *möchten*, *mögen*, separable verbs, vowel-change verbs, *gern / lieber*, *am / um / im* |
-| Test 4 | 10–12 | Perfekt, *war / hatte*, du- and ihr-imperative, *müssen / dürfen*, dates, *nach / zum / zur*, *ihn* |
-| Abschlusstest | 1–12 | all of it, with three listening and three reading parts, 26 grammar items and five speaking tasks |
+| Test | Lessons | Parts | Points |
+| --- | --- | --- | --- |
+| Wiederholungstest Modul 1 | 1–3 | Teil A Grammatik (25 a–d dialogue questions) · Teil B Lesen (a text, 5 richtig/falsch) | /30 |
+| Wiederholungstest Modul 2 | 4–6 | same | /30 |
+| Wiederholungstest Modul 3 | 7–9 | same | /30 |
+| Wiederholungstest Modul 4 | 10–12 | same | /30 |
+| Abschlusstest | 1–12 | Grammatik · Lesen · Schreiben · Sprechen, 25 each | /100, **passed with 18 in every part** |
 
-- **Taking a test**: one section at a time, a timer (no cut-off), answers kept on the device until handed in, so closing the test or losing the connection loses nothing. Recordings play at most twice; without a German voice the text is shown instead. Speaking uses the phone's speech recognition, or typing.
+- **Wiederholungstests** are scored at once, like the paper (no pass mark; the score turns green from 22/30, the final's 72% bar).
+- **Abschlusstest**: Grammatik (25 a–d), Lesen (an email, ads, signs), Schreiben (a form, auto-scored, and a short letter scored by the AI), Sprechen with the four class tasks: *sich vorstellen*, *mit Partner sprechen* (the phone asks 3 questions aloud), *Gestern (Perfekt)* and *Fragen (Kärtchen)*. Each part is scaled to 25. The result shows each part with the 18 mark and says *Bestanden* only when all four reach it, otherwise which part is short.
+- **Taking a test**: one part at a time, a timer (no cut-off), answers kept on the device until handed in. Speaking uses the phone's speech recognition, or typing.
 - **Scoring**: the answer key never leaves the server (`src/lib/server/tests/`); the browser gets the questions only. Typed answers forgive case, spaces, a final dot and *ae / oe / ue / ss* for *ä / ö / ü / ß*. Writing and speaking left empty score 0.
-- **AI examiner** (needs `ANTHROPIC_API_KEY`, like the word helper): one request per attempt scores writing (3 points per content point + 1 for greeting and closing) and speaking (by the Goethe rubric, from the words only, not pronunciation), with corrections, a short explanation in the student's interface language and a tip. 8 checks per hour per student, one at a time per attempt; roughly 3–6 US cents per attempt with Claude Opus 5.5 (check real spend in the Anthropic Console). Without a key, the result shows the model answers and those two sections stay unscored.
-- **Teachers**: `/admin/tests` shows each student's best score per test, the average and pass rate per test, and the latest attempts with their five section scores; any score opens the whole attempt with the student's text and the AI feedback. Names only, no emails.
-- **Adding a test**: write it in `src/lib/server/tests/` (see `german-a1.ts`; `npm test` checks every test: unique ids, valid answers, a perfect attempt scores 100) and add it to `TESTS`.
+- **AI examiner** (needs `ANTHROPIC_API_KEY`): one request per attempt scores the writing (3 points per content point + 1 for greeting and closing) and each speaking task by its own rubric, with corrections, a short explanation in the student's interface language and a tip. 8 checks per hour per student. Without a key, the result shows the model answers and those parts stay unscored.
+- **Teachers**: `/admin/tests` shows each student's best score per test, the average (and for the final, how many passed), and the latest attempts with points per part; any score opens the whole attempt. Names only.
+- **Adding a test or a level**: write it in `src/lib/server/tests/` (see `german-a1.ts`: `level`, `kind: 'unit' | 'final'`, each part's `points` and `pass`) and add it to `TESTS`. `npm test` checks every test: the class format, unique ids, valid answers, and that a perfect attempt gets full marks. A level opens in the app as soon as it has a test.
 
 ## Let's study together
 
