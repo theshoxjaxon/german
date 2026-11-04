@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useT } from '@/lib/client/i18n';
 import { fetchAttempt, requestFeedback } from '@/lib/client/tests';
+import { shortParts } from '@/lib/tests/score';
 import {
-  PASS_SCORE, SECTION_POINTS, SECTIONS,
+  sectionMeta,
   type AttemptDetail, type Item, type OpenFeedback, type OpenItem, type SectionResult,
 } from '@/lib/tests/types';
 import { Icon } from '../ui';
@@ -21,7 +22,7 @@ function given(item: Item, v: string | number | boolean | undefined): string {
 }
 
 /**
- * The result of an attempt: the score and grade, each section, and every answer with the right
+ * The result of an attempt: the points (and, for a final, passed or not), each part, and every answer with the right
  * one. Writing and speaking get the AI's feedback; when it is still missing it is asked for here.
  * Teachers open the same view from /admin/tests (`asTeacher`: no "try again", no new AI request;
  * `who` is the student's name).
@@ -80,22 +81,31 @@ export function TestResultView({ attempt: start, ai, onClose, onRetry, onChange,
   }
 
   const { result, test } = attempt;
-  const passed = result.complete && result.score >= PASS_SCORE;
+  const short = shortParts(result.sections);
+  const final = test.kind === 'final';
   return (
     <Shell title={`${who ? `${who} · ` : ''}${test.title} · ${test.subtitle}`} onClose={onClose}>
-      <section className={`result-hero${result.complete ? (passed ? ' is-pass' : ' is-fail') : ''}`} aria-live="polite">
-        <p className="result-score"><b>{result.score}</b><span> / 100</span></p>
-        {result.complete ? (
-          <p className="result-grade"><span lang="de">{result.grade}</span> · {t(passed ? 'Passed' : 'Not passed yet: 60 points pass')}</p>
+      <section className={`result-hero${result.passed === true ? ' is-pass' : result.passed === false ? ' is-fail' : ''}`} aria-live="polite">
+        <p className="result-score"><b>{result.score}</b><span> / {result.max}</span></p>
+        {result.complete && !final ? (
+          <p className="result-grade">{t('points')}</p>
+        ) : result.complete ? (
+          <p className="result-grade">
+            <span lang="de">{result.passed ? 'Bestanden' : 'Nicht bestanden'}</span>
+            {' · '}
+            {result.passed
+              ? t('18 or more in every part.')
+              : t('Below 18: {parts}', { parts: short.map((x) => `${sectionMeta(x.id).title} ${x.score}/${x.max}`).join(', ') })}
+          </p>
         ) : (
           <p className="result-grade">{t(grading ? 'Checking your writing and speaking…' : 'So far: writing and speaking aren’t scored yet.')}</p>
         )}
       </section>
 
       <section className="panel" aria-label={t('Sections')}>
-        {SECTIONS.map((meta) => {
-          const s = result.sections.find((x) => x.id === meta.id);
-          return s ? <SectionBar key={meta.id} s={s} title={meta.title} label={t(meta.label)} /> : null;
+        {result.sections.map((s) => {
+          const meta = sectionMeta(s.id);
+          return <SectionBar key={s.id} s={s} title={meta.title} label={t(meta.label)} />;
         })}
       </section>
 
@@ -109,7 +119,7 @@ export function TestResultView({ attempt: start, ai, onClose, onRetry, onChange,
       {grading && <div className="panel loading" aria-busy="true">{t('Checking your writing and speaking… this takes a few seconds.')}</div>}
 
       {test.sections.map((section) => {
-        const meta = SECTIONS.find((m) => m.id === section.id);
+        const meta = sectionMeta(section.id);
         return (
           <details key={section.id} className="review-sec" open={section.id === 'schreiben' || section.id === 'sprechen'}>
             <summary><span lang="de">{meta?.title}</span> <span className="muted">· {t(meta?.label ?? '')}</span></summary>
@@ -128,6 +138,7 @@ export function TestResultView({ attempt: start, ai, onClose, onRetry, onChange,
                       {item.audio && <Transcript lines={item.audio} />}
                       {item.text && <ReadTextView text={item.text} />}
                       <p className="rev-q" lang="de">{item.type === 'form' ? item.label : item.prompt}</p>
+                      {item.type === 'choice' && item.reply && <p className="rev-q rev-reply" lang="de">{item.reply}</p>}
                       <p className="rev-a">
                         <Icon name={result.items[item.id]?.ok ? 'check' : 'x'} />
                         <span lang="de">{given(item, attempt.answers[item.id])}</span>
@@ -165,11 +176,16 @@ function Shell({ title, onClose, children }: { title: string; onClose: () => voi
 }
 
 function SectionBar({ s, title, label }: { s: SectionResult; title: string; label: string }) {
+  const { t } = useT();
+  const low = s.pass !== undefined && !s.pending && s.score < s.pass;
   return (
-    <div className="sec-bar">
+    <div className={`sec-bar${low ? ' is-low' : ''}`}>
       <span className="sec-name"><b lang="de">{title}</b><span className="muted small">{label}</span></span>
-      <span className="sec-track"><i style={{ width: `${(s.score / SECTION_POINTS) * 100}%` }} /></span>
-      <span className="sec-n">{s.pending ? '…' : s.score}<span className="muted">/{SECTION_POINTS}</span></span>
+      <span className="sec-track">
+        <i style={{ width: `${(s.score / s.max) * 100}%` }} />
+        {s.pass !== undefined && <span className="sec-pass" style={{ left: `${(s.pass / s.max) * 100}%` }} title={t('{n} needed', { n: s.pass })} />}
+      </span>
+      <span className="sec-n">{s.pending ? '…' : s.score}<span className="muted">/{s.max}</span></span>
     </div>
   );
 }

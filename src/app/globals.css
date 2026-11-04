@@ -883,8 +883,8 @@ details.advanced[open] > summary { margin-bottom: 10px; }
 .test-card { display: grid; gap: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px; }
 .test-card.is-final { border-color: var(--ink-2); box-shadow: inset 4px 0 0 var(--mark); }
 .test-card-h { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.test-card-h h2 { font-family: var(--font-display); font-size: 19px; font-weight: 700; line-height: 1.25; }
-.test-card-h h2 .muted { font-family: var(--font-ui); font-size: 14px; font-weight: 600; }
+.test-card-h h3 { font-family: var(--font-display); font-size: 19px; font-weight: 700; line-height: 1.25; }
+.test-card-h h3 .muted { font-family: var(--font-ui); font-size: 14px; font-weight: 600; }
 .test-card .chip-now { display: inline-block; margin-top: 4px; }
 .test-card .btn-row { margin-top: 8px; }
 .score-pill {
@@ -1118,3 +1118,27 @@ details.advanced[open] > summary { margin-bottom: 10px; }
 .report-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .report-list li { display: grid; gap: 2px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
 .admin .club-list li .grow { flex: 1; min-width: 0; }
+
+/* ---------- levels and the class test format ---------- */
+.level-chips { display: flex; gap: 8px; overflow-x: auto; margin-inline: -16px; padding: 2px 16px 4px; scrollbar-width: none; }
+.level-chips::-webkit-scrollbar { display: none; }
+.level-chip { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.level-chip[aria-selected="true"] { background: var(--ink); color: var(--ink-inv); border-color: var(--ink); }
+.level-chip.is-soon { color: var(--ink-3); border-style: dashed; }
+.level-chip .ic { width: 14px; height: 14px; }
+.test-group { display: grid; gap: 10px; }
+.test-group-h h2 { font-family: var(--font-display); font-size: 21px; font-weight: 700; }
+.test-card-h h3 { margin: 0; }
+.pill-max { font-size: 11px; font-weight: 500; opacity: .75; }
+.score-pill { min-width: 56px; }
+.ok-text { color: var(--good); }
+.q-dialogue { display: grid; gap: 4px; }
+.q-dialogue p { display: flex; gap: 8px; }
+.q-reply { color: var(--ink-2); }
+.dlg { flex: none; width: 14px; color: var(--ink-3); font-weight: 700; }
+.sec-track { position: relative; overflow: visible; }
+.sec-pass { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--ink-2); border-radius: 2px; }
+.sec-bar.is-low .sec-track i { background: var(--again); }
+.sec-bar.is-low .sec-n { color: var(--again); }
+.rev-reply { color: var(--ink-2); font-weight: 500; }
+.attempt-secs .is-low b { color: var(--again); }

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import type { Course } from '@/lib/courses';
 import { useClientValue } from '@/lib/client/hooks';
-import { PASS_SCORE, SECTIONS, type AttemptSummary, type TestInfo } from '@/lib/tests/types';
+import { scoreTone, sectionMeta, type AttemptSummary, type TestInfo } from '@/lib/tests/types';
 import { TestResultView } from '../tests/TestResult';
 import { Avatar } from '../ui';
 import { CourseBar } from './CourseBar';
@@ -18,7 +18,8 @@ function best(list: Attempt[]): Attempt | undefined {
   return done.length ? done.reduce((b, a) => (a.score > b.score ? a : b)) : list[0];
 }
 
-const pillClass = (a: Attempt) => `score-pill${!a.complete ? '' : a.score >= PASS_SCORE ? ' is-pass' : ' is-fail'}`;
+const pillClass = (a: Attempt) => `score-pill${scoreTone(a)}`;
+const verdict = (a: Attempt) => (!a.complete ? 'writing and speaking not scored yet' : a.passed === true ? 'bestanden' : a.passed === false ? 'nicht bestanden' : `${a.score} of ${a.max} points`);
 const SHORT: Record<string, string> = { hoeren: 'Hören', lesen: 'Lesen', grammatik: 'Gramm.', schreiben: 'Schreiben', sprechen: 'Sprechen' };
 const when = (ms: number) => new Date(ms).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
@@ -67,12 +68,15 @@ export function AdminTests({ course, courses, admin, tests, people, attempts }: 
               {tests.map((test) => {
                 const bests = people.map((p) => best(mine(p.id, test.id))).filter((a): a is Attempt => !!a && a.complete);
                 const avg = bests.length ? Math.round(bests.reduce((s, a) => s + a.score, 0) / bests.length) : null;
-                const passed = bests.filter((a) => a.score >= PASS_SCORE).length;
+                const passed = bests.filter((a) => a.passed === true).length;
+                const max = test.kind === 'final' ? 100 : 30;
                 return (
                   <div key={test.id} className="tile">
                     <p className="tile-l">{test.title} · {test.subtitle}</p>
-                    <p className="tile-v">{avg ?? '–'}{avg !== null && <span className="unit"> avg</span>}</p>
-                    <p className="tile-s">{bests.length ? `${passed} of ${bests.length} passed (60+)` : 'nobody yet'}</p>
+                    <p className="tile-v">{avg ?? '–'}{avg !== null && <span className="unit"> / {max} avg</span>}</p>
+                    <p className="tile-s">
+                      {!bests.length ? 'nobody yet' : test.kind === 'final' ? `${passed} of ${bests.length} passed (18+ in every part)` : `${bests.length} took it`}
+                    </p>
                   </div>
                 );
               })}
@@ -110,7 +114,7 @@ export function AdminTests({ course, courses, admin, tests, people, attempts }: 
                             return (
                               <td key={test.id} className="num">
                                 {b ? (
-                                  <button className={pillClass(b)} onClick={() => show(b)} title={`${b.grade ?? 'writing and speaking not scored yet'} · ${list.length} attempt${list.length === 1 ? '' : 's'}`}
+                                  <button className={pillClass(b)} onClick={() => show(b)} title={`${verdict(b)} · ${list.length} attempt${list.length === 1 ? '' : 's'}`}
                                     aria-label={`${p.displayName}, ${test.title}: ${b.score} points${b.complete ? '' : ' so far'}. Open`}>
                                     {b.score}{!b.complete && '…'}
                                   </button>
@@ -127,7 +131,7 @@ export function AdminTests({ course, courses, admin, tests, people, attempts }: 
             </section>
 
             <section className="panel" aria-labelledby="latest-h">
-              <div className="panel-h"><h2 id="latest-h">Latest attempts</h2><span className="muted">sections of 20</span></div>
+              <div className="panel-h"><h2 id="latest-h">Latest attempts</h2><span className="muted">points per part; under the pass mark in red</span></div>
               {!attempts.length ? <p className="muted">Nobody has taken a test yet.</p> : (
                 <ul className="attempt-list">
                   {attempts.slice(0, 40).map((a) => {
@@ -139,13 +143,14 @@ export function AdminTests({ course, courses, admin, tests, people, attempts }: 
                           <span className="attempt-main">
                             <span>
                               <b>{nameOf.get(a.userId) ?? 'Someone'}</b> · {test ? `${test.title} (${test.subtitle})` : a.testId}
-                              <span className="muted small"> · {mounted ? `${when(a.submittedAt)} · ` : ''}{a.grade ?? 'writing and speaking not scored yet'}</span>
+                              <span className="muted small"> · {mounted ? `${when(a.submittedAt)} · ` : ''}{verdict(a)}</span>
                             </span>
                             <span className="attempt-secs">
-                              {SECTIONS.map((s) => {
-                                const r = a.sections.find((x) => x.id === s.id);
-                                return <span key={s.id} lang="de">{SHORT[s.id]} <b>{!r ? '–' : r.pending ? '…' : r.score}</b></span>;
-                              })}
+                              {a.sections.map((r) => (
+                                <span key={r.id} lang="de" className={r.pass !== undefined && !r.pending && r.score < r.pass ? 'is-low' : ''}>
+                                  {SHORT[r.id] ?? sectionMeta(r.id).title} <b>{r.pending ? '…' : r.score}</b>/{r.max}
+                                </span>
+                              ))}
                             </span>
                           </span>
                         </button>

@@ -6,7 +6,7 @@ import { listen, recognitionSupported } from '@/lib/client/listen';
 import { playScript, stopSpeech, useSpeechSupported } from '@/lib/client/speech';
 import { clearDraft, fetchTest, readDraft, saveDraft, submitTest, type Draft } from '@/lib/client/tests';
 import { useClientValue } from '@/lib/client/hooks';
-import { SECTIONS, type AttemptDetail, type Line, type PublicItem, type PublicTask, type PublicTest, type ReadText } from '@/lib/tests/types';
+import { sectionMeta, type AttemptDetail, type Line, type PublicItem, type PublicTask, type PublicTest, type ReadText } from '@/lib/tests/types';
 import { ConfirmButton, Icon } from '../ui';
 
 /** Exam recordings play twice, like in the Goethe exam. */
@@ -71,7 +71,7 @@ export function TestRunner({ testId, onClose, onDone }: { testId: string; onClos
 
   const idx = Math.min(draft.section, (test?.sections.length ?? 1) - 1);
   const section = test?.sections[idx];
-  const meta = SECTIONS.find((s) => s.id === section?.id);
+  const meta = section ? sectionMeta(section.id) : undefined;
   const last = !!test && idx === test.sections.length - 1;
 
   return (
@@ -183,8 +183,15 @@ function ItemView({ item, value, plays, uz, onAnswer, onPlayed }: {
       return (
         <div className="q">
           {extras}
-          <p className="q-prompt" lang="de">{item.prompt}</p>
-          <div className={`opts${item.options.some((o) => o.length > 40) ? ' opts-long' : ''}`} role="radiogroup" aria-label={item.prompt}>
+          {item.reply !== undefined ? (
+            <div className="q-dialogue" lang="de">
+              <p className="q-prompt"><span className="dlg" aria-hidden="true">■</span>{item.prompt}</p>
+              <p className="q-reply"><span className="dlg" aria-hidden="true">•</span>{item.reply}</p>
+            </div>
+          ) : (
+            <p className="q-prompt" lang="de">{item.prompt}</p>
+          )}
+          <div className={`opts${item.options.some((o) => o.length > 40) ? ' opts-long' : ''}`} role="radiogroup" aria-label={item.reply ? `${item.prompt} ${item.reply}` : item.prompt}>
             {item.options.map((o, i) => (
               <button key={i} type="button" className="opt-ans" role="radio" aria-checked={value === i} onClick={() => set(i)} lang="de">
                 <span className="opt-l">{LETTERS[i]}</span><span>{o}</span>
@@ -241,15 +248,20 @@ function ItemView({ item, value, plays, uz, onAnswer, onPlayed }: {
       );
     }
     case 'speaking':
-      return <SpeakingItemView item={item} value={typeof value === 'string' ? value : ''} uz={uz} onChange={set} />;
+      return (
+        <SpeakingItemView item={item} value={typeof value === 'string' ? value : ''} uz={uz} onChange={set}
+          played={plays[item.id] ?? 0} onPlayed={() => onPlayed(item.id)} />
+      );
   }
 }
 
-function SpeakingItemView({ item, value, uz, onChange }: {
+function SpeakingItemView({ item, value, uz, onChange, played, onPlayed }: {
   item: Extract<PublicItem, { type: 'speaking' }>;
   value: string;
   uz: boolean;
   onChange: (v: string) => void;
+  played: number;
+  onPlayed: () => void;
 }) {
   const { t } = useT();
   const canListen = useClientValue(recognitionSupported, false);
@@ -290,9 +302,10 @@ function SpeakingItemView({ item, value, uz, onChange }: {
 
   return (
     <div className="q">
-      <p className="q-prompt" lang="de">{item.prompt}</p>
+      {item.audio && <AudioPlayer lines={item.audio} played={played} onPlayed={onPlayed} />}
+      <p className="q-prompt" lang="de">{item.kind === 'partner' ? <><span className="dlg" aria-hidden="true">■</span>{item.prompt}</> : item.prompt}</p>
       {uz && <p className="task-instr-uz">{item.promptUz}</p>}
-      <div className="cards-row" lang="de">{item.cards.map((c) => <span key={c} className="word-card">{c}</span>)}</div>
+      {item.cards.length > 0 && <div className="cards-row" lang="de">{item.cards.map((c) => <span key={c} className="word-card">{c}</span>)}</div>}
       {canListen && (
         <button type="button" className={`btn mic${on ? ' is-on' : ''}`} onClick={toggle} aria-pressed={on}>
           <Icon name="mic" /> {t(on ? 'Stop' : 'Speak')}
