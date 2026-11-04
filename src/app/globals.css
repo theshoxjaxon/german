@@ -1136,6 +1136,8 @@ details.advanced[open] > summary { margin-bottom: 10px; }
 .q-dialogue p { display: flex; gap: 8px; }
 .q-reply { color: var(--ink-2); }
 .dlg { flex: none; width: 14px; color: var(--ink-3); font-weight: 700; }
+.q-prompt > .dlg { display: inline-block; margin-right: 8px; }
+.q-dialogue .q-prompt > .dlg { margin-right: 0; }
 .sec-track { position: relative; overflow: visible; }
 .sec-pass { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--ink-2); border-radius: 2px; }
 .sec-bar.is-low .sec-track i { background: var(--again); }
