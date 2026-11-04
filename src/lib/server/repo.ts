@@ -1069,8 +1069,9 @@ export const attemptSummary = (a: Pick<AttemptRow, 'id' | 'testId' | 'result' | 
   id: a.id,
   testId: a.testId,
   score: a.result.score,
+  max: a.result.max,
   complete: a.result.complete,
-  grade: a.result.grade,
+  passed: a.result.passed,
   sections: a.result.sections,
   submittedAt: a.submittedAt,
 });

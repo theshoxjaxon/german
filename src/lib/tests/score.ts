@@ -5,11 +5,12 @@
  *   automatic items (choice, richtig/falsch, gaps, form fields): 1 point each
  *   writing: 10 points (3 per content point + 1 for greeting and closing), from the AI
  *   speaking: the task's points, from the AI
- * Each section is scaled to 20 (half points); the total is out of 100.
+ * Each part is scaled to its own points (half points); the total is their sum. A final is
+ * passed only when every part reaches its pass mark (18 of 25), whatever the total.
  */
 import {
-  isOpen, itemMax, PASS_SCORE, SECTION_POINTS,
-  type Answers, type AutoItem, type Grade, type Item, type ItemResult, type OpenFeedback, type PublicItem, type PublicTest, type SectionResult,
+  isOpen, itemMax,
+  type Answers, type AutoItem, type Item, type ItemResult, type OpenFeedback, type PublicItem, type PublicTest, type SectionResult,
   type Test, type TestResult,
 } from './types';
 
@@ -52,9 +53,8 @@ export function scoreItem(item: AutoItem, given: Answers[string] | undefined): I
 
 const half = (x: number) => Math.round(x * 2) / 2;
 
-export function grade(score: number): Grade {
-  return score >= 90 ? 'sehr gut' : score >= 80 ? 'gut' : score >= 70 ? 'befriedigend' : score >= PASS_SCORE ? 'ausreichend' : 'nicht bestanden';
-}
+/** Parts of a final that are below their pass mark. */
+export const shortParts = (sections: SectionResult[]) => sections.filter((s) => s.pass !== undefined && !s.pending && s.score < s.pass);
 
 /**
  * The result of an attempt: the automatic items now, the open ones from `open` (the AI's scores)
@@ -79,11 +79,14 @@ export function scoreAttempt(test: Test, answers: Answers, open: Record<string, 
         raw += r.points;
       }
     }
-    return { id: section.id, raw, rawMax, score: rawMax ? half((raw / rawMax) * SECTION_POINTS) : 0, pending };
+    const score = rawMax ? half((raw / rawMax) * section.points) : 0;
+    return { id: section.id, raw, rawMax, score, max: section.points, ...(section.pass !== undefined ? { pass: section.pass } : {}), pending };
   });
   const score = half(sections.reduce((n, s) => n + s.score, 0));
+  const max = sections.reduce((n, s) => n + s.max, 0);
   const complete = sections.every((s) => !s.pending);
-  return { testId: test.id, items, open, sections, score, complete, grade: complete ? grade(score) : null };
+  const passed = test.kind === 'final' && complete ? shortParts(sections).length === 0 : null;
+  return { testId: test.id, items, open, sections, score, max, complete, passed };
 }
 
 /** Writing and speaking left empty: 0 points straight away, nothing for the AI to check. */
@@ -106,6 +109,8 @@ export function publicTest(test: Test): PublicTest {
     ...test,
     sections: test.sections.map((s) => ({
       id: s.id,
+      points: s.points,
+      ...(s.pass !== undefined ? { pass: s.pass } : {}),
       tasks: s.tasks.map((t) => ({
         ...t,
         items: t.items.map((item) => (isOpen(item) ? omit(item, 'model') : omit(item, 'answer')) as PublicItem),

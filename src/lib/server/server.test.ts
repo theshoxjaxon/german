@@ -605,22 +605,23 @@ describe('mock tests', () => {
   it('saves attempts per person and course, and fills in the AI scores later', async () => {
     const { findTest } = await import('./tests');
     const { scoreAttempt } = await import('../tests/score');
-    const test = findTest('a1-test-1')!;
+    const test = findTest('a11-abschlusstest')!;
     const nodira = await byEmail('nodira@example.com');
     const jasur = await byEmail('jasur@example.com');
     await repo.joinCourse(nodira.id, G);
     await repo.joinCourse(jasur.id, G);
 
-    const answers = { 't1-h1-1': 1, 't1-g1-1': 'heisse', 't1-s2-1': 'Liebe Lena, ich heiße Nodira …' };
+    const answers = { 'f-g-1': 0, 'f-s1-1': 'rahimov', 'f-s2-1': 'Sehr geehrte Damen und Herren, ich heiße Nodira …' };
     const result = scoreAttempt(test, answers);
     expect(result.complete).toBe(false); // writing and speaking wait for the AI
     const id = await repo.saveAttempt({ userId: nodira.id, courseId: G, testId: test.id, answers, result, startedAt: Date.now() - 60_000 });
     const saved = (await repo.getAttempt(id))!;
     expect(saved).toMatchObject({ userId: nodira.id, courseId: G, testId: test.id, answers, complete: false });
-    expect(saved.result.items['t1-h1-1'].ok).toBe(true);
+    expect(saved.result.items['f-g-1'].ok).toBe(true);
+    expect(saved.result.items['f-s1-1'].ok).toBe(true);
 
     const open = Object.fromEntries(
-      ['t1-s2-1', 't1-p1-1', 't1-p2-1', 't1-p3-1'].map((k) => [k, { points: 2, max: 10, summary: 'ok', corrections: [], tip: '' }]),
+      ['f-s2-1', 'f-p1-1', 'f-p2-1', 'f-p2-2', 'f-p2-3', 'f-p3-1', 'f-p4-1'].map((k) => [k, { points: 2, max: 10, summary: 'ok', corrections: [], tip: '' }]),
     );
     // One AI check at a time; a failed one can be retried at once
     expect(await repo.claimAttemptGrading(id)).toBe(true);

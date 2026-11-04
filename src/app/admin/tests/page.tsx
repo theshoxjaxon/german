@@ -20,10 +20,13 @@ export default function TestsPage({ searchParams }: PageProps<'/admin/tests'>) {
 async function TestsData({ searchParams }: Pick<PageProps<'/admin/tests'>, 'searchParams'>) {
   await connection(); // per request: results change with every attempt
   const params = await searchParams;
-  const r = await adminData('/admin/tests', params.course, async (c) => ({
-    tests: testsFor(c.course.id).map(testInfo),
-    ...(await repo.courseTestResults(c.course.id)),
-  }));
+  const r = await adminData('/admin/tests', params.course, async (c) => {
+    const tests = testsFor(c.course.id);
+    const ids = new Set(tests.map((x) => x.id));
+    const { people, attempts } = await repo.courseTestResults(c.course.id);
+    // Attempts of replaced tests (an older format) stay in the database but aren't shown
+    return { tests: tests.map(testInfo), people, attempts: attempts.filter((a) => ids.has(a.testId)) };
+  });
   if ('down' in r) return <DatabaseDown message={r.down} />;
   if ('student' in r) return <NotAdmin name={r.student} />;
   return <AdminTests course={r.course} courses={r.courses} admin={r.admin} {...r.data} />;

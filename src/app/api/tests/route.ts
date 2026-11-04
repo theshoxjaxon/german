@@ -10,6 +10,8 @@ export async function GET(req: Request) {
   if (auth.response) return auth.response;
   const { user } = auth;
   const tests = testsFor(user.courseId);
-  const attempts = tests.length ? await repo.listAttempts(user.id, user.courseId) : [];
+  // Attempts of tests that were replaced (an older format) stay in the database but aren't listed
+  const ids = new Set(tests.map((x) => x.id));
+  const attempts = tests.length ? (await repo.listAttempts(user.id, user.courseId)).filter((a) => ids.has(a.testId)) : [];
   return ok({ tests: tests.map(testInfo), attempts, ai: aiEnabled() });
 }

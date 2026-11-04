@@ -52,7 +52,12 @@ const ENGLISH_TASKS: StudyTask[] = [
 function tasksFor(lang: TargetLang): StudyTask[] {
   const fromTests = TESTS.filter((t) => t.course === 'german' && lang === 'de')
     .flatMap((t) => t.sections.flatMap((s) => s.tasks.flatMap((tk) => tk.items)))
-    .flatMap((it) => (it.type === 'speaking' && it.part > 1 ? [{ prompt: it.prompt, cards: it.cards }] : []));
+    .flatMap((it) => (it.type === 'speaking' && it.kind === 'cards' ? [{ prompt: it.prompt, cards: it.cards }] : []));
+  // The partner questions make one more task: ask each other all of them
+  const partner = TESTS.filter((t) => t.course === 'german' && lang === 'de')
+    .flatMap((t) => t.sections.flatMap((s) => s.tasks.flatMap((tk) => tk.items)))
+    .flatMap((it) => (it.type === 'speaking' && it.kind === 'partner' ? [it.prompt] : []));
+  if (partner.length) fromTests.push({ prompt: 'Stellen Sie sich die Fragen gegenseitig und antworten Sie.', cards: partner });
   return fromTests.length ? fromTests : ENGLISH_TASKS;
 }
 
