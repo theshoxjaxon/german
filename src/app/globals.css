@@ -1235,3 +1235,31 @@ details.advanced[open] > summary { margin-bottom: 10px; }
 .tg-card h2 { font-size: 16px; font-weight: 700; }
 .tg-card p { color: var(--ink-2); font-size: 14.5px; text-wrap: pretty; }
 .tg-card .btn { text-decoration: none; }
+
+/* ---------- sharing a result: the button, and the public page /s/<id> ---------- */
+.share-box { display: grid; gap: 6px; justify-items: start; }
+.share-box .btn { text-decoration: none; }
+.share-box.is-compact { margin-top: 6px; }
+.share-link { width: 100%; min-height: 40px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--surface-2); font-size: 14px; }
+.share {
+  min-height: 100%; display: grid; align-content: start; justify-items: center; gap: 22px;
+  padding: calc(14px + env(safe-area-inset-top, 0px)) 16px calc(36px + env(safe-area-inset-bottom, 0px));
+  background: radial-gradient(52rem 26rem at 50% -4rem, color-mix(in srgb, var(--mark) 24%, transparent), transparent 70%), var(--bg);
+}
+.share .wel-brand { color: var(--ink); text-decoration: none; }
+.share-card {
+  width: 100%; max-width: 560px; display: grid; gap: 8px; margin-top: clamp(16px, 6vh, 60px); padding: 22px 22px 20px;
+  border-radius: 20px; background: var(--card); box-shadow: var(--shadow-card); border-bottom: 3px solid var(--rule-red);
+  animation: wel-deal .6s cubic-bezier(.2, .75, .25, 1.15) backwards;
+}
+.share-card h1 { font-family: var(--font-display); font-size: 26px; line-height: 1.2; text-wrap: balance; }
+.share-who { font-size: 16px; color: var(--ink-2); }
+.share-score { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; font-family: var(--font-display); }
+.share-score b { font-size: 76px; line-height: 1; }
+.share-max { font-size: 34px; color: var(--ink-3); font-weight: 700; }
+.share-pass { align-self: center; padding: 5px 14px; border-radius: 999px; background: var(--good-soft); color: var(--good); font-family: var(--font-ui); font-size: 16px; font-weight: 700; }
+.share-streak { align-items: center; }
+.share-streak .ic { width: 64px; height: 64px; color: var(--flame); }
+.share-streak span { font-size: 22px; font-weight: 700; }
+.share-cta { width: 100%; max-width: 560px; display: grid; gap: 8px; text-align: center; }
+.share-cta .btn { text-decoration: none; }

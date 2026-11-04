@@ -13,6 +13,7 @@ A mobile-first vocabulary app for learning centers. Students study German or Eng
 - **Mock tests** (German course), by level (A1.1 open, the later levels "opens soon"): a **Wiederholungstest** for each Modul (Grammatik 25 + Lesen 5 = 30 points, like the class's paper tests) and the **Abschlusstest** (Grammatik, Lesen, Schreiben, Sprechen, 25 points each; passed with 18 in every part). Automatic parts are scored the moment you hand in; the AI scores writing and speaking and explains each mistake in Uzbek or English. Teachers see every student's results at `/admin/tests`.
 - **Let's study together**: students mark the hours they're free next week and press **I want to study**. Every Sunday at 18:00 the app makes **groups of 3** who share a free hour, each with a suggested time, a speaking task and a **private chat** that only the group can read. Teachers see when the class is free (counts only), plan speaking clubs, and see reports, never chats. Share it as `/lets-study-together`.
 - **Telegram reminder** (optional): students connect Telegram from **Settings → Telegram** (or the card on the home screen after their first session). Each evening, if they haven't practised that day, the bot sends one message: their streak and how many cards wait, with an **Open** button. `/stop` or the Stop button turns it off.
+- **Share a result**: after a mock test (or from the streak in Progress) **Share** makes a link to a card with your first name and the score. In Telegram it shows as a picture; whoever opens it gets **Try it too**, straight into the same course.
 - **Admin dashboard** at `/admin`, per course: members, new sign-ups, daily / weekly / monthly active students, 30-day charts, a member table, the course's invite link, its name and note, and **which lesson the class is on**. Admins also see emails, reset passwords, make teachers and start new courses.
 
 **German · Momente** comes with all twelve Momente lessons, German → Uzbek, 653 words in all, each with IPA, an example sentence, plural or verb forms and a memory hook:
@@ -154,6 +155,14 @@ The app only reaches students who open it. The Telegram bot reaches the ones who
 - **Connecting**: Settings makes a one-time link `t.me/<bot>?start=<code>` (256 random bits, 15 minutes, used once; only its SHA-256 is stored). Pressing **Start** in Telegram ties that chat to the profile; the Settings page notices within a few seconds. One Telegram chat belongs to one profile: connecting it from another profile moves it there.
 - **The evening job**: Vercel Cron calls `/api/cron/daily` at 14:00 UTC (19:00 in Tashkent; on the Hobby plan it runs some time in that hour). Everyone with reminders on who hasn't answered a card that day gets one message, in their interface language: their streak and how many reviews and new words wait in their current course, counted exactly like the home screen. Nobody gets two in a day: the day is claimed before sending. If Telegram says someone blocked the bot, their reminders go off.
 - **Privacy**: the webhook only accepts requests carrying `TELEGRAM_WEBHOOK_SECRET` (Telegram sends it back with every update). The bot never repeats what anyone writes and ignores groups and channels. No page shows a chat id, admins included; `/admin` shows counts only. Disconnecting, or deleting the profile, deletes the link.
+
+## Sharing a result
+
+**Share** under a mock test result (or next to the streak in Progress, from 2 days) makes a public link `/s/<id>` and opens the phone's share sheet, or copies the link where there is none.
+
+- **What it shows**: a snapshot taken when you pressed Share: your first name, the test (or the streak), the score and, for the Abschlusstest, *bestanden*. No email, no answers, no other names. Sharing the same result again gives the same link. The page has **Try it too**, which opens the same course.
+- **The preview**: `/s/<id>/opengraph-image` draws the card (1200×630) for Telegram, WhatsApp and the like. The image font has no ʻ, so names and Uzbek text use the look-alike ‘ there.
+- **Privacy**: only your own complete attempts can be shared (anyone else's gets the same 404). The page is `noindex`, ids are 96 random bits, and deleting the profile deletes its links. 30 shares a day per person.
 
 ## Sign in with Google
 
@@ -326,6 +335,8 @@ Postgres/Supabase  courses · course_members · users · sessions · password_re
 | `POST /api/study/clubs/:id/rsvp` | course members | `{ going }` for a speaking club of your course |
 | `GET /api/cron/study` | Vercel Cron (`CRON_SECRET`) | Makes the due study groups, deletes expired ones |
 | `GET /api/cron/daily` | Vercel Cron (`CRON_SECRET`) | Sends the evening Telegram reminders |
+| `POST /api/share` | signed in | `{ kind: 'test', attemptId }` (your own, complete) or `{ kind: 'streak' }` → `{ url }` of the public card |
+| `GET /s/:id` | anyone | A shared result, with "Try it too"; its preview picture at `/s/:id/opengraph-image` |
 | `GET/POST/DELETE /api/telegram` | signed in | Your reminder state; `{ action: 'link' }` → a one-time t.me link (10 an hour); `{ reminders }` on/off; DELETE disconnects |
 | `POST /api/telegram/webhook` | Telegram (`TELEGRAM_WEBHOOK_SECRET`) | The bot's updates: `/start <code>` connects, `/start` and `/stop` switch reminders |
 | `POST /api/logout` | signed in | Sign out; a plain form post, so the full page reload clears the old profile from memory |

@@ -5,8 +5,10 @@ import { useCourseLang } from '@/lib/client/course';
 import { useNow } from '@/lib/client/hooks';
 import { useT } from '@/lib/client/i18n';
 import { useStore } from '@/lib/client/store';
+import { LANGS } from '@/lib/courses';
 import { computeStats } from '@/lib/queue';
 import { dayLong, weekday } from '@/lib/time';
+import { ShareButton } from './ShareButton';
 import { EmptyBox, LoadError, Term } from './ui';
 import { useUI } from './ui-context';
 
@@ -18,6 +20,7 @@ export function StatsView() {
   const ui = useUI();
   const { t, tn } = useT();
   const lang = useCourseLang();
+  const studiedName = LANGS[data.course?.targetLang ?? 'de'].name; // "German", shown through t()
   const ready = data.status === 'ready' && now > 0;
   const st = useMemo(() => (ready ? computeStats(data, now) : null), [ready, data, now]);
   const [fcSel, setFcSel] = useState<number | null>(null);
@@ -63,6 +66,10 @@ export function StatsView() {
           <p className="tile-l">{t('Streak')}</p>
           <p className="tile-v">{st.streak}<span className="unit"> {t(st.streak === 1 ? 'day' : 'days')}</span></p>
           <p className="tile-s">{t('in a row with reviews')}</p>
+          {data.me && st.streak >= 2 && (
+            <ShareButton compact body={{ kind: 'streak' }} note={t('The link shows your first name and streak.')}
+              text={t('{n} days in a row learning {lang}. Join me:', { n: st.streak, lang: t(studiedName) })} />
+          )}
         </div>
         <div className="tile">
           <p className="tile-l">{t('Retention')}</p>

@@ -8,6 +8,7 @@ import {
   sectionMeta,
   type AttemptDetail, type Item, type OpenFeedback, type OpenItem, type SectionResult,
 } from '@/lib/tests/types';
+import { ShareButton } from '../ShareButton';
 import { Icon } from '../ui';
 import { ReadTextView, Transcript } from './TestRunner';
 
@@ -101,6 +102,16 @@ export function TestResultView({ attempt: start, ai, onClose, onRetry, onChange,
           <p className="result-grade">{t(grading ? 'Checking your writing and speaking…' : 'So far: writing and speaking aren’t scored yet.')}</p>
         )}
       </section>
+
+      {result.complete && !asTeacher && (
+        <ShareButton
+          body={{ kind: 'test', attemptId: attempt.id }}
+          text={final && result.passed
+            ? t('I passed the Abschlusstest with {score}/{max}! Try the mock tests too:', { score: result.score, max: result.max })
+            : t('I got {score}/{max} on “{test}”. Try it too:', { score: result.score, max: result.max, test: test.title })}
+          note={t('The link shows your first name and score.')}
+        />
+      )}
 
       <section className="panel" aria-label={t('Sections')}>
         {result.sections.map((s) => {

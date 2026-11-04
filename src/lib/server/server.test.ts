@@ -903,3 +903,56 @@ describe('Telegram reminders', () => {
     expect(sent()).toEqual([expect.objectContaining({ body: expect.objectContaining({ chat_id: 6006, text: expect.stringMatching(/^\(Sinov xabari\)\n/) }) })]);
   });
 });
+
+describe('sharing a result', () => {
+  const NOW = Date.parse('2026-11-04T14:00:00Z');
+  const result = (score: number, max: number, complete: boolean, passed: boolean | null) =>
+    ({ testId: 'a11-abschlusstest', items: {}, open: {}, sections: [], score, max, complete, passed });
+
+  it('shares only your own complete attempts, as a snapshot with your first name', async () => {
+    const shares = await import('./shares');
+    const me = await profile('share-me@example.com', 'Malika Karimova');
+    const other = await profile('share-other@example.com', 'Sardor');
+    const done = await repo.saveAttempt({ userId: me.id, courseId: G, testId: 'a11-abschlusstest', answers: {}, result: result(86, 100, true, true), startedAt: null }, NOW);
+    const pending = await repo.saveAttempt({ userId: me.id, courseId: G, testId: 'a11-abschlusstest', answers: {}, result: result(40, 100, false, null), startedAt: null }, NOW);
+
+    const id = await shares.shareTest(me, done, NOW);
+    expect(id).toMatch(/^[A-Za-z0-9_-]{16}$/);
+    expect(await shares.shareTest(me, done, NOW)).toBe(id); // the same link again
+    expect(await shares.getShare(id!)).toEqual({
+      kind: 'test', name: 'Malika', course: G, targetLang: 'de', title: 'Abschlusstest', subtitle: expect.any(String), level: 'A1.1',
+      final: true, score: 86, max: 100, passed: true,
+    });
+    // Not someone else's, not one still being scored, not a made-up id
+    expect(await shares.shareTest(other, done, NOW)).toBeNull();
+    expect(await shares.shareTest(me, pending, NOW)).toBeNull();
+    expect(await shares.shareTest(me, 't_nope', NOW)).toBeNull();
+    // The snapshot holds nothing but the card: no email, no answers, no ids
+    const db = await (await import('./db')).getDb();
+    const raw = JSON.stringify((await db.query('SELECT data FROM shares WHERE id = $1', [id])).rows[0].data);
+    expect(raw).not.toContain('share-me@example.com');
+    expect(raw).not.toContain(me.id);
+    expect(raw).not.toContain('Karimova');
+
+    // Unknown or malformed ids find nothing; deleting the profile deletes its links
+    expect(await shares.getShare('AAAAAAAAAAAAAAAA')).toBeNull();
+    expect(await shares.getShare("x' OR 1=1 --")).toBeNull();
+    await repo.deleteUser(me.id);
+    expect(await shares.getShare(id!)).toBeNull();
+  });
+
+  it('shares a streak once there is one', async () => {
+    const shares = await import('./shares');
+    const u = await byEmail((await profile('share-streak@example.com', 'Bek Aliyev')).email);
+    expect(await shares.shareStreak(u, NOW)).toBeNull(); // no study day yet
+    const db = await (await import('./db')).getDb();
+    for (const d of [0, 1, 2]) {
+      await db.query(
+        'INSERT INTO activity (user_id, day, answers) VALUES ($1, $2, 3) ON CONFLICT (user_id, day) DO UPDATE SET answers = 3',
+        [u.id, repo.todayKey(NOW - d * 86_400_000)],
+      );
+    }
+    const id = await shares.shareStreak(u, NOW);
+    expect(await shares.getShare(id!)).toEqual({ kind: 'streak', name: 'Bek', course: G, targetLang: 'de', streak: 3 });
+  });
+});

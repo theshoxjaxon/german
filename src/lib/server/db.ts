@@ -22,7 +22,7 @@ export interface Db {
 }
 
 /** Bump when the schema or the built-in word lists change: every database then runs migrate() once more. */
-const SCHEMA_VERSION = '16';
+const SCHEMA_VERSION = '17';
 
 /*
  * Times are milliseconds since 1970 (JavaScript's Date.now()) in BIGINT columns; days are
@@ -325,6 +325,18 @@ CREATE TABLE IF NOT EXISTS telegram_link_tokens (
 );
 CREATE INDEX IF NOT EXISTS telegram_link_tokens_user_idx ON telegram_link_tokens (user_id);
 
+-- Schema 17: sharing a result. Pressing Share makes a link (/s/<id>) to a snapshot of the result:
+-- the first name, the test (or streak) and the score. Nothing else about the person is public, and
+-- deleting the profile deletes its links.
+CREATE TABLE IF NOT EXISTS shares (
+  id         text PRIMARY KEY,                -- 96 random bits
+  user_id    text NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  ref        text NOT NULL,                   -- what was shared: 'test:<attempt id>' or 'streak:<days>'
+  data       jsonb NOT NULL,
+  created_at bigint NOT NULL,
+  UNIQUE (user_id, ref)                       -- sharing the same thing again gives the same link
+);
+
 -- Supabase also publishes the public schema through its REST API. Row Level Security with no
 -- policies closes that door: only this server (connecting as the table owner) reads the data.
 ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
@@ -352,6 +364,7 @@ ALTER TABLE study_clubs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE study_club_rsvps ENABLE ROW LEVEL SECURITY;
 ALTER TABLE telegram_links ENABLE ROW LEVEL SECURITY;
 ALTER TABLE telegram_link_tokens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE shares ENABLE ROW LEVEL SECURITY;
 
 INSERT INTO settings (key, value) VALUES ('schema_version', '${SCHEMA_VERSION}')
   ON CONFLICT (key) DO UPDATE SET value = excluded.value;

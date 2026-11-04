@@ -51,6 +51,7 @@ const ICONS = {
   chat: '<path d="M4.5 5.5h15a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H10l-4.5 3.5v-3.5h-1a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1z"/><path d="M8 10h8M8 13h5"/>',
   send: '<path d="M4 12 20 4.5 15.5 20l-3.2-6.3z"/><path d="M12.3 13.7 20 4.5"/>',
   calendar: '<rect x="4" y="5.5" width="16" height="14" rx="2"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/>',
+  share: '<path d="M12 15V4M8 7.5 12 3.5l4 4"/><path d="M7 11H6a1 1 0 0 0-1 1v7.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V12a1 1 0 0 0-1-1h-1"/>',
   flag: '<path d="M6 21V4.5M6 5c3-1.6 5.5 1.6 8.5 0s3.5-.4 3.5-.4V13s-.5-1-3.5.4S9 11.6 6 13"/>',
 } as const;
 export type IconName = keyof typeof ICONS;
