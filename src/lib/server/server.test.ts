@@ -956,3 +956,86 @@ describe('sharing a result', () => {
     expect(await shares.getShare(id!)).toEqual({ kind: 'streak', name: 'Bek', course: G, targetLang: 'de', streak: 3 });
   });
 });
+
+describe('the daily quiz channel', () => {
+  const START = Date.parse('2027-01-10T14:00:00Z'); // days no other test uses
+  const DAY_MS = 86_400_000;
+  const APP = 'https://app.example';
+  type Poll = { chat_id: string; question: string; options: { text: string }[]; type: string; correct_option_id: number; is_anonymous: boolean; explanation: string; reply_markup: { inline_keyboard: { url: string }[][] } };
+  let polls: Poll[] = [];
+  let refuse = false;
+  let ch: typeof import('./channel');
+
+  beforeAll(async () => {
+    process.env.TELEGRAM_BOT_TOKEN = '123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw';
+    process.env.TELEGRAM_BOT_USERNAME = 'KarteikastenBot';
+    process.env.TELEGRAM_WEBHOOK_SECRET = 'a-long-random-webhook-secret_123';
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      if (String(url).endsWith('/sendPoll')) polls.push(JSON.parse(String(init.body)));
+      return new Response(JSON.stringify(refuse
+        ? { ok: false, error_code: 400, description: 'Bad Request: need administrator rights in the channel chat' }
+        : { ok: true, result: { message_id: 1 } }));
+    });
+    ch = await import('./channel');
+  });
+  afterAll(() => {
+    vi.unstubAllGlobals();
+    for (const k of ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_BOT_USERNAME', 'TELEGRAM_WEBHOOK_SECRET', 'TELEGRAM_CHANNEL']) delete process.env[k];
+  });
+
+  it('does nothing until a valid channel is set', async () => {
+    delete process.env.TELEGRAM_CHANNEL;
+    expect(await ch.postDailyQuiz(APP, START)).toEqual({ posted: false, reason: 'not-set' });
+    for (const bad of ['nemis', '@ab', 'https://t.me/nemis', '-12345']) {
+      process.env.TELEGRAM_CHANNEL = bad;
+      expect(ch.channelId()).toBeNull();
+    }
+    for (const good of ['@nemis_soz_kuniga', '-1001234567890']) {
+      process.env.TELEGRAM_CHANNEL = good;
+      expect(ch.channelId()).toBe(good);
+    }
+    expect(polls).toHaveLength(0);
+  });
+
+  it('posts one der/die/das quiz a day, with the right answer and a button into the app', async () => {
+    process.env.TELEGRAM_CHANNEL = '@nemis_soz_kuniga';
+    polls = [];
+    const r = await ch.postDailyQuiz(APP, START);
+    expect(r).toEqual({ posted: true, term: expect.stringMatching(/^(der|die|das) \S/) });
+    expect(polls).toHaveLength(1);
+    const p = polls[0];
+    const [art, ...rest] = (r as { term: string }).term.split(' ');
+    expect(p).toMatchObject({ chat_id: '@nemis_soz_kuniga', type: 'quiz', is_anonymous: true, options: [{ text: 'der' }, { text: 'die' }, { text: 'das' }] });
+    expect(p.options[p.correct_option_id].text).toBe(art);
+    expect(p.question).toMatch(new RegExp(`^Qaysi artikl\\? ___ ${rest.join(' ').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\(`));
+    expect(p.question.length).toBeLessThanOrEqual(300);
+    expect(p.explanation.length).toBeLessThanOrEqual(200);
+    expect(p.explanation.startsWith(`${art} ${rest.join(' ')}: `)).toBe(true);
+    expect(p.reply_markup.inline_keyboard[0][0].url).toBe(`${APP}/german`);
+
+    // Once a day, however often it runs
+    expect(await ch.postDailyQuiz(APP, START + 60_000)).toEqual({ posted: false, reason: 'already', term: (r as { term: string }).term });
+    expect(polls).toHaveLength(1);
+    expect(await ch.channelStatus(START)).toEqual({ channel: '@nemis_soz_kuniga', today: (r as { term: string }).term });
+  });
+
+  it('frees the day when Telegram refuses, so a retry can post', async () => {
+    const day2 = START + DAY_MS;
+    refuse = true;
+    expect(await ch.postDailyQuiz(APP, day2)).toMatchObject({ posted: false, reason: 'failed', error: expect.stringContaining('administrator') });
+    expect((await ch.channelStatus(day2)).today).toBeNull();
+    refuse = false;
+    const retry = await ch.postDailyQuiz(APP, day2 + 60_000);
+    expect(retry.posted).toBe(true);
+  });
+
+  it('picks the same word for a day, and no word twice within the window', async () => {
+    const day = repo.todayKey(START + 40 * DAY_MS);
+    expect(await ch.pickWord(day)).toEqual(await ch.pickWord(day));
+    const db = await (await import('./db')).getDb();
+    for (let d = 2; d < 42; d++) expect((await ch.postDailyQuiz(APP, START + d * DAY_MS)).posted).toBe(true);
+    const ids = (await db.query('SELECT word_id FROM channel_posts WHERE day >= $1', [repo.todayKey(START)])).rows.map((x) => x.word_id);
+    expect(ids).toHaveLength(42);
+    expect(new Set(ids).size).toBe(42);
+  });
+});

@@ -13,6 +13,7 @@ A mobile-first vocabulary app for learning centers. Students study German or Eng
 - **Mock tests** (German course), by level (A1.1 open, the later levels "opens soon"): a **Wiederholungstest** for each Modul (Grammatik 25 + Lesen 5 = 30 points, like the class's paper tests) and the **Abschlusstest** (Grammatik, Lesen, Schreiben, Sprechen, 25 points each; passed with 18 in every part). Automatic parts are scored the moment you hand in; the AI scores writing and speaking and explains each mistake in Uzbek or English. Teachers see every student's results at `/admin/tests`.
 - **Let's study together**: students mark the hours they're free next week and press **I want to study**. Every Sunday at 18:00 the app makes **groups of 3** who share a free hour, each with a suggested time, a speaking task and a **private chat** that only the group can read. Teachers see when the class is free (counts only), plan speaking clubs, and see reports, never chats. Share it as `/lets-study-together`.
 - **Telegram reminder** (optional): students connect Telegram from **Settings → Telegram** (or the card on the home screen after their first session). Each evening, if they haven't practised that day, the bot sends one message: their streak and how many cards wait, with an **Open** button. `/stop` or the Stop button turns it off.
+- **Daily quiz channel** (optional): every evening the bot posts a der/die/das quiz (a Telegram quiz poll) with a German noun from the lessons to a public channel, with a button into the app. It brings in German learners outside the class.
 - **Share a result**: after a mock test (or from the streak in Progress) **Share** makes a link to a card with your first name and the score. In Telegram it shows as a picture; whoever opens it gets **Try it too**, straight into the same course.
 - **Admin dashboard** at `/admin`, per course: members, new sign-ups, daily / weekly / monthly active students, 30-day charts, a member table, the course's invite link, its name and note, and **which lesson the class is on**. Admins also see emails, reset passwords, make teachers and start new courses.
 
@@ -156,6 +157,15 @@ The app only reaches students who open it. The Telegram bot reaches the ones who
 - **The evening job**: Vercel Cron calls `/api/cron/daily` at 14:00 UTC (19:00 in Tashkent; on the Hobby plan it runs some time in that hour). Everyone with reminders on who hasn't answered a card that day gets one message, in their interface language: their streak and how many reviews and new words wait in their current course, counted exactly like the home screen. Nobody gets two in a day: the day is claimed before sending. If Telegram says someone blocked the bot, their reminders go off.
 - **Privacy**: the webhook only accepts requests carrying `TELEGRAM_WEBHOOK_SECRET` (Telegram sends it back with every update). The bot never repeats what anyone writes and ignores groups and channels. No page shows a chat id, admins included; `/admin` shows counts only. Disconnecting, or deleting the profile, deletes the link.
 
+## Daily quiz channel
+
+A public Telegram channel where the bot posts one der/die/das quiz every evening: "Qaysi artikl? ___ Hund (it)", with der / die / das as a Telegram **quiz poll** (tap an answer and Telegram shows right or wrong, then the explanation: the word, its meaning and an example). A button under it opens the German course. Anyone can join the channel, so it reaches German learners outside the class.
+
+**Set it up:** create a public channel in Telegram, add the bot (the one from *Telegram reminder* above) as an **admin that may post messages**, and set `TELEGRAM_CHANNEL` to the channel's `@name` (or its numeric `-100…` id). Redeploy, then press **Post today's quiz now** in `/admin` → Telegram to see the first one.
+
+- **Which word**: a shared noun of the German course with der, die or das, from the lesson the class is on while it has words left, else any lesson. A word doesn't come back for 120 days. The choice is fixed for the day, so a retry posts the same quiz.
+- **When**: from the same evening job as the reminders (`/api/cron/daily`, 19:00 in Tashkent), at most once a day: the day is written down before posting, and if Telegram refuses (e.g. the bot isn't an admin), it's freed again so the button or the next run can retry.
+
 ## Sharing a result
 
 **Share** under a mock test result (or next to the streak in Progress, from 2 days) makes a public link `/s/<id>` and opens the phone's share sheet, or copies the link where there is none.
@@ -202,6 +212,7 @@ Copy `.env.example` to `.env.local`. Only `DATABASE_URL` is required.
 | `TELEGRAM_BOT_TOKEN` | – | From @BotFather. Turns on the Telegram reminder (with the two below). Never sent to the browser. |
 | `TELEGRAM_BOT_USERNAME` | – | The bot's name, without @, for `t.me` links |
 | `TELEGRAM_WEBHOOK_SECRET` | – | 20+ letters, digits, `_` or `-`. Telegram sends it back with every update, so forged updates are refused. |
+| `TELEGRAM_CHANNEL` | – | The public channel for the daily der/die/das quiz: its `@name` or numeric `-100…` id. The bot must be an admin there. |
 | `COOKIE_SECURE` | auto | Force `true`/`false`. By default the session cookie is Secure whenever the site is on HTTPS. |
 
 ## Roles and privacy
@@ -334,7 +345,7 @@ Postgres/Supabase  courses · course_members · users · sessions · password_re
 | `POST /api/study/groups/:id/leave` · `/block` · `/report` | group members | Leave; `{ member }` block; `{ member, reason }` report (and block) |
 | `POST /api/study/clubs/:id/rsvp` | course members | `{ going }` for a speaking club of your course |
 | `GET /api/cron/study` | Vercel Cron (`CRON_SECRET`) | Makes the due study groups, deletes expired ones |
-| `GET /api/cron/daily` | Vercel Cron (`CRON_SECRET`) | Sends the evening Telegram reminders |
+| `GET /api/cron/daily` | Vercel Cron (`CRON_SECRET`) | Sends the evening Telegram reminders and posts the day's quiz in the channel |
 | `POST /api/share` | signed in | `{ kind: 'test', attemptId }` (your own, complete) or `{ kind: 'streak' }` → `{ url }` of the public card |
 | `GET /s/:id` | anyone | A shared result, with "Try it too"; its preview picture at `/s/:id/opengraph-image` |
 | `GET/POST/DELETE /api/telegram` | signed in | Your reminder state; `{ action: 'link' }` → a one-time t.me link (10 an hour); `{ reminders }` on/off; DELETE disconnects |

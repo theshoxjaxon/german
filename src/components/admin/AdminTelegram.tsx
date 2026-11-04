@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { telegramSetupAction, telegramTestAction } from '@/app/admin/actions';
+import { telegramQuizAction, telegramSetupAction, telegramTestAction } from '@/app/admin/actions';
 
 export interface TelegramAdminStatus {
   problems: string[]; // settings missing in the environment (names only)
@@ -9,6 +9,8 @@ export interface TelegramAdminStatus {
   linked: number;
   remindersOn: number;
   sentToday: number;
+  channel: string | null; // TELEGRAM_CHANNEL, for the daily quiz
+  quizToday: string | null; // today's quiz word, once posted
 }
 
 /**
@@ -27,7 +29,7 @@ export function AdminTelegram({ status, onDone }: { status: TelegramAdminStatus;
   const ready = status.problems.length === 0;
   return (
     <section className="panel" aria-labelledby="tg-h">
-      <div className="panel-h"><h2 id="tg-h">Telegram reminders</h2><span className="muted">every evening, ~19:00</span></div>
+      <div className="panel-h"><h2 id="tg-h">Telegram</h2><span className="muted">every evening, ~19:00</span></div>
       {!ready ? (
         <div className="tg-setup">
           <p>Not set up yet. To turn it on:</p>
@@ -46,6 +48,26 @@ export function AdminTelegram({ status, onDone }: { status: TelegramAdminStatus;
           <div className="btn-row">
             <button className="btn" disabled={pending} onClick={() => run(telegramSetupAction)}>Connect the bot</button>
             <button className="btn" disabled={pending} onClick={() => run(telegramTestAction)}>Send me a test reminder</button>
+          </div>
+          <div className="tg-channel">
+            <h3>Daily quiz channel</h3>
+            {status.channel ? (
+              <>
+                <p>
+                  <code>{status.channel}</code> gets a der/die/das quiz every evening, with a button into the German course.{' '}
+                  {status.quizToday ? <>Today: <b lang="de">{status.quizToday}</b>.</> : 'Not posted yet today.'}
+                </p>
+                <div className="btn-row">
+                  <button className="btn" disabled={pending || !!status.quizToday} onClick={() => run(telegramQuizAction)}>Post today’s quiz now</button>
+                </div>
+              </>
+            ) : (
+              <ol className="steps">
+                <li>In Telegram, create a <b>public channel</b> (e.g. “Nemis tili: kuniga bitta soʻz”).</li>
+                <li>Add the bot to the channel as an <b>admin</b> that may post messages.</li>
+                <li>In Vercel, add <code>TELEGRAM_CHANNEL</code> with the channel’s <code>@name</code> and redeploy.</li>
+              </ol>
+            )}
           </div>
         </div>
       )}

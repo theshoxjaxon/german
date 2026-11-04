@@ -2,12 +2,20 @@ import type { Metadata } from 'next';
 import { connection } from 'next/server';
 import { Suspense } from 'react';
 import { AdminDashboard } from '@/components/admin/AdminDashboard';
+import type { TelegramAdminStatus } from '@/components/admin/AdminTelegram';
+import { channelStatus } from '@/lib/server/channel';
 import * as repo from '@/lib/server/repo';
 import { telegramCounts } from '@/lib/server/reminders';
 import { settingProblems } from '@/lib/server/telegram';
 import { adminData, DatabaseDown, NotAdmin } from './guard';
 
 export const metadata: Metadata = { title: 'Admin · Karteikasten' };
+
+/** The Telegram panel: what's missing (names only), counts, and the quiz channel. */
+async function telegramStatus(): Promise<TelegramAdminStatus> {
+  const [counts, channel] = await Promise.all([telegramCounts(), channelStatus()]);
+  return { problems: settingProblems(), cron: !!process.env.CRON_SECRET, ...counts, channel: channel.channel, quizToday: channel.today };
+}
 
 export default function AdminPage({ searchParams }: PageProps<'/admin'>) {
   return (
@@ -24,7 +32,7 @@ async function AdminData({ searchParams }: Pick<PageProps<'/admin'>, 'searchPara
   if ('down' in r) return <DatabaseDown message={r.down} />;
   if ('student' in r) return <NotAdmin name={r.student} />;
   // The Telegram bot is the whole site's, so only admins see it (counts only)
-  const telegram = r.admin ? { problems: settingProblems(), cron: !!process.env.CRON_SECRET, ...(await telegramCounts()) } : null;
+  const telegram = r.admin ? await telegramStatus() : null;
   // Keyed by course: notices and open sheets don't carry over to another course
   return <AdminDashboard key={r.course.id} stats={r.data} meId={r.user.id} admin={r.admin} course={r.course} courses={r.courses} telegram={telegram} />;
 }

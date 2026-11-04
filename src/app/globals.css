@@ -1263,3 +1263,6 @@ details.advanced[open] > summary { margin-bottom: 10px; }
 .share-streak span { font-size: 22px; font-weight: 700; }
 .share-cta { width: 100%; max-width: 560px; display: grid; gap: 8px; text-align: center; }
 .share-cta .btn { text-decoration: none; }
+.tg-channel { display: grid; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+.tg-channel h3 { font-size: 15px; font-weight: 700; }
+.tg-channel code { font-family: var(--font-mono); font-size: 13px; background: var(--surface-2); padding: 1px 5px; border-radius: 6px; }

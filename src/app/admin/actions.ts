@@ -9,6 +9,7 @@
  */
 import { refresh } from 'next/cache';
 import { isCourseId, isTargetLang, RESERVED_COURSE_IDS } from '@/lib/courses';
+import { postDailyQuiz } from '@/lib/server/channel';
 import { appUrl } from '@/lib/server/mail';
 import { hashPassword, temporaryPassword } from '@/lib/server/password';
 import { sendTestReminder } from '@/lib/server/reminders';
@@ -183,4 +184,16 @@ export async function telegramTestAction(): Promise<Said> {
   if (!user) return { ok: false, error: 'Only admins can do this.' };
   const r = await sendTestReminder(user.id, await appUrl());
   return r.ok ? { ok: true, message: 'Sent. Look in your Telegram.' } : r;
+}
+
+/** "Post today's quiz now": the channel's daily der/die/das quiz, if it hasn't gone out today. */
+export async function telegramQuizAction(): Promise<Said> {
+  if (!(await requireAdmin())) return { ok: false, error: 'Only admins can do this.' };
+  const r = await postDailyQuiz(await appUrl());
+  refresh();
+  if (r.posted) return { ok: true, message: `Posted today’s quiz: ${r.term}.` };
+  if (r.reason === 'already') return { ok: true, message: `Today’s quiz is already out: ${r.term}.` };
+  if (r.reason === 'not-set') return { ok: false, error: 'Set TELEGRAM_CHANNEL (and the bot) first.' };
+  if (r.reason === 'no-words') return { ok: false, error: 'The German course has no nouns with der, die or das yet.' };
+  return { ok: false, error: `Telegram didn’t post it (${r.error}). Is the bot an admin of the channel that may post messages?` };
 }

@@ -22,7 +22,7 @@ export interface Db {
 }
 
 /** Bump when the schema or the built-in word lists change: every database then runs migrate() once more. */
-const SCHEMA_VERSION = '17';
+const SCHEMA_VERSION = '18';
 
 /*
  * Times are milliseconds since 1970 (JavaScript's Date.now()) in BIGINT columns; days are
@@ -337,6 +337,15 @@ CREATE TABLE IF NOT EXISTS shares (
   UNIQUE (user_id, ref)                       -- sharing the same thing again gives the same link
 );
 
+-- Schema 18: the daily der/die/das quiz in the public Telegram channel. One row per day, written
+-- before posting, so the quiz goes out once; words don't come back for a while (see channel.ts).
+CREATE TABLE IF NOT EXISTS channel_posts (
+  day       text PRIMARY KEY,                 -- 'YYYY-MM-DD' in APP_TIMEZONE
+  word_id   text NOT NULL,                    -- no foreign key: the history outlives a deleted word
+  term      text NOT NULL,                    -- "der Hund", for the admin page
+  posted_at bigint NOT NULL
+);
+
 -- Supabase also publishes the public schema through its REST API. Row Level Security with no
 -- policies closes that door: only this server (connecting as the table owner) reads the data.
 ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
@@ -365,6 +374,7 @@ ALTER TABLE study_club_rsvps ENABLE ROW LEVEL SECURITY;
 ALTER TABLE telegram_links ENABLE ROW LEVEL SECURITY;
 ALTER TABLE telegram_link_tokens ENABLE ROW LEVEL SECURITY;
 ALTER TABLE shares ENABLE ROW LEVEL SECURITY;
+ALTER TABLE channel_posts ENABLE ROW LEVEL SECURITY;
 
 INSERT INTO settings (key, value) VALUES ('schema_version', '${SCHEMA_VERSION}')
   ON CONFLICT (key) DO UPDATE SET value = excluded.value;
