@@ -43,6 +43,15 @@ export function settingProblems(): string[] {
   return out;
 }
 
+/** The token alone, when it looks right: enough to ask Telegram what's wrong while other settings aren't. */
+export function tokenConfig(): BotConfig | null {
+  const token = env('TELEGRAM_BOT_TOKEN');
+  return TOKEN_RE.test(token) ? { token, username: '', secret: '' } : null;
+}
+
+/** TELEGRAM_BOT_USERNAME as set, without a leading @ ('' when missing). */
+export const configuredUsername = () => env('TELEGRAM_BOT_USERNAME').replace(/^@/, '');
+
 /** Whether a webhook request carries the secret (X-Telegram-Bot-Api-Secret-Token), compared in constant time. */
 export function hasSecret(header: string | null, cfg: BotConfig | null): boolean {
   if (!cfg) return false;
@@ -189,4 +198,111 @@ export function parseUpdate(update: unknown): BotEvent | null {
   if (start) return { kind: 'start', chatId: chatId as number, code: start[1] ?? null, lang };
   if (/^\/stop(?:@\w+)?$/.test(text)) return { kind: 'stop', chatId: chatId as number, lang };
   return { kind: 'other', chatId: chatId as number, lang };
+}
+
+/* ============================== "Check the bot" (/admin) ============================== */
+
+/** One line of the check: what's right or wrong, and what to do about it. */
+export interface CheckLine {
+  ok: boolean;
+  label: string;
+  fix?: string;
+}
+
+/** The part of Telegram's getWebhookInfo the check reads. */
+export interface WebhookInfo {
+  url?: string;
+  pending_update_count?: number;
+  last_error_date?: number; // Unix seconds
+  last_error_message?: string;
+}
+
+const SETTING_FIX: Record<string, string> = {
+  TELEGRAM_BOT_TOKEN: 'Copy the token from @BotFather (it looks like 123456789:AA…), with no quotes or spaces, add it in Vercel for Production and redeploy.',
+  TELEGRAM_BOT_USERNAME: 'Use the bot’s @username without the @ (for example karteikasten_bot), not its display name. Then redeploy.',
+  TELEGRAM_WEBHOOK_SECRET: 'Use 20 or more letters, digits, _ or - only (for example the output of `openssl rand -hex 24`). Then redeploy.',
+};
+
+function ago(seconds: number): string {
+  if (seconds < 90) return 'just now';
+  if (seconds < 90 * 60) return `${Math.round(seconds / 60)} minutes ago`;
+  if (seconds < 36 * 3600) return `${Math.round(seconds / 3600)} hours ago`;
+  return `${Math.round(seconds / 86400)} days ago`;
+}
+
+/** What a webhook delivery error means, and the fix. */
+function deliveryFix(message: string): string {
+  if (/\b40[13]\b|unauthori[sz]ed|forbidden/i.test(message)) {
+    return 'The site refused Telegram: the webhook secret doesn’t match (it changed, or the site wasn’t redeployed after setting it). Redeploy, then press Connect the bot again. If it stays, check Vercel → Settings → Deployment Protection: your live address must not be protected.';
+  }
+  if (/\b404\b|not found/i.test(message)) return 'The site has no webhook at that address: the latest code may not be deployed. Redeploy, then press Connect the bot.';
+  if (/\b5\d\d\b|internal server/i.test(message)) return 'The site failed while handling the message. Look at Vercel → Logs for /api/telegram/webhook.';
+  if (/time(d)? ?out|connect|resolve|ssl|certificate|host/i.test(message)) return 'Telegram couldn’t reach the site at that address. If APP_URL is set, it must be your live https address; then press Connect the bot.';
+  return 'Look at Vercel → Logs for /api/telegram/webhook around that time.';
+}
+
+/**
+ * The checklist behind "Check the bot": settings, the token, where the webhook points, and the
+ * last error Telegram had delivering to it. Pure, so every case is tested; the token and the
+ * secret never appear in it.
+ */
+export function diagnose(input: {
+  problems: string[]; // settingProblems()
+  cron: boolean; // CRON_SECRET is set
+  username: string; // TELEGRAM_BOT_USERNAME as set
+  me: TgResult<{ username?: string }> | null; // getMe; null when there's no usable token
+  hook: TgResult<WebhookInfo> | null; // getWebhookInfo; null likewise
+  expectedUrl: string; // <site>/api/telegram/webhook
+  now: number; // ms
+}): CheckLine[] {
+  const lines: CheckLine[] = [];
+  for (const p of input.problems) {
+    const name = p.split(' ')[0];
+    lines.push({ ok: false, label: `${name} is missing or malformed`, fix: SETTING_FIX[name] });
+  }
+  if (!input.problems.length) lines.push({ ok: true, label: 'The three Telegram settings are there' });
+  lines.push(input.cron
+    ? { ok: true, label: 'CRON_SECRET is set, so the evening job can run' }
+    : { ok: false, label: 'CRON_SECRET is missing', fix: 'Add any long random value in Vercel and redeploy: without it no reminders or quizzes go out.' });
+
+  const me = input.me;
+  if (me && !me.ok) {
+    lines.push({ ok: false, label: 'Telegram refused the token', fix: `Telegram said: “${me.description}”. Copy the token again from @BotFather (or Revoke it and use the new one), update it in Vercel and redeploy.` });
+    return lines; // nothing else can be checked without a working token
+  }
+  if (me?.ok) {
+    const real = me.result.username ?? '';
+    if (real && real.toLowerCase() !== input.username.toLowerCase()) {
+      lines.push({ ok: false, label: `The token belongs to @${real}, but TELEGRAM_BOT_USERNAME is “${input.username || '(empty)'}”`, fix: `Set TELEGRAM_BOT_USERNAME to ${real} and redeploy. Students’ Connect links use it.` });
+    } else {
+      lines.push({ ok: true, label: `The token works: @${real}` });
+    }
+  }
+
+  const hook = input.hook;
+  if (!hook) return lines;
+  if (!hook.ok) {
+    lines.push({ ok: false, label: 'Couldn’t read the webhook from Telegram', fix: `Telegram said: “${hook.description}”. Try again in a minute.` });
+    return lines;
+  }
+  const info = hook.result;
+  const url = info.url ?? '';
+  if (!url) {
+    lines.push({ ok: false, label: 'No webhook is set, so Telegram keeps messages to itself and the bot never answers', fix: 'Press Connect the bot, then send /start to the bot again.' });
+  } else if (url !== input.expectedUrl) {
+    lines.push({ ok: false, label: `The webhook points at ${url}`, fix: `Press Connect the bot to point it at ${input.expectedUrl}.` });
+  } else {
+    lines.push({ ok: true, label: `The webhook points at this site (${url})` });
+  }
+  const errorAge = info.last_error_date ? input.now / 1000 - info.last_error_date : null;
+  if (url && info.last_error_message && errorAge != null && errorAge < 24 * 3600) {
+    lines.push({ ok: false, label: `Telegram’s last delivery failed ${ago(errorAge)}: “${info.last_error_message}”`, fix: deliveryFix(info.last_error_message) });
+  } else if (url) {
+    lines.push({ ok: true, label: 'No delivery errors in the last day' });
+  }
+  const pending = info.pending_update_count ?? 0;
+  if (url && pending > 0) {
+    lines.push({ ok: false, label: `${pending} message${pending === 1 ? '' : 's'} waiting to be delivered`, fix: 'Telegram retries on its own. If this number keeps growing, fix the error above.' });
+  }
+  return lines;
 }

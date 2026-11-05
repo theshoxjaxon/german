@@ -16,7 +16,9 @@ import { sendTestReminder } from '@/lib/server/reminders';
 import * as repo from '@/lib/server/repo';
 import { currentUser } from '@/lib/server/session';
 import { createClub, deleteClub } from '@/lib/server/study';
-import { botConfig, call as callTelegram, settingProblems } from '@/lib/server/telegram';
+import {
+  botConfig, call as callTelegram, configuredUsername, diagnose, settingProblems, tokenConfig, type CheckLine, type WebhookInfo,
+} from '@/lib/server/telegram';
 import type { Role } from '@/lib/types';
 
 type Result = { ok: true; password?: string } | { ok: false; error: string };
@@ -196,4 +198,24 @@ export async function telegramQuizAction(): Promise<Said> {
   if (r.reason === 'not-set') return { ok: false, error: 'Set TELEGRAM_CHANNEL (and the bot) first.' };
   if (r.reason === 'no-words') return { ok: false, error: 'The German course has no nouns with der, die or das yet.' };
   return { ok: false, error: `Telegram didn’t post it (${r.error}). Is the bot an admin of the channel that may post messages?` };
+}
+
+/**
+ * "Check the bot": asks Telegram about the token and the webhook and returns a checklist of
+ * what's wrong and how to fix it. Works even while some settings are missing (it uses the token
+ * alone when that looks right). Never returns the token or the secret.
+ */
+export async function telegramCheckAction(): Promise<{ ok: true; lines: CheckLine[] } | { ok: false; error: string }> {
+  if (!(await requireAdmin())) return { ok: false, error: 'Only admins can do this.' };
+  const tc = tokenConfig();
+  const [me, hook] = tc
+    ? await Promise.all([callTelegram<{ username?: string }>('getMe', {}, tc), callTelegram<WebhookInfo>('getWebhookInfo', {}, tc)])
+    : [null, null];
+  return {
+    ok: true,
+    lines: diagnose({
+      problems: settingProblems(), cron: !!process.env.CRON_SECRET, username: configuredUsername(),
+      me, hook, expectedUrl: `${await appUrl()}/api/telegram/webhook`, now: Date.now(),
+    }),
+  };
 }

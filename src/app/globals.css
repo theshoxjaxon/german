@@ -1266,3 +1266,11 @@ details.advanced[open] > summary { margin-bottom: 10px; }
 .tg-channel { display: grid; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
 .tg-channel h3 { font-size: 15px; font-weight: 700; }
 .tg-channel code { font-family: var(--font-mono); font-size: 13px; background: var(--surface-2); padding: 1px 5px; border-radius: 6px; }
+.tg-check { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 8px; }
+.tg-check li { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); font-size: 14.5px; }
+.tg-check li > span { display: grid; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
+.tg-check .is-ok .ic { color: var(--good); }
+.tg-check .is-bad { background: var(--again-soft); }
+.tg-check .is-bad .ic { color: var(--again); }
+.tg-fix { color: var(--ink-2); font-size: 14px; }
+.tg-check .tg-all-ok { background: var(--good-soft); }

@@ -157,6 +157,13 @@ The app only reaches students who open it. The Telegram bot reaches the ones who
 - **The evening job**: Vercel Cron calls `/api/cron/daily` at 14:00 UTC (19:00 in Tashkent; on the Hobby plan it runs some time in that hour). Everyone with reminders on who hasn't answered a card that day gets one message, in their interface language: their streak and how many reviews and new words wait in their current course, counted exactly like the home screen. Nobody gets two in a day: the day is claimed before sending. If Telegram says someone blocked the bot, their reminders go off.
 - **Privacy**: the webhook only accepts requests carrying `TELEGRAM_WEBHOOK_SECRET` (Telegram sends it back with every update). The bot never repeats what anyone writes and ignores groups and channels. No page shows a chat id, admins included; `/admin` shows counts only. Disconnecting, or deleting the profile, deletes the link.
 
+**If the bot doesn't answer `/start`:** it answers every message (even "Salom!" to strangers), so silence means Telegram isn't delivering to the site. Open `/admin` → Telegram → **Check the bot**: it asks Telegram and lists each problem with its fix. The usual ones:
+- **Connect the bot wasn't pressed**, so no webhook is set. Press it, then send `/start` again (messages from before are dropped).
+- **The settings aren't live yet**: they must be set for **Production**, and Vercel only uses new values after a **redeploy**.
+- **`TELEGRAM_BOT_USERNAME` is the display name** (e.g. "GermanStudy") instead of the username (`karteikasten_bot`).
+- **The secret changed** after connecting: Telegram gets 401. Redeploy, then press Connect the bot again. A 401 can also come from Vercel's Deployment Protection if it covers your live address.
+- Never post the bot token anywhere. If it leaks, **Revoke** it in @BotFather and put the new one in Vercel.
+
 ## Daily quiz channel
 
 A public Telegram channel where the bot posts one der/die/das quiz every evening: "Qaysi artikl? ___ Hund (it)", with der / die / das as a Telegram **quiz poll** (tap an answer and Telegram shows right or wrong, then the explanation: the word, its meaning and an example). A button under it opens the German course. Anyone can join the channel, so it reaches German learners outside the class.
@@ -181,6 +188,8 @@ A public Telegram channel where the bot posts one der/die/das quiz every evening
 3. Copy the **Client ID** (`….apps.googleusercontent.com`) into `NEXT_PUBLIC_GOOGLE_CLIENT_ID`. There is no client secret to set.
 
 The server checks every Google ID token with `google-auth-library` (signature, audience = your client ID, issuer, expiry) before using it. The first Google sign-in creates the profile, or links the profile that already has that email (only when Google says the address is verified). Changes in Google Cloud can take a few minutes to apply.
+
+**"Error 400: origin_mismatch"** means the address the app was opened at isn't in **Authorized JavaScript origins**. It must match exactly: `https://german-roan.vercel.app`, with no trailing `/` and no path. Each Vercel preview address (`german-abc123-….vercel.app`) is a different origin, so test Google sign-in on the production address (or add the preview one too).
 
 ## Password emails (Resend)
 

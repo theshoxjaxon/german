@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { botConfig, hasSecret, isGone, isLinkCode, parseUpdate, reminderText, settingProblems, startLink } from './telegram';
+import { botConfig, diagnose, hasSecret, isGone, isLinkCode, parseUpdate, reminderText, settingProblems, startLink } from './telegram';
 
 const TOKEN = '123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw';
 const SECRET = 'a-long-random-webhook-secret_123';
@@ -102,5 +102,61 @@ describe('the evening reminder', () => {
     expect(reminderText('uz', { course: 'Nemis tili', streak: 9, due: 0, fresh: 0 })).toBeNull();
     expect(reminderText('uz', { course: 'Nemis tili', streak: 9, due: 0, fresh: 0 }, true)).toContain('(Sinov xabari)');
     expect(reminderText('en', { course: 'German', streak: 0, due: 2, fresh: 0 }, true)).toMatch(/^\(Test message\)\n/);
+  });
+});
+
+describe('"Check the bot"', () => {
+  const NOW = Date.parse('2026-11-05T10:40:00Z');
+  const URL = 'https://german-roan.vercel.app/api/telegram/webhook';
+  const good = {
+    problems: [], cron: true, username: 'karteikasten_bot', expectedUrl: URL, now: NOW,
+    me: { ok: true as const, result: { username: 'karteikasten_bot' } },
+    hook: { ok: true as const, result: { url: URL, pending_update_count: 0 } },
+  };
+  const bad = (lines: { ok: boolean; label: string; fix?: string }[]) => lines.filter((l) => !l.ok);
+
+  it('is all green when everything is right', () => {
+    const lines = diagnose(good);
+    expect(bad(lines)).toEqual([]);
+    expect(lines.map((l) => l.label)).toContain('The token works: @karteikasten_bot');
+  });
+
+  it('says to press Connect the bot when no webhook is set', () => {
+    const [line] = bad(diagnose({ ...good, hook: { ok: true, result: { url: '', pending_update_count: 3 } } }));
+    expect(line.label).toMatch(/No webhook is set/);
+    expect(line.fix).toMatch(/Connect the bot/);
+  });
+
+  it('notices a webhook pointing somewhere else', () => {
+    const lines = bad(diagnose({ ...good, hook: { ok: true, result: { url: 'https://german-abc123.vercel.app/api/telegram/webhook' } } }));
+    expect(lines[0].label).toContain('german-abc123');
+    expect(lines[0].fix).toContain(URL);
+  });
+
+  it('explains a 401 from the site: the secret, or deployment protection', () => {
+    const hook = { ok: true as const, result: { url: URL, pending_update_count: 2, last_error_date: NOW / 1000 - 600, last_error_message: 'Wrong response from the webhook: 401 Unauthorized' } };
+    const lines = bad(diagnose({ ...good, hook }));
+    expect(lines[0].label).toMatch(/10 minutes ago/);
+    expect(lines[0].fix).toMatch(/secret/);
+    expect(lines[0].fix).toMatch(/Deployment Protection/);
+    expect(lines[1].label).toBe('2 messages waiting to be delivered');
+    // An old error (fixed since) doesn't count
+    expect(bad(diagnose({ ...good, hook: { ok: true, result: { ...hook.result, pending_update_count: 0, last_error_date: NOW / 1000 - 3 * 86400 } } }))).toEqual([]);
+  });
+
+  it('catches the display name used as the username', () => {
+    const [line] = bad(diagnose({ ...good, username: 'GermanStudy' }));
+    expect(line.label).toContain('@karteikasten_bot');
+    expect(line.fix).toBe('Set TELEGRAM_BOT_USERNAME to karteikasten_bot and redeploy. Students’ Connect links use it.');
+  });
+
+  it('stops at a refused token, and names malformed settings with their fix', () => {
+    const lines = diagnose({ ...good, me: { ok: false, code: 401, description: 'Unauthorized' }, hook: { ok: false, code: 401, description: 'Unauthorized' } });
+    expect(bad(lines)).toEqual([expect.objectContaining({ label: 'Telegram refused the token', fix: expect.stringContaining('@BotFather') })]);
+    const missing = bad(diagnose({ ...good, problems: ['TELEGRAM_WEBHOOK_SECRET (20+ letters, digits, _ or -)'], cron: false, me: null, hook: null }));
+    expect(missing.map((l) => l.label)).toEqual(['TELEGRAM_WEBHOOK_SECRET is missing or malformed', 'CRON_SECRET is missing']);
+    expect(missing[0].fix).toMatch(/20 or more/);
+    // Nothing it says ever includes the token or the secret
+    expect(JSON.stringify(diagnose(good))).not.toMatch(/AAH|secret_123/);
   });
 });
