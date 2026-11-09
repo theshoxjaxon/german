@@ -125,61 +125,60 @@ export function drawTopic(previousId: string | null, random: () => number = Math
 }
 
 /**
- * What Gemini gets: who it is (the student's A1 exam partner and examiner), the topic, how the
- * talk goes (no corrections while the student speaks; "Fertig" ends it), what to check, and the
- * feedback to give. Explanations in the student's interface language; the German stays German.
+ * The message the student pastes into Gemini: the topic first, then who Gemini is (their A1
+ * exam partner and teacher), short feedback after EVERY answer (mistake → correction, why, the
+ * corrected answer, a follow-up question), and a full summary when they say "finish" ("Fertig",
+ * "tugadi"). Explanations in the student's interface language; the German stays German.
  */
 export function geminiPrompt(card: SpeakingCard, lang: UiLang): string {
-  const lesson = `Lektion ${card.lesson} · ${SPEAKING_LESSONS[card.lesson].title}`;
+  const lesson = `Momente A1.1 · Lektion ${card.lesson} · ${SPEAKING_LESSONS[card.lesson].title}`;
   // In quotes, unless it has its own („ruchka“): quotes inside quotes read badly
   const topic = card.question.includes('„') ? card.question : `„${card.question}“`;
   if (lang === 'uz') {
     return [
-      'Rol: Siz nemis tili A1 (Goethe-Zertifikat A1 / Momente A1.1) gapirish imtihoni boʻyicha mening sherigim va imtihon oluvchimsiz. Men oʻzbekman, nemis tilini A1 darajada oʻrganyapman.',
+      `🎤 GAPIRISH MAVZUSI: ${topic}`,
+      `(${lesson} · kartochka ${card.id})`,
       '',
-      `Mavzu (kartochka ${card.id}, ${lesson}): ${topic}`,
+      'Siz mening nemis tili A1 gapirish imtihoni boʻyicha sherigim va oʻqituvchimsiz. Men oʻzbekman, A1 darajadaman.',
       '',
-      'Tartib:',
-      '1. Shu savolni (yoki topshiriqni) menga nemischa bering. Men 3–5 ta toʻliq gap bilan javob beraman (ovoz bilan yoki yozib).',
-      '2. Gapirayotganimda xatolarimni tuzatmang. Faqat 1–2 ta oddiy qoʻshimcha savol bering (A1 darajasida), masalan „Und warum?“ yoki „Und du?“.',
-      '3. Men „Fertig“ deganimda, quyidagi formatda fikr-mulohaza bering.',
+      'Qanday ishlaymiz:',
+      '1. Mavzu savolini menga nemischa bering.',
+      '2. Men nemischa javob beraman (ovoz bilan). HAR BIR javobimdan keyin darhol:',
+      '   ❌ men aytgan → ✅ toʻgʻrisi — nega (1 qator, oʻzbekcha)',
+      '   ✍️ javobimning toʻgʻrilangan varianti',
+      '   ➡️ keyin mavzu boʻyicha bitta oddiy qoʻshimcha savol bering.',
+      '3. Men „finish“ (yoki „Fertig“, „tugadi“) deganimda — yakuniy xulosa:',
+      '   📊 Baho 1–10 va imtihondan oʻtish ehtimoli',
+      '   ❌ Barcha xatolarim, turi boʻyicha (feʼl, soʻz tartibi, artikl, kelishik)',
+      '   🌟 Shu mavzu boʻyicha namuna javob (A1, 4–5 gap)',
+      '   💡 Keyingi safar uchun 2 ta maslahat',
       '',
-      'Nimani tekshirish kerak: feʼl shakllari (ich bin, du bist …), soʻz tartibi (feʼl 2-oʻrinda), artikl va kelishik (der/die/das, einen/eine), toʻliq gaplar, mavzuga mosligi, soʻz boyligi. Talaffuzimni eshitsangiz, unga ham qisqa izoh bering.',
-      '',
-      'Fikr-mulohaza (tushuntirish oʻzbekcha, misollar nemischa):',
-      '✅ Yaxshi chiqqan 2 narsa',
-      '❌ Xatolar: men aytgan → toʻgʻrisi — nega (1 qator)',
-      '✍️ Javobimning toʻgʻrilangan toʻliq varianti',
-      '🌟 Namuna javob (A1 darajasi, 4–5 gap)',
-      '📊 Baho: 1–10 va imtihondan oʻtish ehtimoli',
-      '💡 Keyingi safar uchun 2 ta maslahat',
-      '',
+      'Tekshiring: feʼl shakllari, soʻz tartibi (feʼl 2-oʻrinda), artikl va kelishik, toʻliq gaplar, mavzuga moslik.',
       'Faqat oddiy A1 nemis tilidan foydalaning. Hozir savolni berib boshlang.',
     ].join('\n');
   }
   return [
-    'Role: You are my speaking partner and examiner for the German A1 speaking exam (Goethe-Zertifikat A1 / Momente A1.1). I am learning German at A1 level.',
+    `🎤 SPEAKING TOPIC: ${topic}`,
+    `(${lesson} · card ${card.id})`,
     '',
-    `Topic (card ${card.id}, ${lesson}): ${topic}`,
+    'You are my partner and teacher for the German A1 speaking exam. I am learning German at A1 level.',
     '',
     'How it works:',
-    '1. Ask me this question (or give me this task) in German. I will answer in 3–5 full sentences (by voice or typing).',
-    '2. Don’t correct me while I’m speaking. Just ask 1–2 simple follow-up questions (A1 level), like „Und warum?“ or „Und du?“.',
-    '3. When I say „Fertig“, give me feedback in the format below.',
+    '1. Ask me the topic question in German.',
+    '2. I answer in German (by voice). After EVERY answer, right away:',
+    '   ❌ what I said → ✅ the correct version — why (one line, in English)',
+    '   ✍️ my answer, corrected',
+    '   ➡️ then ask me one simple follow-up question on the topic.',
+    '3. When I say “finish” (or “Fertig”, “stop”) — a final summary:',
+    '   📊 Score 1–10 and how likely I would pass the exam',
+    '   ❌ All my mistakes, grouped by type (verbs, word order, articles, cases)',
+    '   🌟 A model answer for this topic (A1, 4–5 sentences)',
+    '   💡 2 tips for next time',
     '',
-    'What to check: verb forms (ich bin, du bist …), word order (verb in second position), articles and cases (der/die/das, einen/eine), full sentences, staying on the topic, vocabulary. If you can hear my pronunciation, comment on it briefly too.',
-    '',
-    'Feedback (explanations in English, examples in German):',
-    '✅ 2 things I did well',
-    '❌ Mistakes: what I said → the correct version — why (one line)',
-    '✍️ My answer, corrected, in full',
-    '🌟 A model answer (A1 level, 4–5 sentences)',
-    '📊 Score 1–10 and how likely I would pass the exam',
-    '💡 2 tips for next time',
-    '',
+    'Check: verb forms, word order (verb in second position), articles and cases, full sentences, staying on the topic.',
     'Use simple A1 German only. Start now by asking the question.',
   ].join('\n');
 }
 
-/** Gemini with the prompt in the address (filled in where Gemini supports it; the app also copies it). */
-export const geminiUrl = (prompt: string) => `https://gemini.google.com/app?q=${encodeURIComponent(prompt)}`;
+/** Gemini's chat. Nothing in the address: Gemini doesn't fill in a message from a link, so the student pastes it. */
+export const GEMINI_URL = 'https://gemini.google.com/app';

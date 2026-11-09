@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { drawTopic, geminiPrompt, geminiUrl, SPEAKING_CARDS, SPEAKING_LESSONS, speakingCard } from './sprechkarten';
+import { drawTopic, GEMINI_URL, geminiPrompt, SPEAKING_CARDS, SPEAKING_LESSONS, speakingCard } from './sprechkarten';
 
 describe('the 60 speaking cards', () => {
   it('has 6 cards for each of Lektion 1–10, as on the sheet', () => {
@@ -24,29 +24,29 @@ describe('the 60 speaking cards', () => {
     for (let i = 0; i < 200; i++) expect(drawTopic('7.3').id).not.toBe('7.3');
   });
 
-  it('gives Gemini its role, the topic, the "Fertig" rule and the feedback to give', () => {
+  it('puts the topic first, then feedback after every answer and a summary on "finish"', () => {
     const card = speakingCard('4.1')!;
     const uz = geminiPrompt(card, 'uz');
-    expect(uz).toContain('Rol: Siz nemis tili A1');
-    expect(uz).toContain('Mavzu (kartochka 4.1, Lektion 4 · Möbel und Preise): „Wie findest du dein Zimmer?“');
-    expect(uz).toContain('„Fertig“');
-    for (const part of ['✅', '❌', '✍️', '🌟', '📊', '💡']) expect(uz).toContain(part);
+    expect(uz.split('\n')[0]).toBe('🎤 GAPIRISH MAVZUSI: „Wie findest du dein Zimmer?“');
+    expect(uz.split('\n')[1]).toBe('(Momente A1.1 · Lektion 4 · Möbel und Preise · kartochka 4.1)');
+    expect(uz).toContain('HAR BIR javobimdan keyin darhol');
+    for (const word of ['„finish“', '„Fertig“', '„tugadi“']) expect(uz).toContain(word);
     const en = geminiPrompt(card, 'en');
-    expect(en).toContain('Role: You are my speaking partner and examiner');
-    expect(en).toContain('explanations in English');
-    expect(en).toContain('„Wie findest du dein Zimmer?“');
+    expect(en.split('\n')[0]).toBe('🎤 SPEAKING TOPIC: „Wie findest du dein Zimmer?“');
+    expect(en).toContain('After EVERY answer, right away');
+    expect(en).toContain('“finish”');
+    for (const p of [uz, en]) {
+      // after each answer: mistake → correction, the corrected answer, a follow-up question
+      for (const part of ['❌', '✅', '✍️', '➡️']) expect(p).toContain(part);
+      // the summary on "finish": score, model answer, tips
+      for (const part of ['📊', '🌟', '💡']) expect(p).toContain(part);
+    }
     // A question with its own quotes isn't quoted again
-    expect(geminiPrompt(speakingCard('5.3')!, 'uz')).toContain('Dinge und Farben): Wie heißt „ruchka“ auf Deutsch?\n');
+    expect(geminiPrompt(speakingCard('5.3')!, 'uz').split('\n')[0]).toBe('🎤 GAPIRISH MAVZUSI: Wie heißt „ruchka“ auf Deutsch?');
   });
 
-  it('fits every prompt in a Gemini link', () => {
-    for (const c of SPEAKING_CARDS) {
-      for (const lang of ['uz', 'en'] as const) {
-        const url = geminiUrl(geminiPrompt(c, lang));
-        expect(url.startsWith('https://gemini.google.com/app?q=')).toBe(true);
-        expect(decodeURIComponent(url.split('?q=')[1])).toBe(geminiPrompt(c, lang));
-        expect(url.length).toBeLessThan(2048); // the longest is about 1,990
-      }
-    }
+  it('opens plain Gemini: it doesn\'t take a message from a link, so the student pastes it', () => {
+    expect(GEMINI_URL).toBe('https://gemini.google.com/app');
+    for (const c of SPEAKING_CARDS) expect(geminiPrompt(c, 'uz').length).toBeLessThan(1500);
   });
 });

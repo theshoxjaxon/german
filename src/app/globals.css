@@ -1295,3 +1295,7 @@ details.advanced[open] > summary { margin-bottom: 10px; }
 .sk-manual { display: grid; gap: 6px; }
 @media (prefers-color-scheme: dark) { .sk-band { color: color-mix(in srgb, var(--lc) 55%, #fff); } }
 @media (prefers-reduced-motion: reduce) { .sk-card { animation: none; } }
+.sk-steps { margin: 0; padding-left: 22px; display: grid; gap: 6px; font-size: 14.5px; color: var(--ink-2); }
+.sk-steps li::marker { font-weight: 700; color: var(--ink); }
+.sk-copied { display: flex; align-items: center; gap: 6px; font-size: 14.5px; font-weight: 600; }
+.sk-message { display: grid; gap: 8px; justify-items: start; }

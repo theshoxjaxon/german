@@ -3,35 +3,48 @@
 import { useState, type CSSProperties } from 'react';
 import { useLocalState } from '@/lib/client/hooks';
 import { useT } from '@/lib/client/i18n';
-import { drawTopic, geminiPrompt, geminiUrl, SPEAKING_LESSONS, speakingCard } from '@/lib/tests/sprechkarten';
+import { drawTopic, GEMINI_URL, geminiPrompt, SPEAKING_LESSONS, speakingCard } from '@/lib/tests/sprechkarten';
 import { Icon } from '../ui';
 
 /**
- * Tests → A1.1: practise the speaking part with the class's 60 cards. "Get a speaking topic"
- * draws one; "Speak with Gemini" copies a ready prompt (Gemini's role, the topic, what to
- * check, the feedback to give) and opens Gemini with it, so the student talks and gets
- * feedback there. The drawn card stays on this device, so it's still there after Gemini.
+ * Tests → A1.1: practise the speaking part with the class's 60 cards. "Get your speaking topic"
+ * draws one; "Copy & open Gemini" copies a ready message (the topic, Gemini's role, feedback
+ * after every answer, a summary on "finish") and opens Gemini, where the student pastes it and
+ * speaks. Gemini doesn't take a message from a link, so pasting is a step of its own, shown as one.
+ * The drawn card stays on this device, so it's still there after Gemini.
  */
 export function SpeakingCard() {
   const { t, lang } = useT();
   const [id, setId] = useLocalState<string>('kk.sprechkarte', '', (v) => typeof v === 'string' && (v === '' || !!speakingCard(v)));
   const [help, setHelp] = useState(false);
-  const [sent, setSent] = useState<'copied' | 'manual' | null>(null);
+  const [copied, setCopied] = useState<'yes' | 'failed' | null>(null);
+  const [showText, setShowText] = useState(false);
   const card = id ? speakingCard(id) : null;
   const prompt = card ? geminiPrompt(card, lang) : '';
 
   const draw = () => {
     setId(drawTopic(id || null).id);
     setHelp(false);
-    setSent(null);
+    setCopied(null);
+    setShowText(false);
   };
-  const speak = () => {
+  /** Copy the message. Started before anything else, while this page still has focus. */
+  const copy = () => {
+    const done = navigator.clipboard?.writeText(prompt);
+    if (!done) {
+      setCopied('failed');
+      setShowText(true);
+      return;
+    }
+    done.then(() => setCopied('yes'), () => {
+      setCopied('failed');
+      setShowText(true);
+    });
+  };
+  const copyAndOpen = () => {
     if (!card) return;
-    // Copy first, while this page still has focus (browsers refuse the clipboard after the new tab opens)
-    const copied = navigator.clipboard?.writeText(prompt);
-    window.open(geminiUrl(prompt), '_blank', 'noopener,noreferrer');
-    if (!copied) return setSent('manual');
-    copied.then(() => setSent('copied'), () => setSent('manual'));
+    copy();
+    window.open(GEMINI_URL, '_blank', 'noopener,noreferrer');
   };
 
   const lesson = card ? SPEAKING_LESSONS[card.lesson] : null;
@@ -39,7 +52,7 @@ export function SpeakingCard() {
     <section className="sk" aria-labelledby="sk-h">
       <div className="sk-head">
         <h2 id="sk-h"><span lang="de">Sprechen üben</span> <span className="muted">· {t('60 speaking cards')}</span></h2>
-        <p className="muted small">{t('The cards of Lektion 1–10, like in the exam. Get a topic, then speak it with Gemini: it listens and checks your grammar.')}</p>
+        <p className="muted small">{t('The cards of Lektion 1–10, like in the exam. Get a topic, then speak it with Gemini: it corrects every answer and gives you a score.')}</p>
       </div>
 
       {!card || !lesson ? (
@@ -58,22 +71,32 @@ export function SpeakingCard() {
               <button className="btn btn-quiet btn-sm sk-help" onClick={() => setHelp(true)}>{t('Show the “Hilfe” line')}</button>
             )}
           </article>
+
           <div className="btn-row">
-            <button className="btn btn-primary" onClick={speak}><Icon name="mic" /> {t('Speak with Gemini')}</button>
+            <button className="btn btn-primary" onClick={copyAndOpen}><Icon name="copy" /> {t('Copy & open Gemini')}</button>
             <button className="btn" onClick={draw}><Icon name="cards" /> {t('Another topic')}</button>
           </div>
-          {sent === 'copied' ? (
-            <p className="callout callout-ok" role="status">
-              {t('Gemini opened with the prompt, and it’s copied too. If Gemini’s box is empty: tap and hold it → Paste → send. Then tap the 🎤 and answer in German. When you finish, say “Fertig”: Gemini gives your score and your mistakes.')}
-            </p>
-          ) : sent === 'manual' ? (
-            <div className="sk-manual">
-              <p className="hint">{t('Copy this prompt and send it to Gemini:')}</p>
-              <textarea className="sk-prompt" readOnly value={prompt} rows={8} onFocus={(e) => e.currentTarget.select()} />
-            </div>
-          ) : (
-            <p className="muted small">{t('Gemini gets a ready prompt: it asks you this question, lets you speak, then checks your grammar and gives feedback.')}</p>
-          )}
+          {copied === 'yes' && <p className="sk-copied ok-text" role="status"><Icon name="check" /> {t('Copied. In Gemini: tap the message box → Paste → send.')}</p>}
+          {copied === 'failed' && <p className="err" role="alert">{t('Couldn’t copy. Select the message below, copy it, and paste it in Gemini.')}</p>}
+
+          <ol className="sk-steps">
+            <li>{t('Tap “Copy & open Gemini”: the message is copied and Gemini opens.')}</li>
+            <li>{t('In Gemini, tap the message box → Paste → send.')}</li>
+            <li>{t('Tap 🎤 and answer in German. Gemini corrects each answer and asks the next question.')}</li>
+            <li>{t('Say “finish”: you get your score, all your mistakes and a model answer.')}</li>
+          </ol>
+
+          <div className="sk-message">
+            <button className="btn btn-quiet btn-sm" aria-expanded={showText} onClick={() => setShowText((v) => !v)}>
+              <Icon name={showText ? 'down' : 'next'} /> {t(showText ? 'Hide the message' : 'Show the message')}
+            </button>
+            {showText && (
+              <>
+                <textarea className="sk-prompt" readOnly value={prompt} rows={12} onFocus={(e) => e.currentTarget.select()} aria-label={t('The message for Gemini')} />
+                <button className="btn btn-sm" onClick={copy}><Icon name="copy" /> {t('Copy again')}</button>
+              </>
+            )}
+          </div>
         </>
       )}
     </section>
