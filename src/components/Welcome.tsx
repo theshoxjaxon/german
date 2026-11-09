@@ -8,6 +8,7 @@ import { rememberLang } from '@/lib/client/lang-device';
 import type { UiLang } from '@/lib/types';
 import { BrandMark } from './auth/AuthShell';
 import { Icon } from './ui';
+import { goal } from '@/lib/client/metrica';
 
 /**
  * The front door at /: "Hallo! Hello! Salom!", "Let's learn!", and a card for each course to pick
@@ -154,7 +155,7 @@ export function Welcome() {
         ) : (
           <>
             {current && (
-              <Link className="btn btn-primary btn-xl wel-continue" href={`/${current.id}`}>
+              <Link className="btn btn-primary btn-xl wel-continue" href={`/${current.id}`} onClick={() => goal('course_pick', { course: current.id, continue: true })}>
                 {t('Continue: {name}', { name: langName(current) })}
                 <Icon name="next" />
               </Link>
@@ -165,7 +166,7 @@ export function Welcome() {
                 const lang = LANGS[c.targetLang];
                 const extra = c.name !== lang.name ? c.name.replace(`${lang.name} · `, '') : '';
                 return (
-                  <Link key={c.id} href={`/${c.id}`} className={`wel-course${c.id === data.current ? ' is-current' : ''}`}
+                  <Link key={c.id} href={`/${c.id}`} onClick={() => goal('course_pick', { course: c.id })} className={`wel-course${c.id === data.current ? ' is-current' : ''}`}
                     style={{ '--i': i + (current ? 1 : 0), '--tilt': `${i % 2 ? 4 : -4}deg` } as CSSProperties}>
                     <span className="wel-course-h">
                       <span className="wel-badge" lang={c.targetLang}>{c.targetLang.toUpperCase()}</span>

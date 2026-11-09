@@ -241,7 +241,7 @@ function ItemView({ item, value, plays, uz, onAnswer, onPlayed }: {
           <p className="q-prompt" lang="de">{item.prompt}</p>
           {uz && <p className="task-instr-uz">{item.promptUz}</p>}
           <ul className="points" lang="de">{item.points.map((p) => <li key={p}>{p}</li>)}</ul>
-          <textarea className="answer-box" rows={8} value={text} onChange={(e) => set(e.target.value)} lang="de" spellCheck={false}
+          <textarea className="answer-box ym-hide-content ym-disable-keys" rows={8} value={text} onChange={(e) => set(e.target.value)} lang="de" spellCheck={false}
             aria-label={t('Your text')} placeholder={t('Write your text here…')} />
           <p className={`muted small${words >= item.words * 0.8 ? ' ok' : ''}`}>{t('{n} words (about {target})', { n: words, target: item.words })}</p>
         </div>
@@ -313,7 +313,7 @@ function SpeakingItemView({ item, value, uz, onChange, played, onPlayed }: {
       )}
       {on && <p className="muted small" aria-live="polite">{interim || t('Listening… speak German.')}</p>}
       {problem && <p className="err small">{t(problem)}</p>}
-      <textarea className="answer-box" rows={5} value={value} onChange={(e) => onChange(e.target.value)} lang="de" spellCheck={false}
+      <textarea className="answer-box ym-hide-content ym-disable-keys" rows={5} value={value} onChange={(e) => onChange(e.target.value)} lang="de" spellCheck={false}
         aria-label={t('What you say')} placeholder={t(canListen ? 'Tap Speak, or type what you would say…' : 'Type what you would say…')} />
     </div>
   );

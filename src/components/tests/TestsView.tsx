@@ -9,6 +9,7 @@ import { Icon, LoadError } from '../ui';
 import { SpeakingCard } from './SpeakingCard';
 import { TestResultView } from './TestResult';
 import { TestRunner } from './TestRunner';
+import { goal } from '@/lib/client/metrica';
 
 /** Your best attempt: the highest complete one, else the newest. */
 function best(attempts: AttemptSummary[]): AttemptSummary | null {
@@ -118,7 +119,7 @@ export function TestsView({ active }: { active: boolean }) {
                       {top?.passed === false && <> · <span lang="de">nicht bestanden</span></>}
                     </p>
                     <div className="btn-row">
-                      <button className="btn btn-primary" onClick={() => setRunning(test.id)}>
+                      <button className="btn btn-primary" onClick={() => (goal('test_start', { test: test.id }), setRunning(test.id))}>
                         <Icon name="clipboard" /> {t(draft ? 'Continue' : mine.length ? 'Try again' : 'Start')}
                       </button>
                       {mine[0] && <button className="btn" onClick={() => setViewing(mine[0].id)}>{t('Last result')}</button>}
@@ -139,6 +140,7 @@ export function TestsView({ active }: { active: boolean }) {
             load();
           }}
           onDone={(a) => {
+            goal('test_done', { test: a.test.id, score: a.result.score, max: a.result.max, ...(a.result.passed === null ? {} : { passed: a.result.passed }) });
             setRunning(null);
             setViewing(a);
             load();

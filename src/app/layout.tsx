@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from 'next';
 import { Atkinson_Hyperlegible_Mono, Atkinson_Hyperlegible_Next, Gentium_Book_Plus, Literata } from 'next/font/google';
 import Script from 'next/script';
+import { Suspense } from 'react';
+import { YandexMetrica } from '@/components/YandexMetrica';
 import { HOME_DESCRIPTION, HOME_TITLE, SITE_NAME, siteUrl, verification } from '@/lib/site';
 import './globals.css';
 
@@ -47,6 +49,8 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
           framework peer dependencies. It only exists on Vercel, so it's left out elsewhere.
         */}
         {process.env.VERCEL && <Script src="/_vercel/insights/script.js" strategy="afterInteractive" />}
+        {/* Yandex Metrica: visitors, sources, devices and goals (only with NEXT_PUBLIC_YANDEX_METRICA_ID) */}
+        <Suspense fallback={null}><YandexMetrica /></Suspense>
       </body>
     </html>
   );

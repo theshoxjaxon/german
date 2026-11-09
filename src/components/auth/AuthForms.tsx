@@ -99,7 +99,7 @@ export function LoginForm() {
   const reset = useClientValue(readReset, false); // just chose a new password
   const { t } = useT();
   return (
-    <form ref={ref} action={action} onSubmit={onSubmit} className="form auth-form" noValidate>
+    <form ref={ref} action={action} onSubmit={onSubmit} className="form auth-form ym-disable-keys" noValidate>
       <Toast message={reset ? 'Password changed. Log in with your new password.' : ''} />
       <input type="hidden" name="next" value={next} />
       <TextField id="email" type="email" label={t('Email')} defaultValue={state.fields?.email} error={e.email}
@@ -120,7 +120,7 @@ export function SignupForm() {
   useEffect(() => noteVisit(), []);
   const { t } = useT();
   return (
-    <form ref={ref} action={action} onSubmit={onSubmit} className="form auth-form" noValidate>
+    <form ref={ref} action={action} onSubmit={onSubmit} className="form auth-form ym-disable-keys" noValidate>
       <input type="hidden" name="visitor" value={visitor ?? ''} />
       <TextField id="name" label={t('Your name')} defaultValue={state.fields?.name} error={e.name}
         autoComplete="name" hint={t('Shown to your classmates, e.g. Sardor Aliyev')} required maxLength={40} />
@@ -150,7 +150,7 @@ export function ForgotForm() {
     );
   }
   return (
-    <form ref={ref} action={action} onSubmit={onSubmit} className="form auth-form" noValidate>
+    <form ref={ref} action={action} onSubmit={onSubmit} className="form auth-form ym-disable-keys" noValidate>
       <input type="hidden" name="lang" value={lang} />
       <TextField id="email" type="email" label={t('Email')} defaultValue={state.fields?.email} error={e.email}
         autoComplete="email" inputMode="email" autoCapitalize="off" autoCorrect="off" spellCheck={false} required maxLength={254} autoFocus />
@@ -171,7 +171,7 @@ export function ResetForm() {
   const { t } = useT();
   const dead = !!e.token || formError === LINK_DEAD || token === '';
   return (
-    <form ref={ref} action={action} onSubmit={onSubmit} className="form auth-form" noValidate>
+    <form ref={ref} action={action} onSubmit={onSubmit} className="form auth-form ym-disable-keys" noValidate>
       <input type="hidden" name="token" value={token ?? ''} />
       {dead ? (
         <div className="auth-done">

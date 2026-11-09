@@ -10,5 +10,8 @@ export async function GET(req: Request) {
   const id = await currentCourse();
   const course = id ? await repo.getCourse(id) : null;
   const url = new URL(course ? `/${course.id}` : '/', req.url);
+  // A new profile's marker for Metrica goes along (only these two values)
+  const joined = new URL(req.url).searchParams.get('joined');
+  if (course && (joined === 'email' || joined === 'google')) url.searchParams.set('joined', joined);
   return NextResponse.redirect(url, 303);
 }

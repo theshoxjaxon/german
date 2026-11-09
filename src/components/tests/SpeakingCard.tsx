@@ -5,6 +5,7 @@ import { useLocalState } from '@/lib/client/hooks';
 import { useT } from '@/lib/client/i18n';
 import { drawTopic, geminiPrompt, geminiUrl, SPEAKING_LESSONS, speakingCard } from '@/lib/tests/sprechkarten';
 import { Icon } from '../ui';
+import { goal } from '@/lib/client/metrica';
 
 /**
  * Tests → A1.1: practise the speaking part with the class's 60 cards. "Get your speaking topic"
@@ -23,7 +24,9 @@ export function SpeakingCard() {
   const prompt = card ? geminiPrompt(card, lang) : '';
 
   const draw = () => {
-    setId(drawTopic(id || null).id);
+    const next = drawTopic(id || null).id;
+    goal('speaking_topic', { card: next });
+    setId(next);
     setHelp(false);
     setCopied(null);
     setShowText(false);
@@ -44,6 +47,7 @@ export function SpeakingCard() {
   const open = () => {
     if (!card) return;
     copy(); // the backup, started while this page still has focus
+    goal('gemini_open', { card: card.id });
     window.open(geminiUrl(prompt), '_blank', 'noopener,noreferrer');
   };
 

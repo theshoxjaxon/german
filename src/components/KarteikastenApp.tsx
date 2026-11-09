@@ -27,6 +27,7 @@ import { CsvSheet, FieldsSheet, FilterSheet, MoreSheet, SortSheet } from './Word
 import { ImportSheet } from './ImportSheet';
 import { DEFAULT_FIELDS, WordsView, isFieldList } from './WordsView';
 import { WordSheet } from './WordSheet';
+import { goal, visitParams } from '@/lib/client/metrica';
 
 const TABS: { id: Tab; label: string; icon: IconName }[] = [
   { id: 'study', label: 'Study', icon: 'cards' },
@@ -96,6 +97,7 @@ export default function KarteikastenApp({ urlCourse }: { urlCourse?: string }) {
 
   const startReview = useCallback(() => {
     const now = Date.now();
+    goal('study_start', { course: store.getSnapshot().course?.id ?? '' });
     setReview({ first: pickNext(buildQueue(store.getSnapshot(), now), now), startedAt: now });
   }, []);
   const endReview = useCallback(() => {
@@ -126,6 +128,22 @@ export default function KarteikastenApp({ urlCourse }: { urlCourse?: string }) {
 
   // The address follows the course: switching to English in the app shows /english (no reload)
   const courseId = course?.id;
+  // Metrica: a new profile arrives as /app?joined=email|google (once), and what this visit is about
+  useEffect(() => {
+    if (!opened) return;
+    const url = new URL(window.location.href);
+    const joined = url.searchParams.get('joined');
+    if (joined === 'email' || joined === 'google') {
+      url.searchParams.delete('joined');
+      window.history.replaceState(null, '', url.pathname + url.search + url.hash); // first, so the goal carries the clean address
+      goal('signup', { method: joined });
+    }
+  }, [opened]);
+  const signedIn = !!me;
+  const isTeacher = !!me?.teacher;
+  useEffect(() => {
+    if (opened && courseId) visitParams({ course: courseId, ui_lang: lang, signed_in: signedIn, teacher: isTeacher });
+  }, [opened, courseId, lang, signedIn, isTeacher]);
   useEffect(() => {
     if (!opened || !courseId || !urlCourse) return;
     const want = `/${courseId}`;

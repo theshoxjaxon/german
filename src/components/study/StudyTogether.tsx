@@ -10,6 +10,7 @@ import { checkMessage, MAX_MESSAGE } from '@/lib/study/text';
 import { REASON_LABEL, REPORT_REASONS, type ReportReason, type StudyClub, type StudyGroupView, type StudyMessage, type StudyState } from '@/lib/study/types';
 import { cityOf, DAYS, FIRST_HOUR, LAST_HOUR, slotDay, slotHour } from '@/lib/study/week';
 import { Avatar, ConfirmButton, Icon } from '../ui';
+import { goal } from '@/lib/client/metrica';
 
 export const DAY_NAMES = [
   { short: 'Mon', label: 'Monday' },
@@ -224,7 +225,7 @@ function SignupPanel({ state, onSaved }: { state: StudyState; onSaved: (s: Study
       <p className="muted small">{tn(picked.size, '{n} hour picked', '{n} hours picked')}</p>
       {error && <p className="err" role="alert">{t(error)}</p>}
       <div className="btn-row">
-        <button className="btn btn-primary" disabled={busy || !changed || !picked.size} onClick={() => void save(() => api.saveSlots([...picked]))} aria-busy={busy}>
+        <button className="btn btn-primary" disabled={busy || !changed || !picked.size} onClick={() => void save(() => api.saveSlots([...picked]).then((s) => (goal('study_together_signup'), s)))} aria-busy={busy}>
           {t(signed ? 'Save my hours' : 'I want to study')}
         </button>
         {signed && (
@@ -369,7 +370,7 @@ function GroupChat({ group, onBack, onLeft }: { group: StudyGroupView; onBack: (
         </div>
         <span />
       </div>
-      <div className="chat-list" ref={list} aria-live="polite">
+      <div className="chat-list ym-hide-content" ref={list} aria-live="polite">
         {!loaded ? <p className="muted center">{t('Loading…')}</p> : !messages.length ? (
           <p className="muted center chat-empty">{t('Say hello and agree on a time. The speaking task is on the group card.')}</p>
         ) : messages.map((m, i) => {
@@ -388,7 +389,7 @@ function GroupChat({ group, onBack, onLeft }: { group: StudyGroupView; onBack: (
         <div className="composer">
           {error && <p className="err" role="alert">{t(error)}</p>}
           <div className="composer-row">
-            <textarea value={text} onChange={(e) => { setText(e.target.value); setError(''); }} rows={2} maxLength={MAX_MESSAGE} aria-label={t('Message')}
+            <textarea className="ym-hide-content ym-disable-keys" value={text} onChange={(e) => { setText(e.target.value); setError(''); }} rows={2} maxLength={MAX_MESSAGE} aria-label={t('Message')}
               placeholder={t('Write a message…')}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {

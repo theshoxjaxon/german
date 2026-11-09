@@ -4,6 +4,7 @@
  */
 import { useEffect, useState } from 'react';
 import { usePoll } from './hooks';
+import { goal } from './metrica';
 
 export interface TelegramState {
   available: boolean; // the bot is set up on this server
@@ -49,6 +50,7 @@ export function useTelegram(enabled: boolean, onConnected?: () => void) {
     setState(s);
     if (s.linked) {
       setLink(null);
+      goal('telegram_connect');
       onConnected?.();
     }
   }, 3000, !!link && !state?.linked);

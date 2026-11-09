@@ -59,9 +59,11 @@ export function GoogleButton() {
           visitor: visitorId() ?? undefined, // links this browser's guest visits to a new profile
         }),
       });
-      const data = (await res.json().catch(() => ({}))) as { next?: string; error?: string };
+      const data = (await res.json().catch(() => ({}))) as { next?: string; error?: string; created?: boolean };
       if (res.ok) {
-        window.location.assign(data.next || '/app'); // a full load, like the email login
+        const next = data.next || '/app';
+        // A new profile is counted once by Metrica (the app reads ?joined= and removes it)
+        window.location.assign(data.created && next === '/app' ? '/app?joined=google' : next); // a full load, like the email login
         return;
       }
       setError(data.error || 'Google sign-in failed. Try again.');

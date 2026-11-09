@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { useT } from '@/lib/client/i18n';
 import { createShare, sendShare, type ShareBody } from '@/lib/client/share';
 import { Icon } from './ui';
+import { goal } from '@/lib/client/metrica';
 
 type State = { k: 'idle' | 'busy' | 'copied' } | { k: 'again'; url: string } | { k: 'error'; message: string };
 
@@ -26,6 +27,7 @@ export function ShareButton({ body, text, note, compact = false }: { body: Share
     setState({ k: 'busy' });
     try {
       url.current = await createShare(body);
+      goal('share', { kind: body.kind });
       await deliver(url.current);
     } catch (e) {
       setState({ k: 'error', message: (e as Error).message });

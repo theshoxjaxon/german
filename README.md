@@ -200,6 +200,37 @@ So the site can be found in Google, Yandex and Bing for searches like "nemis til
 3. **Submit the sitemap** in each: `https://<your domain>/sitemap.xml`. In Google you can also ask for `/`, `/german` and `/english` to be indexed (URL Inspection → Request indexing).
 4. **Get links to it.** A new site rises with links from elsewhere: the Telegram channel's description, the bot's bio, your teacher's channel or group, Instagram bio. It usually takes a few weeks before searches show it.
 
+## Yandex Metrica (visitors, sources, devices, goals)
+
+Shows how many people visit, **where they came from** (Google, Yandex, Telegram, a link, typed in), **on what** (phone or computer, browser, OS, city) and **what they do** (goals below). It's next to the app's own `/admin/analytics` (learning numbers) and Vercel Web Analytics (page views).
+
+**Set it up:**
+1. [metrika.yandex.com](https://metrika.yandex.com) → **Add tag**: the site address (your domain), time zone Tashkent, accept the terms. Leave "Session Replay" off for now (see privacy below).
+2. Copy the **tag number** into `NEXT_PUBLIC_YANDEX_METRICA_ID` in Vercel (Production) and **redeploy**. `NEXT_PUBLIC_` values are built into the page, so a redeploy is needed.
+3. **Goals:** add each one as Goals → **JavaScript event**, with exactly this identifier:
+
+| Goal id | When |
+| --- | --- |
+| `signup` | A new profile (param `method`: email / google) |
+| `course_pick` | Picked a course on the welcome page (`course`) |
+| `study_start` | Started a study session (`course`) |
+| `test_start` / `test_done` | Started / handed in a mock test (`test`, `score`, `max`, `passed`) |
+| `speaking_topic` / `gemini_open` | Drew a speaking topic / opened Gemini with it (`card`) |
+| `share` | Shared a result (`kind`) |
+| `telegram_connect` | Connected the Telegram reminder |
+| `study_together_signup` | Signed up for "Let's study together" |
+
+4. Optional: in Yandex Webmaster, link the site to this Metrica tag (Settings → Metrica link) to see search queries there too.
+
+**Where to look:** Reports → **Sources, summary** (search engines, messengers such as Telegram, links, direct) · **Audience** → devices, browsers, OS, geography · **Conversions** (the goals) · **Visit parameters** (`course`, `ui_lang`, `signed_in`, `teacher`) · **Page views** · **Click map**. Links shared with `?utm_source=telegram&utm_campaign=…` show up as their own campaign.
+
+**Privacy (built in):**
+- **Nothing personal is sent.** No names, emails or user ids; only the course, interface language and the goal.
+- **Addresses lose their query strings** (a password-reset link carries a secret code), except `utm_*`, `from` and `ref`.
+- **The tag never loads on** `/admin`, `/account` or the password pages.
+- **Session Replay (Webvisor) is off.** Turn it on only with `NEXT_PUBLIC_YANDEX_WEBVISOR=1` (and in Metrica's tag settings). The study chat, test answers and login forms are marked `ym-hide-content` / `ym-disable-keys`, so recordings never show what was typed there. Remember that the app promises students their group chat is private.
+- Metrica sets cookies. Mention it in your privacy notice if you publish one.
+
 ## Sharing a result
 
 **Share** under a mock test result (or next to the streak in Progress, from 2 days) makes a public link `/s/<id>` and opens the phone's share sheet, or copies the link where there is none.
@@ -252,6 +283,8 @@ Copy `.env.example` to `.env.local`. Only `DATABASE_URL` is required.
 | `GOOGLE_SITE_VERIFICATION` | – | The code from Google Search Console's "HTML tag" method. See *Search engines (SEO)*. |
 | `YANDEX_VERIFICATION` | – | The code from Yandex Webmaster's "Meta tag" method. |
 | `BING_SITE_VERIFICATION` | – | The code from Bing Webmaster Tools' "HTML Meta Tag" method. |
+| `NEXT_PUBLIC_YANDEX_METRICA_ID` | – | Your Yandex Metrica tag number. Turns Metrica on (rebuild needed). |
+| `NEXT_PUBLIC_YANDEX_WEBVISOR` | – | `1` turns on Session Replay. Off by default; see *Yandex Metrica → Privacy*. |
 | `COOKIE_SECURE` | auto | Force `true`/`false`. By default the session cookie is Secure whenever the site is on HTTPS. |
 
 ## Roles and privacy
