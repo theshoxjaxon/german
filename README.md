@@ -114,6 +114,8 @@ How it works: `src/lib/server/ai.ts` makes one streamed request with the image (
 
 The German course has its tests in a **Tests** tab, by level: **A1.1** is open (Momente A1, Lektion 1–12); A1.2, A2.1, A2.2, B1.1, B1.2, B2.1, B2.2, C1.1, C1.2, C2.1 and C2.2 show as "opens soon". Courses without tests don't show the tab; guests see it locked. The format is the class's own:
 
+**Sprechen üben** (top of A1.1): the class's 60 speaking cards ("Frag mich was!", Lektion 1–10, 6 each, `src/lib/tests/sprechkarten.ts`). **Get your speaking topic** draws one (never the same twice in a row; the *Hilfe* line stays hidden until asked). **Speak with Gemini** copies a ready prompt and opens `gemini.google.com/app?q=…` with it. The prompt tells Gemini it's the student's A1 exam partner and examiner, to ask the question, let them answer in full sentences without interrupting, ask 1–2 follow-ups, and, when they say "Fertig", give feedback: what went well, each mistake with the correction and why, the corrected answer, a model answer, a score out of 10 and two tips (explained in the student's interface language). If Gemini opens without the text, the student pastes it: the app says how.
+
 | Test | Lessons | Parts | Points |
 | --- | --- | --- | --- |
 | Wiederholungstest Modul 1 | 1–3 | Teil A Grammatik (25 a–d dialogue questions) · Teil B Lesen (a text, 5 richtig/falsch) | /30 |

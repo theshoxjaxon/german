@@ -6,6 +6,7 @@ import { useStore } from '@/lib/client/store';
 import { fetchTests, readDraft } from '@/lib/client/tests';
 import { LEVELS, scoreTone, type AttemptDetail, type AttemptSummary, type Level, type TestInfo } from '@/lib/tests/types';
 import { Icon, LoadError } from '../ui';
+import { SpeakingCard } from './SpeakingCard';
 import { TestResultView } from './TestResult';
 import { TestRunner } from './TestRunner';
 
@@ -80,6 +81,8 @@ export function TestsView({ active }: { active: boolean }) {
         })}
       </div>
       {soon && <p className="notice" role="status">{t('{level} opens soon. Keep practising with {open} for now.', { level: soon, open: level })}</p>}
+
+      {level === 'A1.1' && course?.targetLang === 'de' && <SpeakingCard />}
 
       {error && !data ? <LoadError /> : !data ? (
         <div className="panel loading" aria-busy="true">{t('Loading the tests…')}</div>
