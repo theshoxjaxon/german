@@ -180,5 +180,9 @@ export function geminiPrompt(card: SpeakingCard, lang: UiLang): string {
   ].join('\n');
 }
 
-/** Gemini's chat. Nothing in the address: Gemini doesn't fill in a message from a link, so the student pastes it. */
-export const GEMINI_URL = 'https://gemini.google.com/app';
+/**
+ * Gemini with the message already in its text box: Gemini's Guided Learning page takes it from
+ * `?query=` (its normal chat page ignores `?q=`). Not documented by Google, so the app also
+ * copies the message: if the box is ever empty, the student pastes it.
+ */
+export const geminiUrl = (prompt: string) => `https://gemini.google.com/guided-learning?query=${encodeURIComponent(prompt)}`;

@@ -3,14 +3,14 @@
 import { useState, type CSSProperties } from 'react';
 import { useLocalState } from '@/lib/client/hooks';
 import { useT } from '@/lib/client/i18n';
-import { drawTopic, GEMINI_URL, geminiPrompt, SPEAKING_LESSONS, speakingCard } from '@/lib/tests/sprechkarten';
+import { drawTopic, geminiPrompt, geminiUrl, SPEAKING_LESSONS, speakingCard } from '@/lib/tests/sprechkarten';
 import { Icon } from '../ui';
 
 /**
  * Tests → A1.1: practise the speaking part with the class's 60 cards. "Get your speaking topic"
- * draws one; "Copy & open Gemini" copies a ready message (the topic, Gemini's role, feedback
- * after every answer, a summary on "finish") and opens Gemini, where the student pastes it and
- * speaks. Gemini doesn't take a message from a link, so pasting is a step of its own, shown as one.
+ * draws one; "Open Gemini" opens Gemini with a ready message in its text box (the topic, Gemini's
+ * role, feedback after every answer, a summary on "finish"): the student presses send and speaks.
+ * The message is copied as well, in case Gemini ever opens with an empty box.
  * The drawn card stays on this device, so it's still there after Gemini.
  */
 export function SpeakingCard() {
@@ -41,10 +41,10 @@ export function SpeakingCard() {
       setShowText(true);
     });
   };
-  const copyAndOpen = () => {
+  const open = () => {
     if (!card) return;
-    copy();
-    window.open(GEMINI_URL, '_blank', 'noopener,noreferrer');
+    copy(); // the backup, started while this page still has focus
+    window.open(geminiUrl(prompt), '_blank', 'noopener,noreferrer');
   };
 
   const lesson = card ? SPEAKING_LESSONS[card.lesson] : null;
@@ -73,15 +73,15 @@ export function SpeakingCard() {
           </article>
 
           <div className="btn-row">
-            <button className="btn btn-primary" onClick={copyAndOpen}><Icon name="copy" /> {t('Copy & open Gemini')}</button>
+            <button className="btn btn-primary" onClick={open}><Icon name="mic" /> {t('Open Gemini')}</button>
             <button className="btn" onClick={draw}><Icon name="cards" /> {t('Another topic')}</button>
           </div>
-          {copied === 'yes' && <p className="sk-copied ok-text" role="status"><Icon name="check" /> {t('Copied. In Gemini: tap the message box → Paste → send.')}</p>}
+          {copied === 'yes' && <p className="sk-copied ok-text" role="status"><Icon name="check" /> {t('Gemini opened with your message: press send.')}</p>}
           {copied === 'failed' && <p className="err" role="alert">{t('Couldn’t copy. Select the message below, copy it, and paste it in Gemini.')}</p>}
 
           <ol className="sk-steps">
-            <li>{t('Tap “Copy & open Gemini”: the message is copied and Gemini opens.')}</li>
-            <li>{t('In Gemini, tap the message box → Paste → send.')}</li>
+            <li>{t('Tap “Open Gemini”: Gemini opens with the message already written.')}</li>
+            <li>{t('Press send. (Box empty? The message is copied too: tap the box → Paste.)')}</li>
             <li>{t('Tap 🎤 and answer in German. Gemini corrects each answer and asks the next question.')}</li>
             <li>{t('Say “finish”: you get your score, all your mistakes and a model answer.')}</li>
           </ol>

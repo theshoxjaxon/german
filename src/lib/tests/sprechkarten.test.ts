@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { drawTopic, GEMINI_URL, geminiPrompt, SPEAKING_CARDS, SPEAKING_LESSONS, speakingCard } from './sprechkarten';
+import { drawTopic, geminiPrompt, geminiUrl, SPEAKING_CARDS, SPEAKING_LESSONS, speakingCard } from './sprechkarten';
 
 describe('the 60 speaking cards', () => {
   it('has 6 cards for each of Lektion 1–10, as on the sheet', () => {
@@ -45,8 +45,14 @@ describe('the 60 speaking cards', () => {
     expect(geminiPrompt(speakingCard('5.3')!, 'uz').split('\n')[0]).toBe('🎤 GAPIRISH MAVZUSI: Wie heißt „ruchka“ auf Deutsch?');
   });
 
-  it('opens plain Gemini: it doesn\'t take a message from a link, so the student pastes it', () => {
-    expect(GEMINI_URL).toBe('https://gemini.google.com/app');
-    for (const c of SPEAKING_CARDS) expect(geminiPrompt(c, 'uz').length).toBeLessThan(1500);
+  it('opens Gemini with the message in its text box (Guided Learning takes ?query=)', () => {
+    for (const c of SPEAKING_CARDS) {
+      for (const lang of ['uz', 'en'] as const) {
+        const url = geminiUrl(geminiPrompt(c, lang));
+        expect(url.startsWith('https://gemini.google.com/guided-learning?query=')).toBe(true);
+        expect(decodeURIComponent(url.split('?query=')[1])).toBe(geminiPrompt(c, lang));
+        expect(url.length).toBeLessThan(2400); // a safe length for any browser
+      }
+    }
   });
 });
