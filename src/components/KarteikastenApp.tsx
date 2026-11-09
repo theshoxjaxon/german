@@ -7,6 +7,7 @@ import { tick, useLocalState } from '@/lib/client/hooks';
 import { useT } from '@/lib/client/i18n';
 import { store, useStore } from '@/lib/client/store';
 import { langOf } from '@/lib/courses';
+import { courseTitle } from '@/lib/site';
 import { buildQueue, pickNext, type QueueItem } from '@/lib/queue';
 import { EMPTY_FILTERS, SORTS, type Sort } from '@/lib/words-view';
 import { AccountSheet, CheerSheet } from './AccountSheets';
@@ -130,11 +131,11 @@ export default function KarteikastenApp({ urlCourse }: { urlCourse?: string }) {
     const want = `/${courseId}`;
     if (window.location.pathname !== want) window.history.replaceState(null, '', want + window.location.search + window.location.hash);
   }, [opened, courseId, urlCourse]);
-  // …and so does the tab's title ("Nemis tili · Karteikasten"), in the interface language
+  // …and so does the tab's title: the same one the server gave the page (search engines read it too)
   const courseName = course && t(langOf(course).name);
   useEffect(() => {
-    if (opened && courseName && urlCourse) document.title = `${courseName} · Karteikasten`;
-  }, [opened, courseName, urlCourse]);
+    if (opened && courseId && courseName && urlCourse) document.title = courseTitle(courseId, courseName);
+  }, [opened, courseId, courseName, urlCourse]);
 
   // A guest without a course (the address named one that doesn't exist): pick one on the welcome page
   useEffect(() => {

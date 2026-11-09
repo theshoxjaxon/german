@@ -15,5 +15,6 @@ export async function GET(req: Request, ctx: RouteContext<'/c/[slug]'>) {
   const user = await currentUser();
   if (user) await repo.joinCourse(user.id, slug);
   else await chooseCourse(slug);
-  return NextResponse.redirect(new URL(`/${slug}`, req.url), 303);
+  // Permanent: old shared links pass their value to the course's own address
+  return NextResponse.redirect(new URL(`/${slug}`, req.url), 308);
 }

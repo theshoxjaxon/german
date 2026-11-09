@@ -175,6 +175,31 @@ A public Telegram channel where the bot posts one der/die/das quiz every evening
 - **Which word**: a shared noun of the German course with der, die or das, from the lesson the class is on while it has words left, else any lesson. A word doesn't come back for 120 days. The choice is fixed for the day, so a retry posts the same quiz.
 - **When**: from the same evening job as the reminders (`/api/cron/daily`, 19:00 in Tashkent), at most once a day: the day is written down before posting, and if Telegram refuses (e.g. the bot isn't an admin), it's freed again so the button or the next run can retry.
 
+## Search engines (SEO)
+
+So the site can be found in Google, Yandex and Bing for searches like "nemis tilini oʻrganish", "немецкий язык с узбекским переводом" or "learn German Uzbek".
+
+**What's built in:**
+- `/robots.txt`: crawl the public pages; stay out of `/admin`, `/account`, `/app`, password pages and the API. `/api/courses` and `/api/state` stay open, because the public pages read them while Google renders them.
+- `/sitemap.xml`: `/`, `/german`, `/english`, `/signup`, `/login`.
+- Titles and descriptions in Uzbek with the Russian and English words people search for (`src/lib/site.ts`). Each page has its own canonical address, `<html lang="uz">`.
+- On `/`, under the course cards, a short "what this is" section: Uzbek, with Russian and English folded below. Real text with plain links to the courses (`src/components/HomeAbout.tsx`).
+- Structured data (`src/lib/seo.ts`): `WebSite`, `WebApplication` and `FAQPage` on `/`; `Course` on `/german` and `/english`.
+- Old `/c/<course>` links redirect permanently (308).
+
+**What you do:**
+1. **Your own domain** (recommended; e.g. a `.uz` domain):
+   - Vercel → Project → Settings → **Domains** → Add it, and set the DNS records Vercel shows at your registrar.
+   - In the same list, set `german-roan.vercel.app` to **Redirect to** the new domain (308), so search engines see one address.
+   - Set `APP_URL=https://<your domain>` and redeploy. Titles, links, the sitemap and previews follow it.
+   - Then add `https://<your domain>` to Google OAuth's **Authorized JavaScript origins**, and press **Connect the bot** in `/admin` again.
+2. **Tell the search engines.** In each, add the site, choose the **HTML tag** method, copy the `content="…"` code into the variable, redeploy, then press **Verify**:
+   - [Google Search Console](https://search.google.com/search-console) (URL-prefix property) → `GOOGLE_SITE_VERIFICATION`
+   - [Yandex Webmaster](https://webmaster.yandex.com) (much used in Uzbekistan and Russia) → `YANDEX_VERIFICATION`
+   - [Bing Webmaster Tools](https://www.bing.com/webmasters) (also feeds DuckDuckGo and ChatGPT search) → `BING_SITE_VERIFICATION`
+3. **Submit the sitemap** in each: `https://<your domain>/sitemap.xml`. In Google you can also ask for `/`, `/german` and `/english` to be indexed (URL Inspection → Request indexing).
+4. **Get links to it.** A new site rises with links from elsewhere: the Telegram channel's description, the bot's bio, your teacher's channel or group, Instagram bio. It usually takes a few weeks before searches show it.
+
 ## Sharing a result
 
 **Share** under a mock test result (or next to the streak in Progress, from 2 days) makes a public link `/s/<id>` and opens the phone's share sheet, or copies the link where there is none.
@@ -224,6 +249,9 @@ Copy `.env.example` to `.env.local`. Only `DATABASE_URL` is required.
 | `TELEGRAM_BOT_USERNAME` | – | The bot's name, without @, for `t.me` links |
 | `TELEGRAM_WEBHOOK_SECRET` | – | 20+ letters, digits, `_` or `-`. Telegram sends it back with every update, so forged updates are refused. |
 | `TELEGRAM_CHANNEL` | – | The public channel for the daily der/die/das quiz: its `@name` or numeric `-100…` id. The bot must be an admin there. |
+| `GOOGLE_SITE_VERIFICATION` | – | The code from Google Search Console's "HTML tag" method. See *Search engines (SEO)*. |
+| `YANDEX_VERIFICATION` | – | The code from Yandex Webmaster's "Meta tag" method. |
+| `BING_SITE_VERIFICATION` | – | The code from Bing Webmaster Tools' "HTML Meta Tag" method. |
 | `COOKIE_SECURE` | auto | Force `true`/`false`. By default the session cookie is Secure whenever the site is on HTTPS. |
 
 ## Roles and privacy

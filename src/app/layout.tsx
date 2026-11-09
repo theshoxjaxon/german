@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Atkinson_Hyperlegible_Mono, Atkinson_Hyperlegible_Next, Gentium_Book_Plus, Literata } from 'next/font/google';
 import Script from 'next/script';
+import { HOME_DESCRIPTION, HOME_TITLE, SITE_NAME, siteUrl, verification } from '@/lib/site';
 import './globals.css';
 
 // Display face for German words on the cards
@@ -12,18 +13,17 @@ const atkinsonMono = Atkinson_Hyperlegible_Mono({ subsets: ['latin', 'latin-ext'
 // IPA pronunciation symbols
 const gentium = Gentium_Book_Plus({ subsets: ['latin', 'latin-ext'], weight: '400', variable: '--font-gentium', display: 'swap' });
 
-/** The site's public address, for absolute links in previews: APP_URL, else Vercel's production domain. */
-const siteUrl = process.env.APP_URL?.trim().replace(/\/+$/, '')
-  || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL.trim()}` : undefined);
-const description = 'Nemis va ingliz tili soʻzlari uchun kartochkalar, darsdagidek sinov testlari va sinfdoshlar bilan birga oʻrganish. Oʻzbekcha tarjimalar bilan, bepul.';
+const siteAddress = siteUrl();
 
 export const metadata: Metadata = {
-  ...(siteUrl ? { metadataBase: new URL(siteUrl) } : {}),
-  title: 'Karteikasten',
-  description,
-  appleWebApp: { capable: true, title: 'Karteikasten', statusBarStyle: 'default' },
+  ...(siteAddress ? { metadataBase: new URL(siteAddress) } : {}),
+  title: HOME_TITLE,
+  description: HOME_DESCRIPTION,
+  applicationName: SITE_NAME,
+  verification: verification(),
+  appleWebApp: { capable: true, title: SITE_NAME, statusBarStyle: 'default' },
   // The link preview in Telegram, WhatsApp and the like (the image is app/opengraph-image.tsx)
-  openGraph: { title: 'Karteikasten', description, siteName: 'Karteikasten', locale: 'uz_UZ', type: 'website' },
+  openGraph: { title: HOME_TITLE, description: HOME_DESCRIPTION, siteName: SITE_NAME, locale: 'uz_UZ', type: 'website' },
 };
 
 export const viewport: Viewport = {
@@ -38,7 +38,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
-    <html lang="en" className={`${literata.variable} ${atkinson.variable} ${atkinsonMono.variable} ${gentium.variable}`}>
+    <html lang="uz" className={`${literata.variable} ${atkinson.variable} ${atkinsonMono.variable} ${gentium.variable}`}>
       <body>
         {children}
         {/*
