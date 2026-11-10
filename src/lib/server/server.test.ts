@@ -1039,3 +1039,48 @@ describe('the daily quiz channel', () => {
     expect(new Set(ids).size).toBe(42);
   });
 });
+
+describe('grammar practice (Perfekt)', () => {
+  it('keeps each student\'s progress, re-checks answers and counts them for the streak', async () => {
+    const { perfektVerbs } = await import('../grammar/verbs');
+    const { applySession, emptyState, sanitizeState, pickSession } = await import('../grammar/session');
+    const verbs = perfektVerbs();
+    const essen = verbs.find((v) => v.inf === 'essen')!;
+    const now = Date.now();
+    const lola = await profile('lola.grammar@example.com', 'Lola');
+    const timur = await profile('timur.grammar@example.com', 'Timur');
+    expect(await repo.getGrammar(lola.id, 'perfekt')).toBeNull();
+    expect((await repo.myStreak(lola.id, now)).studiedToday).toBe(false);
+
+    // A forged "right" answer is checked again and counts as wrong
+    const out = applySession(emptyState(), verbs, [
+      { task: { type: 'partizip', verb: essen.id }, given: 'geesst' },
+      { task: { type: 'aux', verb: essen.id }, given: 'haben' },
+    ], now);
+    expect(out.right).toBe(1);
+    await repo.saveGrammar(lola.id, 'perfekt', out.state, out.answered, now);
+
+    const stored = sanitizeState(await repo.getGrammar(lola.id, 'perfekt'));
+    expect(stored.rules.irregular).toEqual([false]);
+    expect(stored.rules.aux).toEqual([true]);
+    expect(stored.verbs[essen.id].due).toBeGreaterThan(now);
+    expect(stored.sessions).toBe(1);
+    expect((await repo.myStreak(lola.id, now)).studiedToday).toBe(true);
+
+    // A second session adds to the same row and to today's answers
+    const again = applySession(stored, verbs, [{ task: { type: 'partizip', verb: essen.id }, given: 'gegessen' }], now + 1000);
+    await repo.saveGrammar(lola.id, 'perfekt', again.state, again.answered, now + 1000);
+    expect(sanitizeState(await repo.getGrammar(lola.id, 'perfekt')).rules.irregular).toEqual([false, true]);
+    const db = await (await import('./db')).getDb();
+    const act = await db.query('SELECT answers FROM activity WHERE user_id = $1 AND day = $2', [lola.id, repo.todayKey(now)]);
+    expect(Number(act.rows[0].answers)).toBe(3);
+
+    // Another student's progress is their own
+    expect(await repo.getGrammar(timur.id, 'perfekt')).toBeNull();
+    expect(pickSession(verbs, sanitizeState(await repo.getGrammar(timur.id, 'perfekt')), now)).toHaveLength(10);
+
+    // Deleting the profile deletes the progress
+    await repo.deleteUser(lola.id);
+    expect((await db.query('SELECT 1 FROM grammar_state WHERE user_id = $1', [lola.id])).rows).toHaveLength(0);
+  });
+});

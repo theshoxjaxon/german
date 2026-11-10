@@ -48,7 +48,7 @@ describe('Yandex Metrica', () => {
 
   it('documents every goal it can send', () => {
     expect(Object.keys(GOALS)).toEqual([
-      'signup', 'course_pick', 'study_start', 'test_start', 'test_done', 'speaking_topic', 'gemini_open', 'share', 'telegram_connect', 'study_together_signup',
+      'signup', 'course_pick', 'study_start', 'test_start', 'test_done', 'speaking_topic', 'gemini_open', 'grammar_start', 'grammar_done', 'grammar_check', 'share', 'telegram_connect', 'study_together_signup',
     ]);
   });
 });

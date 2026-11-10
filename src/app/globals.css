@@ -1299,6 +1299,84 @@ details.advanced[open] > summary { margin-bottom: 10px; }
 .sk-steps li::marker { font-weight: 700; color: var(--ink); }
 .sk-copied { display: flex; align-items: center; gap: 6px; font-size: 14.5px; font-weight: 600; }
 .sk-message { display: grid; gap: 8px; justify-items: start; }
+/* Grammatik · Perfekt: the card in Tests, the trainer, the rule sheet and the writing check.
+   Colours follow the class notes: the helper verb boxed, ge- and the ending in red, a prefix in blue. */
+.gr { margin-bottom: 14px; }
+.gr-loading { color: var(--ink-3); font-size: 14px; }
+.gr-rules { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.gr-rule { display: grid; gap: 4px; }
+.gr-rule-h { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 14.5px; }
+.gr-rule-name { font-weight: 600; }
+.gr-rule-n { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.gr-rule.is-good .gr-rule-n { color: var(--good); font-weight: 700; }
+.gr-rule-n svg { width: 15px; height: 15px; }
+.gr-meter { height: 8px; border-radius: 99px; background: var(--surface-3); overflow: hidden; }
+.gr-meter i { display: block; height: 100%; border-radius: inherit; background: var(--ink-3); transition: width .4s; }
+.gr-rule.is-weak .gr-meter i { background: var(--again); }
+.gr-rule.is-mid .gr-meter i { background: var(--hard); }
+.gr-rule.is-good .gr-meter i { background: var(--good); }
+.gr-rule-ex { font-size: 12.5px; }
+
+.gr-p { font-weight: 600; }
+.gr-ge, .gr-end { color: var(--die); font-weight: 800; }
+.gr-pre { color: var(--der); font-weight: 800; }
+.gr-aux, .gr-box { display: inline-block; padding: 0 5px; border: 2px solid var(--die); border-radius: 6px; font-weight: 700; line-height: 1.3; }
+.gr-forms { white-space: nowrap; }
+.gr-bracket { font-size: 16px; line-height: 1.9; }
+.gr-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.gr-h { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+.gr-rule-sec { display: grid; gap: 8px; }
+.gr-ex { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+.gr-all-btn { width: 100%; justify-content: flex-start; }
+.gr-chips { margin: 10px 0; }
+.gr-table { list-style: none; margin: 0; padding: 0; display: grid; }
+.gr-table li { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.gr-table li .muted { text-align: right; }
+
+.gr-screen .eyebrow { margin-bottom: 0; }
+.gr-close[data-armed="1"] { width: auto; padding-inline: 10px; background: var(--again); color: var(--ink-inv); font-size: 13px; font-weight: 700; border-radius: 10px; }
+.gr-task { display: grid; gap: 14px; }
+.gr-prompt { font-family: var(--font-display); font-size: clamp(24px, 6.5vw, 30px); font-weight: 700; line-height: 1.25; text-wrap: balance; }
+.gr-mean { font-family: var(--font-ui); font-size: 15px; font-weight: 500; }
+.gr-line { display: flex; align-items: center; gap: 10px; font-size: 22px; }
+.gr-line .gr-aux { font-size: 20px; }
+.gr-gap { display: inline-block; min-width: 56px; padding: 0 6px; border-bottom: 3px solid var(--ink); text-align: center; font-weight: 700; }
+.gr-input {
+  flex: 1; min-width: 0; height: 52px; padding: 0 14px; border-radius: 12px; border: 1.5px solid var(--line-strong);
+  background: var(--surface); color: var(--ink); font-size: 20px; font-family: var(--font-ui);
+}
+.gr-input.is-wide { width: 100%; font-size: 18px; }
+.gr-input:focus { outline: none; border-color: var(--ink-2); box-shadow: 0 0 0 3px var(--mark-soft); }
+.gr-umlauts { display: flex; gap: 8px; }
+.gr-umlauts .btn { min-width: 48px; font-size: 18px; }
+.gr-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.gr-choices .btn { font-size: 22px; flex-direction: column; gap: 0; }
+.gr-built { min-height: 56px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px; border-radius: 12px; border: 1.5px dashed var(--line-strong); background: var(--surface-2); }
+.gr-pool { display: flex; flex-wrap: wrap; gap: 8px; }
+.gr-tile {
+  min-height: 44px; padding: 0 14px; border-radius: 10px; border: 1.5px solid var(--line-strong); background: var(--surface);
+  color: var(--ink); font-size: 17px; font-weight: 600; cursor: pointer;
+}
+.gr-tile:disabled { opacity: .3; cursor: default; }
+.gr-tile.is-placed { background: var(--ink); color: var(--ink-inv); border-color: var(--ink); }
+.gr-tile.is-placed:disabled { opacity: 1; }
+.gr-feedback { display: grid; gap: 8px; padding: 14px 16px; border-radius: 14px; border: 1.5px solid; font-size: 15.5px; }
+.gr-feedback.is-ok { background: var(--good-soft); border-color: var(--good); }
+.gr-feedback.is-wrong { background: var(--again-soft); border-color: var(--again); }
+.gr-verdict { display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 17px; }
+.gr-feedback.is-ok .gr-verdict { color: var(--good); }
+.gr-feedback.is-wrong .gr-verdict { color: var(--again); }
+.gr-why { font-weight: 600; }
+.gr-score { display: grid; justify-items: center; gap: 2px; padding: 14px 0 6px; }
+.gr-score b { font-family: var(--font-display); font-size: 56px; line-height: 1; font-variant-numeric: tabular-nums; }
+.gr-score b .muted { font-size: 30px; }
+.gr-changes, .gr-missed { list-style: none; margin: 0 0 6px; padding: 0; display: grid; gap: 8px; }
+.gr-changes li { display: flex; justify-content: space-between; gap: 10px; }
+.gr-down { color: var(--again); }
+.gr-write { display: grid; gap: 8px; }
+.gr-write .gr-prompt { font-size: clamp(21px, 5.5vw, 26px); }
+.gr-count { text-align: right; }
+.gr-corrected { font-size: 16px; line-height: 1.6; }
 
 /* ---------- / : "Karteikasten haqida" (what the app is, for people and search engines) ---------- */
 .about { padding: 8px 16px calc(40px + env(safe-area-inset-bottom, 0px)); background: var(--bg); }

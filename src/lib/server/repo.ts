@@ -1157,3 +1157,32 @@ export async function courseTestResults(courseId: string): Promise<{
     })),
   };
 }
+
+/* ---------------------------------------------------------------------------------------------
+ * Grammar practice: one stored state per student and topic ('perfekt'). Only ever read and
+ * written with the signed-in student's own id.
+ */
+
+/** A student's practice state for a topic, or null before their first session. */
+export async function getGrammar(userId: string, topic: string): Promise<unknown | null> {
+  const db = await getDb();
+  const r = await db.query('SELECT data FROM grammar_state WHERE user_id = $1 AND topic = $2', [userId, topic]);
+  return r.rows[0] ? parse<unknown>(r.rows[0].data) : null;
+}
+
+/**
+ * Save the state after a session and count its answers toward today's activity (the streak,
+ * the teacher's page and the evening reminder see it). One statement.
+ */
+export async function saveGrammar(userId: string, topic: string, data: unknown, answers: number, now = Date.now()): Promise<void> {
+  const db = await getDb();
+  await db.query(
+    `WITH g AS (
+       INSERT INTO grammar_state (user_id, topic, data, updated_at) VALUES ($1, $2, $3::jsonb, $4)
+       ON CONFLICT (user_id, topic) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at
+     )
+     INSERT INTO activity (user_id, day, answers) SELECT $1, $5, $6 WHERE $6::int > 0
+     ON CONFLICT (user_id, day) DO UPDATE SET answers = activity.answers + excluded.answers`,
+    [userId, topic, JSON.stringify(data), now, todayKey(now), answers],
+  );
+}

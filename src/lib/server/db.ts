@@ -22,7 +22,7 @@ export interface Db {
 }
 
 /** Bump when the schema or the built-in word lists change: every database then runs migrate() once more. */
-const SCHEMA_VERSION = '18';
+const SCHEMA_VERSION = '19';
 
 /*
  * Times are milliseconds since 1970 (JavaScript's Date.now()) in BIGINT columns; days are
@@ -346,6 +346,15 @@ CREATE TABLE IF NOT EXISTS channel_posts (
   posted_at bigint NOT NULL
 );
 
+-- A student's grammar practice, one row per topic ('perfekt'): rule results and verb schedules.
+CREATE TABLE IF NOT EXISTS grammar_state (
+  user_id    text NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  topic      text NOT NULL,
+  data       jsonb NOT NULL,
+  updated_at bigint NOT NULL,
+  PRIMARY KEY (user_id, topic)
+);
+
 -- Supabase also publishes the public schema through its REST API. Row Level Security with no
 -- policies closes that door: only this server (connecting as the table owner) reads the data.
 ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
@@ -375,6 +384,7 @@ ALTER TABLE telegram_links ENABLE ROW LEVEL SECURITY;
 ALTER TABLE telegram_link_tokens ENABLE ROW LEVEL SECURITY;
 ALTER TABLE shares ENABLE ROW LEVEL SECURITY;
 ALTER TABLE channel_posts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE grammar_state ENABLE ROW LEVEL SECURITY;
 
 INSERT INTO settings (key, value) VALUES ('schema_version', '${SCHEMA_VERSION}')
   ON CONFLICT (key) DO UPDATE SET value = excluded.value;

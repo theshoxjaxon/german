@@ -11,6 +11,7 @@ A mobile-first vocabulary app for learning centers. Students study German or Eng
 - **Words**: an Airtable-style table and card gallery: search, filter, sort. Teachers manage the shared lesson words; every student can also add **their own words**, which only they see and study.
 - **AI word helper** (optional): take a photo of a word list (textbook page, worksheet, whiteboard, notes) or type words, and Claude turns them into finished flashcards in the course's language: meaning, IPA, forms (German: with the article), an example sentence and a memory hook. You tick the ones to keep and pick the topic. In the word form, **Fill in the rest with AI** completes a single word.
 - **Mock tests** (German course), by level (A1.1 open, the later levels "opens soon"): a **Wiederholungstest** for each Modul (Grammatik 25 + Lesen 5 = 30 points, like the class's paper tests) and the **Abschlusstest** (Grammatik, Lesen, Schreiben, Sprechen, 25 points each; passed with 18 in every part). Automatic parts are scored the moment you hand in; the AI scores writing and speaking and explains each mistake in Uzbek or English. Teachers see every student's results at `/admin/tests`.
+- **Grammatik · Perfekt** (German course, Tests → A1.1, signed-in students): a trainer for the Perfekt (*haben/sein + Partizip II*) built on how people actually get better: they recall the form themselves, get feedback that names the rule they broke, meet their weak verbs again on a spaced schedule, then write freely. A bar per rule (ge-…-t, separable verbs, no ge-, irregular verbs, haben/sein and word order), 5-minute sessions of 10 mixed tasks, a colour-coded rule sheet with every verb of the course, and an AI check of a few sentences about yesterday.
 - **Let's study together**: students mark the hours they're free next week and press **I want to study**. Every Sunday at 18:00 the app makes **groups of 3** who share a free hour, each with a suggested time, a speaking task and a **private chat** that only the group can read. Teachers see when the class is free (counts only), plan speaking clubs, and see reports, never chats. Share it as `/lets-study-together`.
 - **Telegram reminder** (optional): students connect Telegram from **Settings → Telegram** (or the card on the home screen after their first session). Each evening, if they haven't practised that day, the bot sends one message: their streak and how many cards wait, with an **Open** button. `/stop` or the Stop button turns it off.
 - **Daily quiz channel** (optional): every evening the bot posts a der/die/das quiz (a Telegram quiz poll) with a German noun from the lessons to a public channel, with a button into the app. It brings in German learners outside the class.
@@ -132,6 +133,26 @@ The German course has its tests in a **Tests** tab, by level: **A1.1** is open (
 - **Teachers**: `/admin/tests` shows each student's best score per test, the average (and for the final, how many passed), and the latest attempts with points per part; any score opens the whole attempt. Names only.
 - **Adding a test or a level**: write it in `src/lib/server/tests/` (see `german-a1.ts`: `level`, `kind: 'unit' | 'final'`, each part's `points` and `pass`) and add it to `TESTS`. `npm test` checks every test: the class format, unique ids, valid answers, and that a perfect attempt gets full marks. A level opens in the app as soon as it has a test.
 
+## Grammatik · Perfekt
+
+Tests → A1.1 in the German course, for signed-in students. The class's five rules for the Perfekt, each with its own bar (the share right in its last 10 answers; **learned** at 80% with at least 5):
+
+| Rule | Example | What the feedback says when it's broken |
+| --- | --- | --- |
+| Regular verbs: ge-…-t | machen → gemacht, arbeiten → gearbeitet | *gemachen* → "ge- + stem + -t, not -en"; *gearbeitt* → "after -t or -d the ending is -et" |
+| Separable verbs | einkaufen → eingekauft | *gekauft*, *geeinkauft* → "ge- goes between the prefix and the verb" |
+| No ge-: -ieren, be-, ver-, er- | telefonieren → telefoniert, bezahlen → bezahlt | *getelefoniert* → "verbs in -ieren take no ge-" |
+| Irregular verbs (the table) | essen → gegessen | *geesst* → "irregular: ends in -en"; *gessen* → "starts with ge-" |
+| haben or sein, word order | Er **ist** gefahren. Gestern **hat** er Fußball **gespielt**. | wrong helper verb, wrong person (*ich hat*), helper verb not 2nd, Partizip not last |
+
+**A session** (about 5 minutes) is 10 tasks, mixed so the same kind never comes twice in a row: type the **Partizip II** (with ä ö ü ß keys), pick **hat or ist**, **build a sentence** from word tiles (any part may go first if the helper verb is 2nd and the Partizip last; one decoy helper verb), and turn a **Präsens sentence into the Perfekt**. Each answer is checked at once; a missed verb comes back a few tasks later. Sessions lean toward the student's weakest rules and bring the verbs that are due first: every verb has its own SM-2 schedule (the same as the flashcards), so a missed verb returns tomorrow and a known one after days, then weeks. The end screen shows the score, which rules went up or down, and the verbs to repeat. Answers count toward the day's activity, so the streak, the teacher's page and the evening Telegram reminder see them.
+
+**The verbs** are the 94 lesson verbs whose cards give their Perfekt (*"er fährt · fuhr · ist gefahren"*), read from the word lists, plus 11 the class uses (machen, spielen, hören, aufstehen, bezahlen …); modal verbs are left out. Each is sorted by rule automatically (`src/lib/grammar/perfekt.ts`). **The rules** sheet is colour-coded like the class notes (helper verb boxed, ge- and the ending red, a separable prefix blue) and lists all verbs, filterable by rule.
+
+**Write it (AI check)**: "Was hast du gestern oder am Wochenende gemacht?" in 3–5 sentences. Claude returns each mistake (what was written → the right German, and the rule, in Uzbek or English), the corrected text, how many sentences used the Perfekt correctly, and one tip. 8 checks an hour per student; the text is not stored. Needs the AI helper switched on (see *AI word helper*).
+
+Progress is one row per student in `grammar_state` (deleted with the profile). The server checks every answer again before it moves a bar, so progress can't be faked from the browser. Code: `src/lib/grammar/` (verbs, checks, sessions), `src/app/api/grammar/perfekt/`, `src/components/grammar/`.
+
 ## Let's study together
 
 A card at the top of the **Class** tab (or the link `/lets-study-together`) opens it.
@@ -216,6 +237,8 @@ Shows how many people visit, **where they came from** (Google, Yandex, Telegram,
 | `study_start` | Started a study session (`course`) |
 | `test_start` / `test_done` | Started / handed in a mock test (`test`, `score`, `max`, `passed`) |
 | `speaking_topic` / `gemini_open` | Drew a speaking topic / opened Gemini with it (`card`) |
+| `grammar_start` / `grammar_done` | Started / finished a Perfekt session (`right`, `answered`) |
+| `grammar_check` | Had a Perfekt text checked by the AI (`sentences`, `perfekt`) |
 | `share` | Shared a result (`kind`) |
 | `telegram_connect` | Connected the Telegram reminder |
 | `study_together_signup` | Signed up for "Let's study together" |
