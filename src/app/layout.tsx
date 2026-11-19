@@ -1,5 +1,9 @@
 import type { Metadata, Viewport } from 'next';
 import { Atkinson_Hyperlegible_Mono, Atkinson_Hyperlegible_Next, Gentium_Book_Plus, JetBrains_Mono, Literata, Outfit } from 'next/font/google';
+import Script from 'next/script';
+import { Suspense } from 'react';
+import { YandexMetrica } from '@/components/YandexMetrica';
+import { HOME_DESCRIPTION, HOME_TITLE, SITE_NAME, siteUrl, verification } from '@/lib/site';
 import './globals.css';
 import './wordfield.css';
 
@@ -16,10 +20,17 @@ const gentium = Gentium_Book_Plus({ subsets: ['latin', 'latin-ext'], weight: '40
 const outfit = Outfit({ subsets: ['latin', 'latin-ext'], variable: '--font-outfit', display: 'swap' });
 const jetbrains = JetBrains_Mono({ subsets: ['latin', 'latin-ext'], variable: '--font-jetbrains', display: 'swap' });
 
+const siteAddress = siteUrl();
+
 export const metadata: Metadata = {
-  title: 'Wordfield',
-  description: 'Pick a language and start swiping: spaced-repetition flashcards, daily decks and friend streaks.',
-  appleWebApp: { capable: true, title: 'Wordfield', statusBarStyle: 'default' },
+  ...(siteAddress ? { metadataBase: new URL(siteAddress) } : {}),
+  title: HOME_TITLE,
+  description: HOME_DESCRIPTION,
+  applicationName: SITE_NAME,
+  verification: verification(),
+  appleWebApp: { capable: true, title: SITE_NAME, statusBarStyle: 'default' },
+  // The link preview in Telegram, WhatsApp and the like (the image is app/opengraph-image.tsx)
+  openGraph: { title: HOME_TITLE, description: HOME_DESCRIPTION, siteName: SITE_NAME, locale: 'uz_UZ', type: 'website' },
 };
 
 export const viewport: Viewport = {
@@ -34,8 +45,18 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
-    <html lang="en" className={`${literata.variable} ${atkinson.variable} ${atkinsonMono.variable} ${gentium.variable} ${outfit.variable} ${jetbrains.variable}`}>
-      <body>{children}</body>
+    <html lang="uz" className={`${literata.variable} ${atkinson.variable} ${atkinsonMono.variable} ${gentium.variable} ${outfit.variable} ${jetbrains.variable}`}>
+      <body>
+        {children}
+        {/*
+          Vercel Web Analytics: page views and visitors in the Vercel dashboard (no cookies). This is
+          the script the @vercel/analytics package loads, added directly to skip that package's
+          framework peer dependencies. It only exists on Vercel, so it's left out elsewhere.
+        */}
+        {process.env.VERCEL && <Script src="/_vercel/insights/script.js" strategy="afterInteractive" />}
+        {/* Yandex Metrica: visitors, sources, devices and goals (only with NEXT_PUBLIC_YANDEX_METRICA_ID) */}
+        <Suspense fallback={null}><YandexMetrica /></Suspense>
+      </body>
     </html>
   );
 }

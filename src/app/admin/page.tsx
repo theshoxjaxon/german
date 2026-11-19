@@ -1,38 +1,38 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
-import { redirect } from 'next/navigation';
 import { connection } from 'next/server';
 import { Suspense } from 'react';
 import { AdminDashboard } from '@/components/admin/AdminDashboard';
-import { BrandMark } from '@/components/auth/AuthShell';
+import type { TelegramAdminStatus } from '@/components/admin/AdminTelegram';
+import { channelStatus } from '@/lib/server/channel';
 import * as repo from '@/lib/server/repo';
-import { currentUser } from '@/lib/server/session';
+import { telegramCounts } from '@/lib/server/reminders';
+import { settingProblems } from '@/lib/server/telegram';
+import { adminData, DatabaseDown, NotAdmin } from './guard';
 
 export const metadata: Metadata = { title: 'Admin · Karteikasten' };
 
-export default function AdminPage() {
+/** The Telegram panel: what's missing (names only), counts, and the quiz channel. */
+async function telegramStatus(): Promise<TelegramAdminStatus> {
+  const [counts, channel] = await Promise.all([telegramCounts(), channelStatus()]);
+  return { problems: settingProblems(), cron: !!process.env.CRON_SECRET, ...counts, channel: channel.channel, quizToday: channel.today };
+}
+
+export default function AdminPage({ searchParams }: PageProps<'/admin'>) {
   return (
-    <div className="admin">
-      <header className="appbar">
-        <Link className="appbar-brand" href="/">
-          <BrandMark size={26} />
-          Karteikasten
-        </Link>
-        <span className="role-pill role-admin">Admin</span>
-      </header>
-      {/* The session is read at request time, so it sits behind a Suspense boundary (required with Cache Components). */}
-      <Suspense fallback={<div className="admin-main"><div className="panel loading" aria-busy="true">Loading the dashboard…</div></div>}>
-        <AdminData />
-      </Suspense>
-    </div>
+    // The session is read at request time, so it sits behind a Suspense boundary (required with Cache Components).
+    <Suspense fallback={<div className="admin-main"><div className="panel loading" aria-busy="true">Loading the dashboard…</div></div>}>
+      <AdminData searchParams={searchParams} />
+    </Suspense>
   );
 }
 
-async function AdminData() {
+async function AdminData({ searchParams }: Pick<PageProps<'/admin'>, 'searchParams'>) {
   await connection(); // everything below depends on the request and the current time
-  const user = await currentUser();
-  if (!user) redirect('/login?next=/admin');
-  if (user.role !== 'admin') redirect('/');
-  const stats = await repo.adminStats();
-  return <AdminDashboard stats={stats} meId={user.id} />;
+  const r = await adminData('/admin', (await searchParams).course, (c) => repo.adminStats(c.course.id, c.admin));
+  if ('down' in r) return <DatabaseDown message={r.down} />;
+  if ('student' in r) return <NotAdmin name={r.student} />;
+  // The Telegram bot is the whole site's, so only admins see it (counts only)
+  const telegram = r.admin ? await telegramStatus() : null;
+  // Keyed by course: notices and open sheets don't carry over to another course
+  return <AdminDashboard key={r.course.id} stats={r.data} meId={r.user.id} admin={r.admin} course={r.course} courses={r.courses} telegram={telegram} />;
 }

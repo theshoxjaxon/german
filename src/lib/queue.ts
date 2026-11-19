@@ -3,6 +3,7 @@
  * Everything here is a pure function of (words, cards, prefs, now).
  */
 import { SRS_DEFAULTS, type SrsConfig } from './srs';
+import { genderOf, type Article } from './text';
 import { dayIndex } from './time';
 import type { CardDoc, CardState, Dir, Prefs, StudyData, Word } from './types';
 
@@ -29,7 +30,17 @@ export function compareSource(a: Word, b: Word): number {
   return collator.compare(a.deck || '', b.deck || '') || (a.order ?? 0) - (b.order ?? 0) || (a.createdAt || 0) - (b.createdAt || 0);
 }
 
-export const sortedWords = (words: Map<string, Word>) => [...words.values()].filter((w) => w && w.term).sort(compareSource);
+/**
+ * The words in list order. Sorting a course's thousand-plus words is the slow part of building a
+ * queue, so the result is kept per words map: the store replaces the map whenever a word changes,
+ * while answers only change the cards. Read-only: callers make their own arrays (filter, slice).
+ */
+const sorted = new WeakMap<Map<string, Word>, readonly Word[]>();
+export function sortedWords(words: Map<string, Word>): readonly Word[] {
+  let list = sorted.get(words);
+  if (!list) sorted.set(words, (list = [...words.values()].filter((w) => w && w.term).sort(compareSource)));
+  return list;
+}
 
 export function deckCounts(words: Map<string, Word>): [string, number][] {
   const m = new Map<string, number>();
@@ -37,6 +48,39 @@ export function deckCounts(words: Map<string, Word>): [string, number][] {
   return [...m.entries()].sort((a, b) => collator.compare(a[0], b[0]));
 }
 export const deckNames = (words: Map<string, Word>) => deckCounts(words).map(([d]) => d).filter(Boolean);
+
+/**
+ * Where a deck is in the course: "Lektion 10", "Unit 10" or "Lesson 10" → 10, a level A1 → 1,
+ * A2 → 2, B1 → 3 … C2 → 6. Null for a deck that is neither (your own words, say).
+ */
+export function lessonNumber(deck: string | null | undefined): number | null {
+  const d = (deck ?? '').trim();
+  const lesson = /^(?:lektion|lesson|unit)\s+(\d+)$/i.exec(d);
+  if (lesson) return Number(lesson[1]);
+  const level = /^([abc])([12])$/i.exec(d);
+  return level ? (level[1].toLowerCase().charCodeAt(0) - 97) * 2 + Number(level[2]) : null;
+}
+
+/**
+ * New words for "All decks" once the teacher has set the class's lesson: that lesson first, then
+ * the ones before it, newest first (10, 9, 8 …), so a class on Lektion 10 isn't sent back to
+ * Lektion 2 first. Lessons after it wait until the class gets there (pick the deck to study one
+ * early). Other decks, like your own words, come after, as before. Without a class lesson, new
+ * words come in book order. Within a lesson, the order is kept: recognition before production.
+ */
+export function orderNewWords<T extends { word: Word }>(fresh: T[], classLesson: string | null | undefined): T[] {
+  const current = lessonNumber(classLesson);
+  if (current === null) return fresh;
+  const rank = (w: Word) => {
+    const n = lessonNumber(w.deck);
+    return n === null ? current + 1 : n <= current ? current - n : -1; // -1: later lesson, held back
+  };
+  return fresh
+    .map((x, i) => ({ x, i, r: rank(x.word) }))
+    .filter((e) => e.r >= 0)
+    .sort((a, b) => a.r - b.r || a.i - b.i)
+    .map((e) => e.x);
+}
 
 export function currentDeck(data: StudyData): string {
   const d = data.prefs.studyDeck || 'all';
@@ -83,7 +127,7 @@ export function buildQueue(data: StudyData, now: number): Queue {
   const words = sortedWords(data.words).filter((w) => deck === 'all' || (w.deck || '') === deck);
   const learning: QueueItem[] = [];
   const review: QueueItem[] = [];
-  const fresh: QueueItem[] = [];
+  let fresh: QueueItem[] = [];
   let newToday = 0;
   let reviewsToday = 0;
 
@@ -104,6 +148,7 @@ export function buildQueue(data: StudyData, now: number): Queue {
   }
   learning.sort((a, b) => a.s!.due - b.s!.due);
   review.sort((a, b) => a.s!.due - b.s!.due);
+  if (deck === 'all') fresh = orderNewWords(fresh, data.classLesson);
 
   const { prefs } = data;
   const bonus = prefs.bonusNew?.day === today ? prefs.bonusNew.n : 0;
@@ -120,6 +165,15 @@ export function buildQueue(data: StudyData, now: number): Queue {
 }
 
 /** Order: learning cards that are due → reviews → new cards → learning cards due soon. */
+/**
+ * The der/die/das quiz: on a recognition card for a noun with an article, the article is hidden
+ * and the learner picks it first. Returns the right article, or '' when there is no quiz.
+ */
+export function quizArticle(item: Pick<QueueItem, 'word' | 'dir'> | null, prefs: Pick<Prefs, 'genderQuiz'>, articles = true): Article | '' {
+  if (!item || !prefs.genderQuiz || item.dir !== 'f' || !articles) return '';
+  return genderOf(item.word.term);
+}
+
 export function pickNext(q: Queue, now: number): QueueItem | null {
   const dueLearning = q.learning.find((x) => x.s!.due <= now);
   if (dueLearning) return dueLearning;

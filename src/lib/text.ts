@@ -15,16 +15,20 @@ export function norm(s: unknown): string {
 }
 
 export type Article = 'der' | 'die' | 'das';
+export const ARTICLES: Article[] = ['der', 'die', 'das'];
 const ART_RE = /^(der|die|das)\s+(.+)$/i;
 
-/** "die Familie" → { art: 'die', rest: 'Familie' } */
-export function splitTerm(term: string): { art: Article | ''; rest: string } {
+/**
+ * "die Familie" → { art: 'die', rest: 'Familie' }. `articles`: the language has der/die/das
+ * (German); in English "die out" is just a verb.
+ */
+export function splitTerm(term: string, articles = true): { art: Article | ''; rest: string } {
   const t = String(term ?? '').trim();
-  const m = ART_RE.exec(t);
+  const m = articles ? ART_RE.exec(t) : null;
   return m ? { art: m[1].toLowerCase() as Article, rest: m[2] } : { art: '', rest: t };
 }
 
-export const genderOf = (term: string) => splitTerm(term).art;
+export const genderOf = (term: string, articles = true) => splitTerm(term, articles).art;
 
 /** Collapse spaces and lower-case a leading article: "Die  Familie" → "die Familie". */
 export function cleanTerm(t: string): string {
@@ -33,18 +37,20 @@ export function cleanTerm(t: string): string {
   return m ? `${m[1].toLowerCase()} ${m[2]}` : s;
 }
 
-export function guessPos(term: string): Pos {
+/** A first guess at the word type of a German term (English: only phrases are recognised). */
+export function guessPos(term: string, german = true): Pos {
   const t = String(term).trim();
-  if (ART_RE.test(t)) return 'noun';
+  if (german && ART_RE.test(t)) return 'noun';
   if (/[?!]$/.test(t) || /\s/.test(t)) return 'phrase';
+  if (!german) return 'other';
   if (/^[a-zäöüß]+(en|ern|eln)$/.test(t)) return 'verb';
   if (/^[A-ZÄÖÜ]/.test(t)) return 'noun';
   return 'other';
 }
 
 /** Long German compounds get a smaller font on the card. */
-export function termSizeClass(term: string): string {
-  const { rest } = splitTerm(term);
+export function termSizeClass(term: string, articles = true): string {
+  const { rest } = splitTerm(term, articles);
   const longest = Math.max(...rest.split(/\s+/).map((w) => w.length));
   return longest > 15 || rest.length > 26 ? 'is-xlong' : longest > 11 || rest.length > 16 ? 'is-long' : '';
 }
@@ -53,8 +59,8 @@ export function termSizeClass(term: string): string {
  * Split an example sentence into parts and flag the ones that are forms of the studied word,
  * e.g. sprechen → "spreche", Familie → "Familie". Returns plain text parts; the UI decides how to mark them.
  */
-export function highlightParts(example: string, term: string): { text: string; mark: boolean }[] {
-  const stems = splitTerm(term)
+export function highlightParts(example: string, term: string, articles = true): { text: string; mark: boolean }[] {
+  const stems = splitTerm(term, articles)
     .rest.split(/[\s,.?!…]+/)
     .filter((w) => w.length >= 3)
     .map((w) => {
@@ -79,3 +85,5 @@ export const parseTags = (s: string): string[] => [
 /** Ids are minted on the client, so creating a word is an idempotent PUT. */
 export const newId = () => 'w' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 export const ID_RE = /^[A-Za-z0-9_\-.~:@+]{1,120}$/;
+/** The random id a browser makes up for anonymous visit counting (a UUID). */
+export const VISITOR_RE = /^[A-Za-z0-9-]{16,64}$/;

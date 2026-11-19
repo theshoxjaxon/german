@@ -1,16 +1,24 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
+import { useT } from '@/lib/client/i18n';
 import { speak, useSpeechSupported } from '@/lib/client/speech';
+import { useCourseLang } from '@/lib/client/course';
 import { store, useStore } from '@/lib/client/store';
 import type { WordInfo } from '@/lib/queue';
 import { initials } from '@/lib/account-rules';
+import { voiceFor } from '@/lib/courses';
 import { splitTerm } from '@/lib/text';
 import { useUI } from './ui-context';
 
 /* ---------- icons (stroke icons on a 24px grid) ---------- */
 const ICONS = {
   x: '<path d="M6 6l12 12M18 6 6 18"/>',
+  back: '<path d="M15 5 8 12l7 7"/>',
+  next: '<path d="m9 5 7 7-7 7"/>',
+  down: '<path d="m6 9 6 6 6-6"/>',
+  mic: '<rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3"/>',
+  clipboard: '<rect x="5" y="4.5" width="14" height="16.5" rx="2"/><path d="M9 4.5V3h6v1.5M8.5 11.5l2 2 4-4M8.5 17h7"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   minus: '<path d="M5 12h14"/>',
   sliders: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
@@ -40,6 +48,11 @@ const ICONS = {
   image: '<rect x="3.5" y="5" width="17" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m4 17.5 5-4.5 3.5 3 3-2.5 4.5 4"/>',
   lock: '<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>',
   book: '<path d="M4 5.5c2.7-1 5.3-1 8 .8 2.7-1.8 5.3-1.8 8-.8v13c-2.7-1-5.3-1-8 .8-2.7-1.8-5.3-1.8-8-.8z"/><path d="M12 6.3v13"/>',
+  chat: '<path d="M4.5 5.5h15a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H10l-4.5 3.5v-3.5h-1a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1z"/><path d="M8 10h8M8 13h5"/>',
+  send: '<path d="M4 12 20 4.5 15.5 20l-3.2-6.3z"/><path d="M12.3 13.7 20 4.5"/>',
+  calendar: '<rect x="4" y="5.5" width="16" height="14" rx="2"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/>',
+  share: '<path d="M12 15V4M8 7.5 12 3.5l4 4"/><path d="M7 11H6a1 1 0 0 0-1 1v7.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V12a1 1 0 0 0-1-1h-1"/>',
+  flag: '<path d="M6 21V4.5M6 5c3-1.6 5.5 1.6 8.5 0s3.5-.4 3.5-.4V13s-.5-1-3.5.4S9 11.6 6 13"/>',
 } as const;
 export type IconName = keyof typeof ICONS;
 
@@ -48,9 +61,9 @@ export function Icon({ name }: { name: IconName }) {
   return <svg className="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false" dangerouslySetInnerHTML={{ __html: ICONS[name] }} />;
 }
 
-/** "die Familie" with the article in its gender colour (der blue, die red, das green). */
+/** "die Familie" with the article in its gender colour (der blue, die red, das green). Other languages: as written. */
 export function Term({ term }: { term: string }) {
-  const { art, rest } = splitTerm(term);
+  const { art, rest } = splitTerm(term, useCourseLang().articles);
   if (!art) return <>{rest}</>;
   return (
     <>
@@ -62,14 +75,15 @@ export function Term({ term }: { term: string }) {
 const STATUS_LABEL = { new: 'New', learning: 'Learning', review: 'Review', suspended: 'Paused' } as const;
 
 export function StatusPill({ info }: { info: Pick<WordInfo, 'status' | 'relearning' | 'leech'> }) {
-  const label = info.status === 'learning' && info.relearning ? 'Relearning' : STATUS_LABEL[info.status];
+  const { t } = useT();
+  const label = t(info.status === 'learning' && info.relearning ? 'Relearning' : STATUS_LABEL[info.status]);
   return (
     <>
       <span className={`pill st-${info.status}`}>
         <i />
         {label}
       </span>
-      {info.leech && <span className="leech">Leech</span>}
+      {info.leech && <span className="leech">{t('Leech')}</span>}
     </>
   );
 }
@@ -77,9 +91,12 @@ export function StatusPill({ info }: { info: Pick<WordInfo, 'status' | 'relearni
 export function SpeakButton({ text, small = false }: { text: string | undefined; small?: boolean }) {
   const supported = useSpeechSupported();
   const { prefs } = useStore();
+  const lang = useCourseLang();
+  const { t } = useT();
   if (!supported || !text) return null;
   return (
-    <button type="button" className={`speak ${small ? 'sm' : ''}`} aria-label="Play pronunciation" onClick={() => speak(text, prefs.ttsLang)}>
+    <button type="button" className={`speak ${small ? 'sm' : ''}`} aria-label={t('Play pronunciation')}
+      onClick={() => speak(text, voiceFor(prefs.ttsLang, lang), prefs.slowSpeech)}>
       <Icon name="volume" />
     </button>
   );
@@ -115,9 +132,20 @@ export function ConfirmButton({ className = 'btn', confirmLabel, onConfirm, chil
 }
 
 /** A round avatar with initials; the colour comes from the user id, so it never changes. */
-export function Avatar({ id, name, size = 'md' }: { id: string; name: string; size?: 'sm' | 'md' | 'lg' }) {
+/** A round photo (from Google) or, without one, initials on a colour picked from the id. */
+export function Avatar({ id, name, src, size = 'md' }: { id: string; name: string; src?: string | null; size?: 'sm' | 'md' | 'lg' }) {
+  const [broken, setBroken] = useState<string | null>(null);
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  if (src && broken !== src) {
+    return (
+      <span className={`avatar avatar-photo avatar-${size}`} aria-hidden="true">
+        {/* A plain <img>: a tiny, already-sized photo from Google; no-referrer, as Google's photo links expect */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt="" referrerPolicy="no-referrer" decoding="async" onError={() => setBroken(src)} />
+      </span>
+    );
+  }
   return (
     <span className={`avatar av-${h % 8} avatar-${size}`} aria-hidden="true">
       {initials(name)}
@@ -126,10 +154,16 @@ export function Avatar({ id, name, size = 'md' }: { id: string; name: string; si
 }
 
 export function LoadError() {
+  const { loadProblem } = useStore();
+  const { t } = useT();
   return (
     <div className="panel error-panel" role="alert">
-      <p>Could not load your words. Check your internet connection, then try again.</p>
-      <button className="btn" onClick={() => store.load()}>Try again</button>
+      <p>
+        {loadProblem === 'server'
+          ? t('The app’s server is having trouble right now. Your progress is safe; try again in a few minutes.')
+          : t('Could not load your words. Check your internet connection, then try again.')}
+      </p>
+      <button className="btn" onClick={() => store.load()}>{t('Try again')}</button>
     </div>
   );
 }
@@ -137,33 +171,34 @@ export function LoadError() {
 export function EmptyBox() {
   const ui = useUI();
   const { me } = useStore();
+  const { t } = useT();
   if (!me) {
     return (
       <section className="panel empty">
-        <h2>No words yet</h2>
-        <p>The teacher hasn’t added any words. Check back soon.</p>
+        <h2>{t('No words yet')}</h2>
+        <p>{t('The teacher hasn’t added any words. Check back soon.')}</p>
       </section>
     );
   }
-  if (me.role !== 'admin') {
+  if (!me.teacher) {
     return (
       <section className="panel empty">
-        <h2>No words yet</h2>
-        <p>Your teacher hasn’t added lesson words yet. You can add your own words now: only you see them.</p>
+        <h2>{t('No words yet')}</h2>
+        <p>{t('Your teacher hasn’t added lesson words yet. You can add your own words now: only you see them.')}</p>
         <div className="btn-row">
-          <button className="btn btn-primary" onClick={() => ui.openSheet({ kind: 'word', id: null })}>Add a word</button>
-          <button className="btn" onClick={() => ui.openSheet({ kind: 'import' })}>Paste a list</button>
+          <button className="btn btn-primary" onClick={() => ui.openSheet({ kind: 'word', id: null })}>{t('Add a word')}</button>
+          <button className="btn" onClick={() => ui.openSheet({ kind: 'import' })}>{t('Paste a list')}</button>
         </div>
       </section>
     );
   }
   return (
     <section className="panel empty">
-      <h2>Your card box is empty</h2>
-      <p>Add words one at a time, or paste a whole list from your lesson. Every word becomes a flashcard.</p>
+      <h2>{t('Your card box is empty')}</h2>
+      <p>{t('Add words one at a time, or paste a whole list from your lesson. Every word becomes a flashcard.')}</p>
       <div className="btn-row">
-        <button className="btn btn-primary" onClick={() => ui.openSheet({ kind: 'word', id: null })}>Add a word</button>
-        <button className="btn" onClick={() => ui.openSheet({ kind: 'import' })}>Paste a list</button>
+        <button className="btn btn-primary" onClick={() => ui.openSheet({ kind: 'word', id: null })}>{t('Add a word')}</button>
+        <button className="btn" onClick={() => ui.openSheet({ kind: 'import' })}>{t('Paste a list')}</button>
       </div>
     </section>
   );
@@ -171,10 +206,11 @@ export function EmptyBox() {
 
 export function SyncNote() {
   const { guest } = useStore();
+  const { t } = useT();
   return (
     <p className={`sync${guest ? ' is-local' : ''}`}>
       <span className="dot" />
-      {guest ? 'Progress saved on this device only' : 'Progress saved to your profile'}
+      {t(guest ? 'Progress saved on this device only' : 'Progress saved to your profile')}
     </p>
   );
 }

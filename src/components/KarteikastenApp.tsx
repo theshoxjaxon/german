@@ -1,17 +1,24 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Activity, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { CourseLangContext } from '@/lib/client/course';
 import { tick, useLocalState } from '@/lib/client/hooks';
+import { useT } from '@/lib/client/i18n';
 import { store, useStore } from '@/lib/client/store';
+import { langOf } from '@/lib/courses';
+import { courseTitle } from '@/lib/site';
 import { buildQueue, pickNext, type QueueItem } from '@/lib/queue';
 import { EMPTY_FILTERS, SORTS, type Sort } from '@/lib/words-view';
-import { AccountSheet, CheerSheet, PasswordSheet } from './AccountSheets';
+import { AccountSheet, CheerSheet } from './AccountSheets';
 import { AiSheet } from './AiSheet';
 import { BrandMark } from './auth/AuthShell';
 import { ClassView } from './ClassView';
+import { CoursePicker, CoursePill, CourseSheet } from './CourseViews';
 import { GuestActions, LockedView } from './GuestViews';
 import { ReviewSession } from './ReviewSession';
 import { SettingsSheet } from './SettingsSheet';
+import { TestsView } from './tests/TestsView';
 import { StatsView } from './StatsView';
 import { StudyView } from './StudyView';
 import { Avatar, Icon, type IconName } from './ui';
@@ -20,26 +27,42 @@ import { CsvSheet, FieldsSheet, FilterSheet, MoreSheet, SortSheet } from './Word
 import { ImportSheet } from './ImportSheet';
 import { DEFAULT_FIELDS, WordsView, isFieldList } from './WordsView';
 import { WordSheet } from './WordSheet';
+import { goal, visitParams } from '@/lib/client/metrica';
 
 const TABS: { id: Tab; label: string; icon: IconName }[] = [
   { id: 'study', label: 'Study', icon: 'cards' },
   { id: 'words', label: 'Words', icon: 'table' },
+  { id: 'tests', label: 'Tests', icon: 'clipboard' },
   { id: 'class', label: 'Class', icon: 'people' },
   { id: 'stats', label: 'Progress', icon: 'chart' },
 ];
 const DEFAULT_SORT: Sort = { key: 'source', dir: 'asc' };
-const isTab = (v: unknown) => v === 'study' || v === 'words' || v === 'class' || v === 'stats';
+const isTab = (v: unknown) => v === 'study' || v === 'words' || v === 'tests' || v === 'class' || v === 'stats';
 const isLayout = (v: unknown) => v === 'table' || v === 'gallery';
 const isSort = (v: unknown) =>
   !!v && typeof v === 'object' && (v as Sort).key in SORTS && ((v as Sort).dir === 'asc' || (v as Sort).dir === 'desc');
 
-export default function KarteikastenApp() {
-  const { me, guest } = useStore();
-  const [tab, setTab] = useLocalState<Tab>('kk.tab', 'study', isTab);
+/** The app, on a course's page (/german, /english): `urlCourse` is the course in the address. */
+export default function KarteikastenApp({ urlCourse }: { urlCourse?: string }) {
+  const { me, guest, status, course } = useStore();
+  const router = useRouter();
+  const [opened, setOpened] = useState(false); // the address's course has been loaded
+  const { t, lang } = useT();
+  const [savedTab, setTab] = useLocalState<Tab>('kk.tab', 'study', isTab);
   const [layout, setLayout] = useLocalState<Layout>('kk.layout', 'table', isLayout);
   const [sort, setSort] = useLocalState<Sort>('kk.sort', DEFAULT_SORT, isSort);
   const [fields, setFields] = useLocalState<string[]>('kk.fields', DEFAULT_FIELDS, isFieldList);
   const [query, setQueryState] = useState<WordsQuery>({ q: '', filters: EMPTY_FILTERS });
+  // A search or filter (by deck, say) belongs to one course: start fresh after switching.
+  const [queryCourse, setQueryCourse] = useState(course?.id);
+  if (queryCourse !== course?.id) {
+    setQueryCourse(course?.id);
+    setQueryState({ q: '', filters: EMPTY_FILTERS });
+  }
+  const picking = status === 'ready' && guest && !course; // a guest who hasn't picked a course yet
+  const hasTests = (course?.tests ?? 0) > 0; // the Tests tab is there only for courses with mock tests
+  const tab: Tab = savedTab === 'tests' && !hasTests ? 'study' : savedTab;
+  const studied = langOf(course); // one object per language, so this only changes with the course
   const [sheet, setSheet] = useState<SheetSpec | null>(null);
   const [sheetClosing, setSheetClosing] = useState(false);
   const [review, setReview] = useState<{ first: QueueItem | null; startedAt: number } | null>(null);
@@ -74,6 +97,7 @@ export default function KarteikastenApp() {
 
   const startReview = useCallback(() => {
     const now = Date.now();
+    goal('study_start', { course: store.getSnapshot().course?.id ?? '' });
     setReview({ first: pickNext(buildQueue(store.getSnapshot(), now), now), startedAt: now });
   }, []);
   const endReview = useCallback(() => {
@@ -85,7 +109,8 @@ export default function KarteikastenApp() {
   // (so progress made on your phone shows up on your laptop and the other way round).
   useEffect(() => {
     store.setErrorHandler(toast);
-    store.load();
+    let live = true;
+    void store.load(urlCourse).then(() => live && setOpened(true));
     const refresh = () => {
       if (document.hidden) return;
       tick();
@@ -95,10 +120,55 @@ export default function KarteikastenApp() {
     document.addEventListener('visibilitychange', refresh);
     window.addEventListener('focus', refresh);
     return () => {
+      live = false;
       document.removeEventListener('visibilitychange', refresh);
       window.removeEventListener('focus', refresh);
     };
-  }, [toast]);
+  }, [toast, urlCourse]);
+
+  // The address follows the course: switching to English in the app shows /english (no reload)
+  const courseId = course?.id;
+  // Metrica: a new profile arrives as /app?joined=email|google (once), and what this visit is about
+  useEffect(() => {
+    if (!opened) return;
+    const url = new URL(window.location.href);
+    const joined = url.searchParams.get('joined');
+    if (joined === 'email' || joined === 'google') {
+      url.searchParams.delete('joined');
+      window.history.replaceState(null, '', url.pathname + url.search + url.hash); // first, so the goal carries the clean address
+      goal('signup', { method: joined });
+    }
+  }, [opened]);
+  const signedIn = !!me;
+  const isTeacher = !!me?.teacher;
+  useEffect(() => {
+    if (opened && courseId) visitParams({ course: courseId, ui_lang: lang, signed_in: signedIn, teacher: isTeacher });
+  }, [opened, courseId, lang, signedIn, isTeacher]);
+  useEffect(() => {
+    if (!opened || !courseId || !urlCourse) return;
+    const want = `/${courseId}`;
+    if (window.location.pathname !== want) window.history.replaceState(null, '', want + window.location.search + window.location.hash);
+  }, [opened, courseId, urlCourse]);
+  // …and so does the tab's title: the same one the server gave the page (search engines read it too)
+  const courseName = course && t(langOf(course).name);
+  useEffect(() => {
+    if (opened && courseId && courseName && urlCourse) document.title = courseTitle(courseId, courseName);
+  }, [opened, courseId, courseName, urlCourse]);
+
+  // A guest without a course (the address named one that doesn't exist): pick one on the welcome page
+  useEffect(() => {
+    if (opened && picking && urlCourse) router.replace('/');
+  }, [opened, picking, urlCourse, router]);
+
+  // /lets-study-together arrives as /german#study: open the Class tab (its study card opens the page)
+  useEffect(() => {
+    if (window.location.hash === '#study') setTab('class');
+  }, [setTab]);
+
+  // Screen readers and the browser's spell checking follow the interface language.
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
 
   // Escape closes the open sheet; "/" jumps to the word search.
   useEffect(() => {
@@ -126,59 +196,77 @@ export default function KarteikastenApp() {
     [tab, setTab, openSheet, closeSheet, sheetClosing, toast, startReview, query, layout, setLayout, sort, setSort, fields, setFields],
   );
 
+  /*
+   * Only the open tab is live. The others (and all of them while a study session covers the
+   * screen) are hidden with React's <Activity>: they keep their state and scroll position, but
+   * their updates wait until the browser is idle, so an answer never waits for the word table.
+   */
+  const view = (id: Tab) => (!picking && !review && tab === id ? 'visible' : 'hidden');
+
   return (
     <UIContext.Provider value={ui}>
-      <div className="app">
-        <header className="appbar">
-          <span className="appbar-brand">
-            <BrandMark size={26} />
-            Karteikasten
-          </span>
-          {me && (
-            <button className="appbar-user" onClick={() => openSheet({ kind: 'account' })} aria-label={`Your profile, ${me.displayName}`}>
-              <span className="appbar-name">{me.displayName.split(' ')[0]}</span>
-              <Avatar id={me.id} name={me.displayName} size="sm" />
-            </button>
-          )}
-          {guest && <GuestActions />}
-        </header>
-        <main className="views">
-          <section className="view" aria-label="Study" hidden={tab !== 'study'}>
-            <StudyView />
-          </section>
-          {/* Guests practise the flashcards; the other sections come with a free profile. */}
-          <section className={`view${guest ? '' : ' view-words'}`} aria-label="Words" hidden={tab !== 'words'}>
-            {guest ? <LockedView feature="words" /> : <WordsView />}
-          </section>
-          <section className="view" aria-label="Class" hidden={tab !== 'class'}>
-            {guest ? <LockedView feature="class" /> : <ClassView active={tab === 'class'} />}
-          </section>
-          <section className="view" aria-label="Progress" hidden={tab !== 'stats'}>
-            {guest ? <LockedView feature="stats" /> : <StatsView />}
-          </section>
-        </main>
-        <nav className="tabbar" aria-label="Sections">
-          {TABS.map((t) => {
-            const locked = guest && t.id !== 'study';
-            return (
-              <button key={t.id} className="tab" aria-current={tab === t.id ? 'page' : 'false'} onClick={() => setTab(t.id)}
-                aria-label={locked ? `${t.label} (needs a profile)` : undefined}>
-                <span className="tab-ic">
-                  <Icon name={t.icon} />
-                  {locked && <span className="tab-lock"><Icon name="lock" /></span>}
-                </span>
-                {t.label}
+      <CourseLangContext value={studied}>
+        <div className="app">
+          <header className="appbar">
+            <span className="appbar-brand">
+              <BrandMark size={26} />
+              <span className="appbar-word">Karteikasten</span>
+            </span>
+            <CoursePill />
+            {me && (
+              <button className="appbar-user" onClick={() => openSheet({ kind: 'account' })} aria-label={t('Your profile, {name}', { name: me.displayName })}>
+                <span className="appbar-name">{me.displayName.split(' ')[0]}</span>
+                <Avatar id={me.id} name={me.displayName} src={me.avatarUrl} size="sm" />
               </button>
-            );
-          })}
-        </nav>
-      </div>
+            )}
+            {guest && <GuestActions />}
+          </header>
+          <main className="views">
+            {picking && <section className="view"><CoursePicker /></section>}
+            <Activity mode={view('study')}>
+              <section className="view" aria-label={t('Study')}><StudyView /></section>
+            </Activity>
+            {/* Guests practise the flashcards and browse the words (read-only); Class and Progress come with a free profile. */}
+            <Activity mode={view('words')}>
+              <section className="view view-words" aria-label={t('Words')}><WordsView /></section>
+            </Activity>
+            {hasTests && (
+              <Activity mode={view('tests')}>
+                <section className="view" aria-label={t('Tests')}>{guest ? <LockedView feature="tests" /> : <TestsView active={tab === 'tests'} />}</section>
+              </Activity>
+            )}
+            <Activity mode={view('class')}>
+              <section className="view" aria-label={t('Class')}>
+                {guest ? <LockedView feature="class" /> : <ClassView active={tab === 'class'} />}
+              </section>
+            </Activity>
+            <Activity mode={view('stats')}>
+              <section className="view" aria-label={t('Progress')}>{guest ? <LockedView feature="stats" /> : <StatsView />}</section>
+            </Activity>
+          </main>
+          <nav className="tabbar" aria-label={t('Sections')} hidden={picking}>
+            {TABS.filter((tb) => tb.id !== 'tests' || hasTests).map((tb) => {
+              const locked = guest && (tb.id === 'class' || tb.id === 'stats' || tb.id === 'tests');
+              return (
+                <button key={tb.id} className="tab" aria-current={tab === tb.id ? 'page' : 'false'} onClick={() => setTab(tb.id)}
+                  aria-label={locked ? t('{label} (needs a profile)', { label: t(tb.label) }) : undefined}>
+                  <span className="tab-ic">
+                    <Icon name={tb.icon} />
+                    {locked && <span className="tab-lock"><Icon name="lock" /></span>}
+                  </span>
+                  {t(tb.label)}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
 
-      {review && <ReviewSession first={review.first} startedAt={review.startedAt} onClose={endReview} />}
-      {sheet && <SheetHost spec={sheet} />}
-      <div className={`toast${toastState.visible ? ' show' : ''}`} role="status" aria-live="polite">
-        {toastState.message}
-      </div>
+        {review && <ReviewSession first={review.first} startedAt={review.startedAt} onClose={endReview} />}
+        {sheet && <SheetHost spec={sheet} />}
+        <div className={`toast${toastState.visible ? ' show' : ''}`} role="status" aria-live="polite">
+          {t(toastState.message)}
+        </div>
+      </CourseLangContext>
     </UIContext.Provider>
   );
 }
@@ -205,9 +293,9 @@ function SheetHost({ spec }: { spec: SheetSpec }) {
       return <CsvSheet text={spec.text} />;
     case 'account':
       return <AccountSheet />;
-    case 'password':
-      return <PasswordSheet />;
     case 'cheer':
       return <CheerSheet to={spec.to} />;
+    case 'course':
+      return <CourseSheet />;
   }
 }

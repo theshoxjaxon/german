@@ -1,22 +1,29 @@
 /**
- * A tiny fixed-window rate limiter kept in memory, to slow down password guessing.
- * Per server process: fine for one server. Behind several instances, use a shared store (e.g. Redis).
+ * Rate limits kept in the database, so they hold across every server instance (Vercel runs
+ * many, and each starts empty). A fixed window per key: the first hit opens it, and after `max`
+ * hits the action is refused until the window ends. Keys are stored as SHA-256 hashes, so no
+ * email address or IP address is kept in plain text.
  */
+import { createHash } from 'node:crypto';
 import { headers } from 'next/headers';
+import { getDb } from './db';
 
-const g = globalThis as typeof globalThis & { __kkRate?: Map<string, { n: number; reset: number }> };
-const buckets = (g.__kkRate ??= new Map());
+const hashKey = (key: string) => createHash('sha256').update(key).digest('hex');
 
-/** Returns true if the action is allowed, false if the limit is reached. */
-export function hit(key: string, max: number, windowMs: number, now = Date.now()): boolean {
-  if (buckets.size > 10_000) for (const [k, b] of buckets) if (b.reset < now) buckets.delete(k);
-  const b = buckets.get(key);
-  if (!b || b.reset < now) {
-    buckets.set(key, { n: 1, reset: now + windowMs });
-    return true;
-  }
-  b.n++;
-  return b.n <= max;
+/** Count one attempt. True if it is allowed, false once the limit is reached. One round trip. */
+export async function hit(key: string, max: number, windowMs: number, now = Date.now()): Promise<boolean> {
+  const db = await getDb();
+  const r = await db.query<{ hits: number }>(
+    `INSERT INTO rate_limits (key, hits, reset_at) VALUES ($1, 1, $3)
+     ON CONFLICT (key) DO UPDATE SET
+       hits     = CASE WHEN rate_limits.reset_at <= $2 THEN 1 ELSE rate_limits.hits + 1 END,
+       reset_at = CASE WHEN rate_limits.reset_at <= $2 THEN excluded.reset_at ELSE rate_limits.reset_at END
+     RETURNING hits`,
+    [hashKey(key), now, now + windowMs],
+  );
+  // Housekeeping now and then: windows that are over count for nothing
+  if (Math.random() < 0.02) await db.query('DELETE FROM rate_limits WHERE reset_at <= $1', [now]);
+  return Number(r.rows[0]?.hits ?? 1) <= max;
 }
 
 /** Best-effort client address (behind a proxy, the first X-Forwarded-For entry). */

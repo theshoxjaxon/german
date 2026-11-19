@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { langOf, LANGS, voiceFor } from './courses';
 import { parseList, suggestDeck } from './import-parser';
-import { buildQueue, pickNext } from './queue';
+import { buildQueue, lessonNumber, orderNewWords, pickNext, quizArticle, sortedWords } from './queue';
 import { packWords, SEED_PACKS } from './seed';
 import { answer } from './srs';
 import { cleanTerm, guessPos, highlightParts, norm, splitTerm } from './text';
@@ -55,6 +56,48 @@ describe('import parser', () => {
   });
 });
 
+describe('the class lesson', () => {
+  const allPacks = (): StudyData => {
+    const words = new Map<string, ReturnType<typeof packWords>[string]>();
+    for (const pack of SEED_PACKS.filter((p) => p.course === 'german')) for (const [id, w] of Object.entries(packWords(pack, NOW - 1000))) words.set(id, w);
+    return { words, cards: new Map(), prefs: DEFAULT_PREFS };
+  };
+  const decksOf = (q: ReturnType<typeof buildQueue>) => [...new Set(q.fresh.map((x) => x.word.deck))];
+
+  it('reads lesson numbers from deck names', () => {
+    expect(lessonNumber('Lektion 10')).toBe(10);
+    expect(lessonNumber(' lektion 2 ')).toBe(2);
+    expect(lessonNumber('My words')).toBeNull();
+    expect(lessonNumber(null)).toBeNull();
+  });
+
+  it('without one, brings in new words in book order', () => {
+    expect(decksOf(buildQueue(allPacks(), NOW))[0]).toBe('Lektion 1');
+  });
+
+  it('starts "All decks" at the class lesson, goes back from there, and holds later lessons back', () => {
+    const q = buildQueue({ ...allPacks(), classLesson: 'Lektion 8' }, NOW);
+    expect(decksOf(q)).toEqual(['Lektion 8', 'Lektion 7', 'Lektion 6', 'Lektion 5', 'Lektion 4', 'Lektion 3', 'Lektion 2', 'Lektion 1']);
+    expect(pickNext(q, NOW)?.word.deck).toBe('Lektion 8');
+    // With both directions on, recognition still comes before production within a lesson
+    const both = buildQueue({ ...allPacks(), classLesson: 'Lektion 8', prefs: { ...DEFAULT_PREFS, dirF: true, dirR: true } }, NOW);
+    const l8 = both.fresh.filter((x) => x.word.deck === 'Lektion 8');
+    expect(l8.findIndex((x) => x.dir === 'r')).toBeGreaterThan(0);
+    expect(l8.findIndex((x) => x.dir === 'r')).toBeGreaterThan(l8.findLastIndex((x) => x.dir === 'f'));
+  });
+
+  it('leaves a chosen deck alone, even a later lesson', () => {
+    const q = buildQueue({ ...allPacks(), classLesson: 'Lektion 8', prefs: { ...DEFAULT_PREFS, studyDeck: 'Lektion 10' } }, NOW);
+    expect(decksOf(q)).toEqual(['Lektion 10']);
+  });
+
+  it('puts decks that are not lessons (your own words) after the lessons', () => {
+    const w = (deck: string) => ({ word: { deck } as never });
+    const out = orderNewWords([w('My words'), w('Lektion 2'), w('Lektion 9'), w('Lektion 4')], 'Lektion 4');
+    expect(out.map((x) => (x.word as { deck: string }).deck)).toEqual(['Lektion 4', 'Lektion 2', 'My words']);
+  });
+});
+
 describe('study queue', () => {
   it('starts with 20 new cards in list order', () => {
     const q = buildQueue(data(), NOW);
@@ -71,9 +114,29 @@ describe('study queue', () => {
     expect(pickNext(buildQueue(data({ 'l3-familie': { f, r: null, suspended: false, updatedAt: NOW } }), NOW + 10 * 60_000), NOW + 10 * 60_000)?.word.term).toBe('die Familie');
   });
 
+  it('sorts the words once per word list, not once per answer', () => {
+    const d = data();
+    const first = sortedWords(d.words);
+    expect(sortedWords(d.words)).toBe(first); // same words: the sorted list is reused
+    const words = new Map(d.words);
+    const w = words.get('l3-familie')!;
+    words.set(w.id, { ...w, order: 999 }); // a changed word comes as a new map, like the store does
+    const again = sortedWords(words);
+    expect(again).not.toBe(first);
+    expect(again.at(-1)?.id).toBe('l3-familie');
+  });
+
   it('skips paused words', () => {
     const q = buildQueue(data({ 'l3-familie': { f: null, r: null, suspended: true, updatedAt: NOW } }), NOW);
     expect(pickNext(q, NOW)?.word.term).toBe('die Mutter');
+  });
+
+  it('quizzes the article on recognition cards for nouns only', () => {
+    const item = pickNext(buildQueue(data(), NOW), NOW)!; // die Familie
+    expect(quizArticle(item, { genderQuiz: true })).toBe('die');
+    expect(quizArticle(item, { genderQuiz: false })).toBe('');
+    expect(quizArticle({ ...item, dir: 'r' }, { genderQuiz: true })).toBe(''); // production cards ask for the whole word
+    expect(quizArticle({ ...item, word: { ...item.word, term: 'heißen' } }, { genderQuiz: true })).toBe(''); // no article
   });
 });
 
@@ -87,5 +150,37 @@ describe('words view', () => {
   it('sorts A–Z by the noun, ignoring der/die/das', () => {
     const rows = visibleRows(data(), NOW, '', EMPTY_FILTERS, { key: 'term', dir: 'asc' });
     expect(rows.slice(0, 5).map((r) => r.w.term)).toEqual(['dein', 'doch', 'ein bisschen', 'das Enkelkind', 'die Familie']);
+  });
+});
+
+describe('languages', () => {
+  const english = (term: string, deck = 'A1') => ({ ...packWords(SEED_PACKS[0], NOW)['l3-familie'], id: `en-${term}`, term, deck });
+
+  it('reads levels and units as places in the course', () => {
+    expect(['A1', 'a2', 'B1', 'B2', 'C1', 'C2'].map(lessonNumber)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(lessonNumber('Unit 4')).toBe(4);
+    expect(lessonNumber('Lesson 12')).toBe(12);
+    expect(lessonNumber('A3')).toBeNull();
+    const w = (deck: string) => ({ word: { deck } as never });
+    const out = orderNewWords([w('A1'), w('B2'), w('A2'), w('B1'), w('My words')], 'B1');
+    expect(out.map((x) => (x.word as { deck: string }).deck)).toEqual(['B1', 'A2', 'A1', 'My words']); // B2 waits
+  });
+
+  it('has der/die/das only in German', () => {
+    expect(splitTerm('die out', false)).toEqual({ art: '', rest: 'die out' });
+    expect(guessPos('Apple', false)).toBe('other'); // capitalised is a German noun, not an English one
+    const item = { word: english('die out'), dir: 'f' as const };
+    expect(quizArticle(item, { genderQuiz: true }, false)).toBe('');
+    const words = new Map([['en-die out', english('die out')], ['en-apple', english('apple')]]);
+    const study: StudyData = { words, cards: new Map(), prefs: DEFAULT_PREFS, course: { targetLang: 'en' } };
+    expect(visibleRows(study, NOW, '', { ...EMPTY_FILTERS, gender: ['die'] }, { key: 'source', dir: 'asc' })).toHaveLength(2); // no gender filter
+    expect(visibleRows(study, NOW, '', EMPTY_FILTERS, { key: 'term', dir: 'asc' }).map((r) => r.w.term)).toEqual(['apple', 'die out']);
+  });
+
+  it('reads aloud in the language of the course', () => {
+    expect(voiceFor('de-AT', LANGS.de)).toBe('de-AT');
+    expect(voiceFor('de-AT', LANGS.en)).toBe('en-GB'); // a German voice can't read English
+    expect(voiceFor('en-US', LANGS.en)).toBe('en-US');
+    expect(langOf(null)).toBe(LANGS.de);
   });
 });

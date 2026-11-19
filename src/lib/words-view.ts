@@ -1,5 +1,6 @@
 /** Search, filter and sort for the Words (database) tab. */
 import { compareText, sortedWords, wordInfo, type WordInfo } from './queue';
+import { langOf } from './courses';
 import { genderOf, norm, splitTerm } from './text';
 import { dayIndex } from './time';
 import { POS_LABEL, type StudyData, type Word } from './types';
@@ -37,9 +38,9 @@ export interface Row {
   i: WordInfo;
 }
 
-function sortValue(key: SortKey, w: Word, i: WordInfo): string | number | null {
+function sortValue(key: SortKey, w: Word, i: WordInfo, articles: boolean): string | number | null {
   switch (key) {
-    case 'term': return splitTerm(w.term).rest;
+    case 'term': return splitTerm(w.term, articles).rest;
     case 'status': return ['learning', 'review', 'new', 'suspended'].indexOf(i.status);
     case 'due': return i.dueMs;
     case 'ease': return i.ease;
@@ -60,11 +61,12 @@ export function matchesStatus(value: string, i: WordInfo): boolean {
 export function visibleRows(data: StudyData, now: number, q: string, f: Filters, sort: Sort): Row[] {
   const today = dayIndex(now);
   const qn = norm(q);
+  const { articles } = langOf(data.course);
   const rows: Row[] = [];
   for (const w of sortedWords(data.words)) {
     const i = wordInfo(data, w, today);
     if (f.deck.length && !f.deck.includes(w.deck || '')) continue;
-    if (f.gender.length && !f.gender.includes(genderOf(w.term) || 'none')) continue;
+    if (f.gender.length && articles && !f.gender.includes(genderOf(w.term) || 'none')) continue;
     if (f.pos.length && !f.pos.includes(w.pos || 'other')) continue;
     if (f.tag.length && !(w.tags || []).some((t) => f.tag.includes(t))) continue;
     if (f.status.length && !f.status.some((s) => matchesStatus(s, i))) continue;
@@ -81,8 +83,8 @@ export function visibleRows(data: StudyData, now: number, q: string, f: Filters,
   const sign = sort.dir === 'desc' ? -1 : 1;
   // Array.prototype.sort is stable, so ties keep list order.
   return rows.sort((a, b) => {
-    const va = sortValue(sort.key, a.w, a.i);
-    const vb = sortValue(sort.key, b.w, b.i);
+    const va = sortValue(sort.key, a.w, a.i, articles);
+    const vb = sortValue(sort.key, b.w, b.i, articles);
     const ea = va == null || va === '';
     const eb = vb == null || vb === '';
     if (ea || eb) return ea === eb ? 0 : ea ? 1 : -1; // empty values always last

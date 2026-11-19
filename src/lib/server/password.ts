@@ -1,39 +1,26 @@
 /**
- * Password hashing with scrypt (built into Node, no extra dependency).
+ * Password hashing with bcrypt (bcryptjs: plain JavaScript, so it runs anywhere Node does).
  *
- * Stored format: scrypt$N$r$p$<salt base64>$<hash base64>
- * Keeping the parameters in the string means they can be raised later without
- * breaking existing accounts.
+ * The stored string ($2b$11$…) carries its own salt and cost, so the cost can be raised later
+ * without breaking existing accounts. bcrypt reads only the first 72 bytes of a password;
+ * longer ones are refused when they're chosen (auth-schemas.ts) instead of silently cut.
  */
-import { randomBytes, scrypt as scryptCb, timingSafeEqual, type ScryptOptions } from 'node:crypto';
+import { compare, hash } from 'bcryptjs';
+import { randomBytes } from 'node:crypto';
 
-const scrypt = (password: string, salt: Buffer, keylen: number, opts: ScryptOptions) =>
-  new Promise<Buffer>((resolve, reject) => scryptCb(password, salt, keylen, opts, (err, key) => (err ? reject(err) : resolve(key))));
-
-const N = 2 ** 15; // CPU/memory cost: ~32 MB and ~50 ms per hash
-const R = 8;
-const P = 1;
-const KEYLEN = 32;
-const MAXMEM = 64 * 1024 * 1024;
+const COST = 11; // about 150 ms per hash on a server: slow for a guesser, unnoticeable for a person
 
 export async function hashPassword(password: string): Promise<string> {
-  const salt = randomBytes(16);
-  const key = await scrypt(password.normalize('NFKC'), salt, KEYLEN, { N, r: R, p: P, maxmem: MAXMEM });
-  return `scrypt$${N}$${R}$${P}$${salt.toString('base64')}$${key.toString('base64')}`;
+  return hash(password.normalize('NFKC'), COST);
 }
 
-export async function verifyPassword(password: string, stored: string): Promise<boolean> {
-  const [alg, n, r, p, saltB64, hashB64] = stored.split('$');
-  if (alg !== 'scrypt' || !saltB64 || !hashB64) return false;
-  const expected = Buffer.from(hashB64, 'base64');
-  const key = await scrypt(password.normalize('NFKC'), Buffer.from(saltB64, 'base64'), expected.length, {
-    N: Number(n), r: Number(r), p: Number(p), maxmem: MAXMEM,
-  });
-  // Constant-time comparison, so response timing reveals nothing about the hash.
-  return key.length === expected.length && timingSafeEqual(key, expected);
+/** False when there is no password (a Google-only profile) or it doesn't match. */
+export async function verifyPassword(password: string, stored: string | null): Promise<boolean> {
+  if (!stored?.startsWith('$2')) return false;
+  return compare(password.normalize('NFKC'), stored);
 }
 
-/** A hash of a random password, used to spend the same time when a username does not exist. */
+/** A hash of a random password, used to spend the same time when an email has no password to check. */
 let dummy: Promise<string> | null = null;
 export async function burnPasswordCheck(password: string): Promise<void> {
   dummy ??= hashPassword(randomBytes(12).toString('hex'));

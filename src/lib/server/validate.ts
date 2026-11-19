@@ -1,6 +1,6 @@
 /** Input validation for the API routes. Anything a client sends is checked before it is stored. */
 import { ID_RE } from '../text';
-import { DEFAULT_PREFS, POS_OPTIONS, RATINGS, type CardDoc, type CardState, type CardType, type LogEntry, type Prefs, type WordData } from '../types';
+import { DEFAULT_PREFS, POS_OPTIONS, RATINGS, UI_LANGS, type CardDoc, type CardState, type CardType, type LogEntry, type Prefs, type WordData } from '../types';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
@@ -80,6 +80,10 @@ export function sanitizePrefs(v: unknown, base: Prefs = DEFAULT_PREFS): Prefs {
     relearnSteps: steps(v.relearnSteps, base.relearnSteps),
     autoplay: typeof v.autoplay === 'boolean' ? v.autoplay : base.autoplay,
     ttsLang: /^[a-z]{2}(-[A-Z]{2})?$/.test(String(v.ttsLang)) ? String(v.ttsLang) : base.ttsLang,
+    slowSpeech: typeof v.slowSpeech === 'boolean' ? v.slowSpeech : base.slowSpeech,
+    genderQuiz: typeof v.genderQuiz === 'boolean' ? v.genderQuiz : base.genderQuiz,
+    dailyGoal: clamp(v.dailyGoal, 0, 500, base.dailyGoal),
+    ...(UI_LANGS.includes(v.uiLang as never) ? { uiLang: v.uiLang as Prefs['uiLang'] } : base.uiLang ? { uiLang: base.uiLang } : {}),
     studyDeck: typeof v.studyDeck === 'string' ? v.studyDeck.slice(0, 80) : base.studyDeck,
     bonusNew: bonus,
   };

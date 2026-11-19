@@ -171,3 +171,8 @@ html:has(.wf) body { height: auto; overflow-x: hidden; overscroll-behavior: auto
 .wf .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 80; padding: 12px 18px; border-radius: 999px; background: #212838; border: 1px solid var(--line); font-size: 14px; }
 .wf .route { position: fixed; left: 0; top: 0; height: 2px; z-index: 90; background: var(--lime); }
 @media (prefers-reduced-motion: reduce) { .wf * { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+/* the "what is this app" text under the home page, in the dark look */
+.wf-about { --bg:#0B0E14; --surface:#11151D; --line:rgba(255,255,255,.08); --ink:#F2F4F8; --ink-2:#A3ABBA; --rule-red:rgba(255,255,255,.1); --mark:#9BE15D; min-height: 0; font-size: 15px; }
+.wf-about .about { background: var(--bg); }
+.wf-about a { color: var(--ink); }

@@ -1,17 +1,18 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { tick, useLocalState, useNow } from '@/lib/client/hooks';
+import { tick, useNow } from '@/lib/client/hooks';
 import { speak } from '@/lib/client/speech';
 import { store, useStore, type Snapshot } from '@/lib/client/store';
-import { LANGS, langOf, type Lang } from '@/lib/langs';
+import { LANGS, type Lang } from '@/lib/langs';
+import { LANGS as COURSE_LANGS } from '@/lib/courses';
 import { buildQueue, srsConfig, type QueueItem } from '@/lib/queue';
 import { answer, preview } from '@/lib/srs';
 import { DAY, dayIndex, fmtSpan, HOUR, MIN, ROLLOVER_HOUR } from '@/lib/time';
 import { CHEERS, type CardDoc, type CheerKind, type Rating, type StudyData } from '@/lib/types';
 
-const isLang = (v: unknown) => LANGS.some((l) => l.id === v && l.on);
 const initial = (name: string) => (name.trim()[0] || '?').toUpperCase();
 
 /* ---------- derived numbers (no extra backend: everything comes from your cards) ---------- */
@@ -39,71 +40,150 @@ function untilRollover(now: number) {
   const h = Math.floor(left / HOUR), m = Math.floor((left % HOUR) / MIN);
   return { long: `${h}h ${String(m).padStart(2, '0')}m`, short: `${h}h` };
 }
-function langData(snap: Snapshot, lang: string): StudyData {
-  const words = new Map([...snap.words].filter(([, w]) => langOf(w) === lang));
-  return { words, cards: snap.cards, prefs: { ...snap.prefs, studyDeck: 'all' } };
-}
 
 type Sheet = { kind: 'ping'; id: string; name: string } | { kind: 'me' } | null;
-interface StageSpec { title: string; items: QueueItem[]; lang: Lang }
+interface StageSpec { heading: string; items: QueueItem[]; lang: Lang; speech: string }
 
-export default function Wordfield() {
-  const snap = useStore();
+const studyData = (snap: Snapshot): StudyData => ({ words: snap.words, cards: snap.cards, prefs: { ...snap.prefs, studyDeck: 'all' } });
+const SAMPLE: Record<string, string> = { de: 'der Hund', en: 'hello' };
+
+function useToast() {
+  const [msg, setMsg] = useState('');
+  const toast = useCallback((m: string) => {
+    setMsg(m);
+    setTimeout(() => setMsg((cur) => (cur === m ? '' : cur)), 2600);
+  }, []);
+  return [msg, toast] as const;
+}
+
+/* ---------- home (/): pick a language ---------- */
+interface CourseRow { id: string; name: string; targetLang: string; words: number }
+export function WordfieldHome() {
   const now = useNow();
-  const [view, setView] = useState<'home' | 'dash'>('home');
-  const [langId, setLangId] = useLocalState('wf.lang', 'de', isLang);
+  const [data, setData] = useState<{ courses: CourseRow[]; current: string | null; signedIn: boolean } | null>(null);
   const [query, setQuery] = useState('');
-  const [menu, setMenu] = useState(false);
-  const [stage, setStage] = useState<StageSpec | null>(null);
-  const [sheet, setSheet] = useState<Sheet>(null);
-  const [toastMsg, setToastMsg] = useState('');
+  const [toastMsg, toast] = useToast();
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const toast = useCallback((m: string) => {
-    setToastMsg(m);
-    setTimeout(() => setToastMsg((cur) => (cur === m ? '' : cur)), 2600);
-  }, []);
-
   useEffect(() => {
-    store.setErrorHandler(toast);
-    store.load();
-    const refresh = () => { if (!document.hidden) { tick(); store.load(); } };
-    document.addEventListener('visibilitychange', refresh);
-    return () => document.removeEventListener('visibilitychange', refresh);
-  }, [toast]);
-  useEffect(() => { if (snap.me) store.loadClass(); }, [snap.me]);
+    fetch('/api/courses', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then(setData, () => {});
+  }, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement;
-      if (e.key === '/' && view === 'home' && !/INPUT|TEXTAREA/.test(t.tagName)) { e.preventDefault(); searchRef.current?.focus(); }
-      if (e.key === 'Escape') { setMenu(false); setSheet(null); }
+      if (e.key === '/' && !/INPUT|TEXTAREA/.test((e.target as HTMLElement).tagName)) { e.preventDefault(); searchRef.current?.focus(); }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [view]);
+  }, []);
 
-  const lang = LANGS.find((l) => l.id === langId) ?? LANGS[0];
-  const comingSoon = (l: Lang) => toast(`${l.name} is coming soon.`);
-  const pick = (l: Lang) => {
-    if (!l.on) return comingSoon(l);
-    setLangId(l.id);
-    setMenu(false);
-    setView('dash');
-    window.scrollTo(0, 0);
-  };
-
-  const counts = useMemo(() => {
-    const o: Record<string, number> = {};
-    snap.words.forEach((w) => (o[langOf(w)] = (o[langOf(w)] || 0) + 1));
-    return o;
-  }, [snap.words]);
+  const q = query.trim().toLowerCase();
+  const langs = LANGS.filter((l) => !q || [l.name, l.native, l.code].some((x) => x.toLowerCase().includes(q)));
+  const cd = now ? untilRollover(now) : { long: '', short: '' };
+  const courseOf = (l: Lang) => data?.courses.find((c) => c.targetLang === l.targetLang)?.id ?? l.course;
+  const wordsOf = (l: Lang) => (data?.courses ?? []).filter((c) => c.targetLang === l.targetLang).reduce((n, c) => n + c.words, 0);
+  const total = LANGS.reduce((n, l) => n + (l.course ? wordsOf(l) : 0), 0);
+  const open = LANGS.filter((l) => l.course);
 
   return (
     <div className="wf">
-      {view === 'home'
-        ? <Home snap={snap} now={now} query={query} setQuery={setQuery} searchRef={searchRef} counts={counts} pick={pick} />
-        : <Dash snap={snap} now={now} lang={lang} counts={counts} menu={menu} setMenu={setMenu} pick={pick}
-            goHome={() => { setView('home'); setMenu(false); }} setStage={setStage} setSheet={setSheet} />}
+      <div className="in">
+        <nav className="nav">
+          <a href="#" className="brand"><i />Wordfield</a>
+          {data?.signedIn
+            ? <>{data.current && <Link href={`/${data.current}`} className="btn-lime">Continue</Link>}<Link href="/classic" className="btn-ghost">Words</Link></>
+            : <><Link href="/login" className="btn-ghost">Sign in</Link><Link href="/signup" className="btn-lime">Get started</Link></>}
+        </nav>
+        <section className="hero">
+          <span className="live"><span className="live-dot" />{total} words ready to learn</span>
+          <h1>Pick a language. Start swiping in under a second.</h1>
+          <p className="lede">Daily 24-hour decks, flashcards that remember what you forget, and friend streaks. German and English are open today; more languages are on the way.</p>
+          <label className="search">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7A8396" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
+            <input ref={searchRef} type="search" aria-label="Search languages" placeholder="Search languages" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <span className="kbd">/</span>
+          </label>
+        </section>
+        <section className="sec">
+          <div className="sec-head"><h2>Languages</h2><span className="tiny">{langs.length} shown</span></div>
+          <div className="grid">
+            {langs.map((l) => {
+              const inner = (
+                <>
+                  <div className="lang-top">
+                    <span className="code">{l.code}</span>
+                    {l.course ? <span className="pill pill-gold">24h{cd.short && ` · ${cd.short}`}</span> : <span className="pill pill-grey">Coming soon</span>}
+                  </div>
+                  <div><span className="lang-name">{l.name}</span><span className="lang-native">{l.native}</span></div>
+                  {l.course && <span className="lang-live"><i />{wordsOf(l)} words</span>}
+                </>
+              );
+              return l.course
+                ? <Link key={l.id} href={`/${courseOf(l)}`} className="lang" aria-label={`Open ${l.name}`}>{inner}</Link>
+                : <button key={l.id} className="lang off" onClick={() => toast(`${l.name} is coming soon.`)} aria-label={`${l.name}, coming soon`}>{inner}</button>;
+            })}
+          </div>
+          {!langs.length && (
+            <div className="empty"><b style={{ fontSize: 20 }}>Nothing matches “{query}”</b><span className="note">We add languages every month.</span></div>
+          )}
+        </section>
+        <section className="sec" style={{ paddingBottom: 96 }}>
+          <div className="sec-head"><h2>Today’s Snap-Decks</h2>{cd.long && <span className="mono" style={{ fontSize: 13, color: 'var(--gold)' }}>expire in {cd.long}</span>}</div>
+          <div className="snaps">
+            {open.map((l, i) => (
+              <Link key={l.id} href={`/${courseOf(l)}`} className="snap" aria-label={`${l.name} snap-deck`}>
+                <div className={`snap-art g${i}`}>{SAMPLE[l.id]}</div>
+                <div className="snap-shade" />
+                <span className="snap-tag">{l.code} · {wordsOf(l)} cards</span>
+                <div className="snap-foot"><b>{data?.courses.find((c) => c.targetLang === l.targetLang)?.name ?? l.name}</b><span>{l.name}</span></div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      </div>
+      {toastMsg && <div className="toast" role="status">{toastMsg}</div>}
+    </div>
+  );
+}
+
+/* ---------- a course page (/german, /english): dashboard + stage ---------- */
+export function WordfieldCourse({ urlCourse }: { urlCourse: string }) {
+  const snap = useStore();
+  const now = useNow();
+  const router = useRouter();
+  const [menu, setMenu] = useState(false);
+  const [stage, setStage] = useState<StageSpec | null>(null);
+  const [sheet, setSheet] = useState<Sheet>(null);
+  const [toastMsg, toast] = useToast();
+
+  useEffect(() => {
+    store.setErrorHandler(toast);
+    void store.load(urlCourse);
+    const refresh = () => { if (!document.hidden) { tick(); void store.load(); } };
+    document.addEventListener('visibilitychange', refresh);
+    return () => document.removeEventListener('visibilitychange', refresh);
+  }, [toast, urlCourse]);
+  const courseId = snap.course?.id;
+  useEffect(() => { if (snap.me && courseId) void store.loadClass(); }, [snap.me, courseId]);
+  useEffect(() => { if (snap.status === 'ready' && !snap.course) router.replace('/'); }, [snap.status, snap.course, router]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setMenu(false); setSheet(null); } };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
+
+  const lang = LANGS.find((l) => l.targetLang === snap.course?.targetLang) ?? LANGS[0];
+  const speech = COURSE_LANGS[snap.course?.targetLang ?? 'de'].voices[0][0];
+  const pick = (l: Lang) => {
+    if (!l.course) return toast(`${l.name} is coming soon.`);
+    setMenu(false);
+    if (l.targetLang !== snap.course?.targetLang) router.push(`/${snap.courses.find((c) => c.targetLang === l.targetLang)?.id ?? l.course}`);
+  };
+  const ready = snap.status === 'ready' && courseId === urlCourse;
+
+  return (
+    <div className="wf">
+      <Dash snap={snap} now={now} lang={lang} ready={ready} menu={menu} setMenu={setMenu} pick={pick}
+        goHome={() => router.push('/')} setStage={(s) => setStage({ ...s, speech })} setSheet={setSheet} />
       {stage && <Stage spec={stage} onClose={() => { setStage(null); tick(); }} setSheet={setSheet} />}
       {sheet && <SheetView sheet={sheet} snap={snap} close={() => setSheet(null)} toast={toast} />}
       {toastMsg && <div className="toast" role="status">{toastMsg}</div>}
@@ -111,93 +191,25 @@ export default function Wordfield() {
   );
 }
 
-/* ---------- home: pick a language ---------- */
-function Home({ snap, now, query, setQuery, searchRef, counts, pick }: {
-  snap: Snapshot; now: number; query: string; setQuery: (q: string) => void; searchRef: React.RefObject<HTMLInputElement | null>;
-  counts: Record<string, number>; pick: (l: Lang) => void;
-}) {
-  const q = query.trim().toLowerCase();
-  const langs = LANGS.filter((l) => !q || [l.name, l.native, l.code].some((s) => s.toLowerCase().includes(q)));
-  const cd = now ? untilRollover(now) : { long: '', short: '' };
-  const total = (counts.de || 0) + (counts.en || 0);
-  const snaps = LANGS.filter((l) => l.on).map((l, i) => {
-    const data = langData(snap, l.id);
-    const fresh = buildQueue(data, now).fresh;
-    return { l, i, word: fresh[0]?.word.term ?? [...data.words.values()][0]?.term ?? l.native, n: Math.min(fresh.length, 8), deck: fresh[0]?.word.deck || l.name };
-  });
-  return (
-    <div className="in">
-      <nav className="nav">
-        <a href="#" className="brand"><i />Wordfield</a>
-        {snap.me
-          ? <><span className="btn-ghost">{snap.me.displayName.split(' ')[0]}</span><Link href="/classic" className="btn-ghost">Words</Link></>
-          : <><Link href="/login" className="btn-ghost">Sign in</Link><Link href="/signup" className="btn-lime">Get started</Link></>}
-      </nav>
-      <section className="hero">
-        <span className="live"><span className="live-dot" />{total} words ready to learn</span>
-        <h1>Pick a language. Start swiping in under a second.</h1>
-        <p className="lede">Daily 24-hour decks, flashcards that remember what you forget, and friend streaks. German and English are open today; more languages are on the way.</p>
-        <label className="search">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7A8396" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
-          <input ref={searchRef} type="search" aria-label="Search languages" placeholder="Search languages" value={query} onChange={(e) => setQuery(e.target.value)} />
-          <span className="kbd">/</span>
-        </label>
-      </section>
-      <section className="sec">
-        <div className="sec-head"><h2>Languages</h2><span className="tiny">{langs.length} shown</span></div>
-        <div className="grid">
-          {langs.map((l) => (
-            <button key={l.id} className={`lang${l.on ? '' : ' off'}`} onClick={() => pick(l)} aria-label={l.on ? `Open ${l.name}` : `${l.name}, coming soon`}>
-              <div className="lang-top">
-                <span className="code">{l.code}</span>
-                {l.on ? <span className="pill pill-gold">24h{cd.short && ` · ${cd.short}`}</span> : <span className="pill pill-grey">Coming soon</span>}
-              </div>
-              <div><span className="lang-name">{l.name}</span><span className="lang-native">{l.native}</span></div>
-              {l.on && <span className="lang-live"><i />{counts[l.id] || 0} words</span>}
-            </button>
-          ))}
-        </div>
-        {!langs.length && (
-          <div className="empty"><b style={{ fontSize: 20 }}>Nothing matches “{query}”</b><span className="note">We add languages every month.</span></div>
-        )}
-      </section>
-      <section className="sec" style={{ paddingBottom: 96 }}>
-        <div className="sec-head"><h2>Today’s Snap-Decks</h2>{cd.long && <span className="mono" style={{ fontSize: 13, color: 'var(--gold)' }}>expire in {cd.long}</span>}</div>
-        <div className="snaps">
-          {snaps.map((s) => (
-            <button key={s.l.id} className="snap" onClick={() => pick(s.l)} aria-label={`${s.l.name} snap-deck`}>
-              <div className={`snap-art g${s.i}`}>{s.word}</div>
-              <div className="snap-shade" />
-              <span className="snap-tag">{s.l.code} · {s.n} new</span>
-              <div className="snap-foot"><b>{s.deck}</b><span>{s.l.name}</span></div>
-            </button>
-          ))}
-        </div>
-      </section>
-    </div>
-  );
-}
-
 /* ---------- dashboard ---------- */
-function Dash({ snap, now, lang, counts, menu, setMenu, pick, goHome, setStage, setSheet }: {
-  snap: Snapshot; now: number; lang: Lang; counts: Record<string, number>; menu: boolean; setMenu: (b: boolean) => void;
-  pick: (l: Lang) => void; goHome: () => void; setStage: (s: StageSpec) => void; setSheet: (s: Sheet) => void;
+function Dash({ snap, now, lang, ready, menu, setMenu, pick, goHome, setStage, setSheet }: {
+  snap: Snapshot; now: number; lang: Lang; ready: boolean; menu: boolean; setMenu: (b: boolean) => void;
+  pick: (l: Lang) => void; goHome: () => void; setStage: (s: Omit<StageSpec, 'speech'>) => void; setSheet: (s: Sheet) => void;
 }) {
   const t = now; // 0 until the browser clock starts
   const { me, guest, classData, cheers } = snap;
   const lvl = levelOf(xpOf(snap.cards));
   const streak = streakOf(snap.cards, t);
-  const q = useMemo(() => buildQueue(langData(snap, lang.id), t), [snap, lang.id, t]);
+  const q = useMemo(() => buildQueue(studyData(snap), t), [snap, t]);
   const newItems = q.fresh.slice(0, Math.min(8, q.newLeft));
   const dueItems = [...q.learning.filter((x) => x.s!.due <= t), ...q.review.slice(0, q.reviewLeft)].slice(0, 30);
   const cd = now ? untilRollover(now).long : '';
   const friends = classData?.members.filter((m) => !m.isMe) ?? [];
   const league = [...(classData?.members ?? [])].sort((a, b) => b.answersWeek - a.answersWeek).slice(0, 6);
   const heroWord = newItems[0]?.word;
-  const ready = snap.status === 'ready';
   const parts = [
-    { label: 'learning', n: q.counts.learning, c: '#FFE45C' },
-    { label: 'review', n: q.counts.review, c: '#7aa7ff' },
+    { name: 'learning', n: q.counts.learning, c: '#FFE45C' },
+    { name: 'review', n: q.counts.review, c: '#7aa7ff' },
   ];
 
   return (
@@ -215,8 +227,8 @@ function Dash({ snap, now, lang, counts, menu, setMenu, pick, goHome, setStage, 
             {menu && (
               <div className="menu" role="listbox">
                 {LANGS.map((l) => (
-                  <button key={l.id} role="option" aria-selected={l.id === lang.id} aria-disabled={!l.on} onClick={() => pick(l)}>
-                    <span className="mono">{l.code}</span>{l.name}{!l.on && <span className="pill pill-grey" style={{ marginLeft: 'auto' }}>Soon</span>}
+                  <button key={l.id} role="option" aria-selected={l.id === lang.id} aria-disabled={!l.course} onClick={() => pick(l)}>
+                    <span className="mono">{l.code}</span>{l.name}{!l.course && <span className="pill pill-grey" style={{ marginLeft: 'auto' }}>Soon</span>}
                   </button>
                 ))}
               </div>
@@ -258,16 +270,16 @@ function Dash({ snap, now, lang, counts, menu, setMenu, pick, goHome, setStage, 
               <div className="hero-badge"><span>24H SNAP-DECK</span><span className="t">{cd}</span></div>
               <div className="info">
                 <b>{heroWord ? heroWord.deck || lang.name : 'Nothing new today'}</b>
-                <span>{newItems.length ? `${newItems.length} new ${lang.name} words · ${counts[lang.id] || 0} in the course` : 'Come back after the day rolls over, or review what is due.'}</span>
-                <button className="btn-lime" disabled={!newItems.length} onClick={() => setStage({ title: 'SNAP-DECK', items: newItems, lang })}>{newItems.length ? 'Start snap-deck' : 'Done for today'}</button>
+                <span>{newItems.length ? `${newItems.length} new ${lang.name} words · ${snap.course?.words ?? snap.words.size} in the course` : 'Come back after the day rolls over, or review what is due.'}</span>
+                <button className="btn-lime" disabled={!newItems.length} onClick={() => setStage({ heading: 'SNAP-DECK', items: newItems, lang })}>{newItems.length ? 'Start snap-deck' : 'Done for today'}</button>
               </div>
             </div>
             <div className="panel">
               <span className="label">Due reviews</span>
               <span className="due-n">{dueItems.length}</span>
-              <div className="segs" aria-hidden="true">{parts.flatMap((p) => Array.from({ length: Math.min(p.n, 12) }, (_, i) => <i key={p.label + i} style={{ background: p.c }} />))}</div>
-              <div className="legend">{parts.map((p) => <span key={p.label}><i style={{ background: p.c }} />{p.label} {p.n}</span>)}</div>
-              <button className="btn-lime" style={{ alignSelf: 'flex-start' }} disabled={!dueItems.length} onClick={() => setStage({ title: 'DUE REVIEWS', items: dueItems, lang })}>
+              <div className="segs" aria-hidden="true">{parts.flatMap((p) => Array.from({ length: Math.min(p.n, 12) }, (_, i) => <i key={p.name + i} style={{ background: p.c }} />))}</div>
+              <div className="legend">{parts.map((p) => <span key={p.name}><i style={{ background: p.c }} />{p.name} {p.n}</span>)}</div>
+              <button className="btn-lime" style={{ alignSelf: 'flex-start' }} disabled={!dueItems.length} onClick={() => setStage({ heading: 'DUE REVIEWS', items: dueItems, lang })}>
                 {dueItems.length ? `Review ${dueItems.length} cards` : 'Nothing due'}
               </button>
             </div>
@@ -361,7 +373,7 @@ function Stage({ spec, onClose, setSheet }: { spec: StageSpec; onClose: () => vo
   }, [rate, onClose]);
 
   const pv = item ? preview(item.s, clock, srsConfig(store.getSnapshot().prefs), item.key) : null;
-  const speakIt = () => item && speak(item.word.term, spec.lang.speech);
+  const speakIt = () => item && speak(item.word.term, spec.speech);
   const x = leaving ? leaving * 700 : dx;
 
   return (
@@ -378,7 +390,7 @@ function Stage({ spec, onClose, setSheet }: { spec: StageSpec; onClose: () => vo
             <span className="combo">COMBO {combo}</span>
             {pop > 0 && <span key={pop} className="pop">+10 XP</span>}
           </div>
-          <div className="stage-title"><span>{spec.title} · {spec.lang.name}</span><span>{i + 1} / {queue.length}</span></div>
+          <div className="stage-title"><span>{spec.heading} · {spec.lang.name}</span><span>{i + 1} / {queue.length}</span></div>
           <div className="deck">
             <div className={`scard${dragging ? ' drag' : ''}`} style={{ transform: `translateX(${x}px) rotate(${x / 18}deg)`, opacity: leaving ? 0 : 1 }}
               onPointerDown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); start.current = e.clientX; moved.current = false; setDragging(true); }}
@@ -458,9 +470,9 @@ function SheetView({ sheet, snap, close, toast }: { sheet: NonNullable<Sheet>; s
         {sheet.kind === 'me' && snap.me && (
           <>
             <h2>{snap.me.displayName}</h2>
-            <span className="note">@{snap.me.username}</span>
+            {snap.me.email && <span className="note">{snap.me.email}</span>}
             <Link href="/classic" className="btn-lime" style={{ justifyContent: 'center' }}>Words, AI helper &amp; progress</Link>
-            {snap.me.role === 'admin' && <Link href="/admin" className="btn-ghost" style={{ border: '1px solid var(--line)', justifyContent: 'center' }}>Teacher dashboard</Link>}
+            {(snap.me.role === 'admin' || snap.me.teacher) && <Link href="/admin" className="btn-ghost" style={{ border: '1px solid var(--line)', justifyContent: 'center' }}>Teacher dashboard</Link>}
             <form action="/api/logout" method="post"><button className="btn-ghost" style={{ width: '100%', border: '1px solid var(--line)', justifyContent: 'center' }}>Log out</button></form>
           </>
         )}

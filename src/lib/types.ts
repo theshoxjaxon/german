@@ -1,4 +1,5 @@
 // Shared data model for the client, the API routes and the tests.
+import type { Course } from './courses';
 
 export type Rating = 'again' | 'hard' | 'good' | 'easy';
 export const RATINGS: Rating[] = ['again', 'hard', 'good', 'easy'];
@@ -78,9 +79,16 @@ export interface Prefs {
   relearnSteps: number[]; // minutes
   autoplay: boolean;
   ttsLang: string;
+  slowSpeech: boolean; // read words aloud more slowly
+  genderQuiz: boolean; // nouns: pick der/die/das before the answer is shown
+  dailyGoal: number; // answers a day; 0 = no goal
+  uiLang?: UiLang; // unset until chosen: then the device's language is used
   studyDeck: string; // 'all' or a deck name
   bonusNew: { day: number; n: number } | null; // extra new cards for one study day
 }
+
+export type UiLang = 'en' | 'uz';
+export const UI_LANGS: UiLang[] = ['en', 'uz'];
 
 export const DEFAULT_PREFS: Prefs = {
   newPerDay: 20,
@@ -91,6 +99,9 @@ export const DEFAULT_PREFS: Prefs = {
   relearnSteps: [10],
   autoplay: false,
   ttsLang: 'de-DE',
+  slowSpeech: false,
+  genderQuiz: true,
+  dailyGoal: 20,
   studyDeck: 'all',
   bonusNew: null,
 };
@@ -99,13 +110,26 @@ export const DEFAULT_PREFS: Prefs = {
 
 export type Role = 'student' | 'admin';
 
-/** The signed-in person, as the client sees them. */
+/** The signed-in person, as the client sees them (GET /api/me, /api/state). */
 export interface Me {
   id: string;
-  username: string;
   displayName: string;
-  role: Role;
+  role: Role; // 'admin': runs the whole app (ADMIN_EMAILS)
+  courseId: string; // the course being studied now
+  teacher: boolean; // may change this course's lesson words and settings (its teachers, and admins)
+  inClass: boolean; // on this course's leaderboard: everyone, unless a teacher took them off it
+  avatarUrl: string | null; // the Google profile photo
+  /** Only admins see an email address, their own included: students never see one, not even theirs. */
+  email?: string;
+  hasPassword: boolean;
+  hasGoogle: boolean;
 }
+
+/**
+ * On the class leaderboard: listed in the Class tab and can send cheers. Everyone who signs up
+ * is (there's one class for now); a teacher can take someone off it. Admins always are.
+ */
+export const isClassMember = (me: Pick<Me, 'teacher' | 'inClass'> | null | undefined) => !!me && (me.teacher || me.inClass);
 
 export type CheerKind = 'keep-going' | 'great-streak' | 'study-together';
 export const CHEERS: Record<CheerKind, string> = {
@@ -118,15 +142,14 @@ export interface Cheer {
   id: string;
   kind: CheerKind;
   createdAt: number;
-  from: { id: string; displayName: string; username: string };
+  from: { id: string; displayName: string };
 }
 
 /** One row on the Class tab. */
 export interface ClassMember {
   id: string;
-  username: string;
   displayName: string;
-  role: Role;
+  role: Role; // 'admin': teaches this course (shown as "teacher")
   activeWords: number; // words started (learning or reviewing), not paused
   matureWords: number; // interval 21+ days
   streak: number; // days in a row with at least one answer
@@ -149,13 +172,20 @@ export interface AppData {
   cards: Record<string, CardDoc>;
   prefs: Prefs;
   cheers: Cheer[]; // cheers received and not yet seen
-  ai: boolean; // the AI word helper is switched on for this server
+  ai: boolean; // the AI word helper is switched on for this server (for everyone signed in)
+  streak: { days: number; studiedToday: boolean }; // from the server: right across all your devices
+  classLesson: string | null; // the lesson the class is on, set by the teacher
+  course: Course; // the course you're studying: words, cards and the class are this course's
+  courses: Course[]; // every course, for the switcher
 }
 
 /** What GET /api/state returns to a guest (not signed in). Their progress stays in their browser. */
 export interface GuestData {
   me: null;
   words: Record<string, Word>;
+  classLesson: string | null;
+  course: Course | null; // null: hasn't picked one yet (no words then)
+  courses: Course[];
 }
 
 /** What the UI works with: Maps for fast lookup. */
@@ -163,4 +193,8 @@ export interface StudyData {
   words: Map<string, Word>;
   cards: Map<string, CardDoc>;
   prefs: Prefs;
+  /** The lesson the class is on, set by the teacher (e.g. "Lektion 10"): see orderNewWords() in queue.ts. */
+  classLesson?: string | null;
+  /** The course studied: its language decides whether terms have der/die/das. */
+  course?: Pick<Course, 'targetLang'> | null;
 }

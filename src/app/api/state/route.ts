@@ -1,25 +1,44 @@
+import { DEFAULT_COURSE } from '@/lib/courses';
 import { aiEnabled } from '@/lib/server/ai';
+import { chosenCourse } from '@/lib/server/course';
 import { ok } from '@/lib/server/http';
 import * as repo from '@/lib/server/repo';
 import { requireUser } from '@/lib/server/session';
+import { testsFor } from '@/lib/server/tests';
+import type { Course } from '@/lib/courses';
+
+/** A course as the app gets it: with how many mock tests it has (the Tests tab shows when there are any). */
+const withTests = (c: Course): Course => ({ ...c, tests: testsFor(c.id).length });
 
 /**
- * GET /api/state → you, the shared words and your own words, your progress, your settings and new cheers for you.
- * Not signed in → { me: null, words }: guests practise the flashcards and keep their progress
- * in their own browser.
+ * GET /api/state → you, your course (and the list of courses), its shared words and your own
+ * words in it, your progress on them, your settings and new cheers for you.
+ * Not signed in → { me: null, words, course }: guests practise the flashcards of the course
+ * they picked and keep their progress in their own browser. A guest who hasn't picked a
+ * course yet (when there are several) gets course: null and no words.
  */
 export async function GET(req: Request) {
   const auth = await requireUser(req);
   if (auth.response) {
     if (auth.response.status !== 401) return auth.response;
-    return ok({ me: null, words: await repo.listWords(null) });
+    const [all, chosen] = await Promise.all([repo.listCourses(), chosenCourse()]);
+    const courses = all.map(withTests);
+    const course = courses.find((c) => c.id === chosen) ?? (courses.length === 1 ? courses[0] : null);
+    const words = course ? await repo.listWords(null, course.id) : {};
+    return ok({ me: null, words, classLesson: course?.currentLesson ?? null, course, courses });
   }
   const { user } = auth;
-  const [words, cards, prefs, cheers] = await Promise.all([
-    repo.listWords(user.id),
-    repo.listCards(user.id),
+  const [words, cards, prefs, cheers, streak, courses] = await Promise.all([
+    repo.listWords(user.id, user.courseId),
+    repo.listCards(user.id, user.courseId),
     repo.getPrefs(user.id),
     repo.unseenCheers(user.id),
+    repo.myStreak(user.id),
+    repo.listCourses().then((all) => all.map(withTests)),
   ]);
-  return ok({ me: repo.publicUser(user), words, cards, prefs, cheers, ai: aiEnabled() });
+  const course = courses.find((c) => c.id === user.courseId) ?? courses.find((c) => c.id === DEFAULT_COURSE) ?? courses[0];
+  // Everyone signed in gets the AI helper (it has an hourly limit per person, since each use costs money).
+  return ok({
+    me: repo.publicUser(user), words, cards, prefs, cheers, ai: aiEnabled(), streak, classLesson: course?.currentLesson ?? null, course, courses,
+  });
 }

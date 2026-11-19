@@ -10,29 +10,42 @@
  *
  * Guests (no profile yet) can practise the flashcards too. Their progress and settings are
  * kept in this browser's localStorage; after they sign up it is moved into their profile.
+ *
+ * Everything shown is one course's (German, English…): its words, your progress on them and
+ * its class. Switching the course reloads it all.
  */
 import { useSyncExternalStore } from 'react';
+import type { ServerStreak } from '../goal';
+import { translateCount } from '../i18n';
+import { deviceLang, rememberLang } from './lang-device';
+import { noteTry, noteVisit } from './visitor';
+import type { Course } from '../courses';
 import { DEFAULT_PREFS, type AppData, type CardDoc, type Cheer, type CheerKind, type ClassData, type GuestData, type Me, type Prefs, type Word } from '../types';
 
 export interface Snapshot {
   status: 'loading' | 'ready' | 'error';
+  loadProblem: 'offline' | 'server' | null; // why status is 'error'
   me: Me | null;
   guest: boolean; // studying without a profile; progress lives in this browser only
   guestWords: number; // signed in, with guest progress on this device waiting for a decision
-  ai: boolean; // the AI word helper is available
+  ai: boolean;
+  streak: ServerStreak | null; // signed in: from the server (guests count on the device) // the AI word helper is available
   words: Map<string, Word>;
   cards: Map<string, CardDoc>;
   prefs: Prefs;
   cheers: Cheer[]; // received, not yet seen
   classData: ClassData | null;
   classStatus: 'idle' | 'loading' | 'ready' | 'error';
+  classLesson: string | null; // the lesson the class is on (set by the teacher)
+  course: Course | null; // the course being studied; null: a guest who hasn't picked one yet
+  courses: Course[];
 }
 type Kind = 'words' | 'cards';
 type Doc<K extends Kind> = K extends 'words' ? Word : CardDoc;
 
 const INITIAL: Snapshot = {
-  status: 'loading', me: null, guest: false, guestWords: 0, ai: false, words: new Map(), cards: new Map(), prefs: DEFAULT_PREFS,
-  cheers: [], classData: null, classStatus: 'idle',
+  status: 'loading', loadProblem: null, me: null, guest: false, guestWords: 0, ai: false, streak: null, words: new Map(), cards: new Map(), prefs: DEFAULT_PREFS,
+  cheers: [], classData: null, classStatus: 'idle', classLesson: null, course: null, courses: [],
 };
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
@@ -49,6 +62,7 @@ function readGuest(key: string): Record<string, unknown> {
     return {}; // storage blocked or bad JSON
   }
 }
+/** All of a guest's progress: every course they tried (word ids are unique across courses). */
 function readGuestCards(): Record<string, CardDoc> {
   const out: Record<string, CardDoc> = {};
   for (const [id, doc] of Object.entries(readGuest(GUEST_CARDS))) {
@@ -56,6 +70,8 @@ function readGuestCards(): Record<string, CardDoc> {
   }
   return out;
 }
+/** A guest's progress on these words (one course's). */
+const guestCardsFor = (words: Map<string, Word>) => new Map(Object.entries(readGuestCards()).filter(([id]) => words.has(id)));
 /** Returns false when the browser refuses to store (private mode, storage full). */
 function writeGuest(key: string, value: unknown): boolean {
   try {
@@ -138,13 +154,22 @@ class Store {
   }
 
   /** Fetch your data from the server. Also used to pick up changes made on another device. */
-  load(): Promise<void> {
+  /**
+   * Load your data. `course` (from the address, /english) is made your course first, so the app
+   * opens straight in it; an unknown course is ignored and the app shows your current one.
+   */
+  load(course?: string): Promise<void> {
     if (this.loading) return this.loading;
     this.loading = (async () => {
       try {
+        if (course && course !== this.snap.course?.id) {
+          await fetch('/api/course', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ id: course }) }).catch(() => null);
+        }
         if (await this.fetchState()) await this.checkGuestProgress();
       } catch (e) {
-        if (this.snap.status === 'loading' && !(e instanceof HttpError && e.status === 401)) this.emit({ status: 'error' });
+        if (this.snap.status === 'loading' && !(e instanceof HttpError && e.status === 401)) {
+          this.emit({ status: 'error', loadProblem: e instanceof HttpError ? 'server' : 'offline' });
+        }
       } finally {
         this.loading = null;
       }
@@ -166,10 +191,12 @@ class Store {
       }
       // A guest: progress and settings come from this browser.
       this.emit({
-        status: 'ready', me: null, guest: true, guestWords: 0, ai: false, words, cheers: [],
-        cards: new Map(Object.entries(readGuestCards())),
+        status: 'ready', me: null, guest: true, guestWords: 0, ai: false, streak: null, words, cheers: [], classLesson: data.classLesson ?? null,
+        course: data.course, courses: data.courses,
+        cards: guestCardsFor(words),
         prefs: { ...DEFAULT_PREFS, ...readGuest(GUEST_PREFS) } as Prefs,
       });
+      if (data.course) noteVisit(data.course.id); // anonymous count for the course's analytics funnel
       return false;
     }
     const cards = new Map(Object.entries(data.cards));
@@ -181,11 +208,16 @@ class Store {
       me: data.me,
       guest: false,
       ai: data.ai === true,
+      streak: data.streak ?? null,
       words,
       cards,
       cheers: data.cheers,
+      classLesson: data.classLesson ?? null,
+      course: data.course,
+      courses: data.courses,
       prefs: this.prefsDirty ? this.snap.prefs : { ...DEFAULT_PREFS, ...data.prefs },
     });
+    if (data.prefs.uiLang) rememberLang(data.prefs.uiLang);
     return true;
   }
 
@@ -216,7 +248,10 @@ class Store {
       clearGuest();
       this.emit({ guestWords: 0 });
       await this.fetchState().catch(() => {}); // saved either way; the next refresh shows it
-      if (imported) this.report(`Your guest progress (${imported} ${imported === 1 ? 'word' : 'words'}) is now saved in your profile.`);
+      if (imported) {
+        const lang = this.snap.prefs.uiLang ?? deviceLang();
+        this.report(translateCount(lang, imported, 'Your guest progress ({n} word) is now saved in your profile.', 'Your guest progress ({n} words) is now saved in your profile.'));
+      }
       else if (asked) this.report('Your profile already had progress on those words, so it stays as it was.');
       return true;
     } catch (e) {
@@ -231,9 +266,11 @@ class Store {
     this.emit({ guestWords: 0 });
   }
 
-  /** Guests: save all progress to this browser. */
+  /** Guests: save this course's progress to this browser, next to other courses'. */
   private saveGuestCards(cards: Map<string, CardDoc>) {
-    if (!writeGuest(GUEST_CARDS, Object.fromEntries(cards))) {
+    const all = readGuestCards();
+    for (const id of this.snap.words.keys()) delete all[id];
+    if (!writeGuest(GUEST_CARDS, { ...all, ...Object.fromEntries(cards) })) {
       this.report('This browser won’t save progress (private mode?). Create a free profile to keep it.');
     }
   }
@@ -261,6 +298,8 @@ class Store {
       else cards.delete(id);
       this.emit({ cards });
       this.saveGuestCards(cards);
+      const card = doc as CardDoc | null;
+      if ((card?.f?.log.length || card?.r?.log.length) && this.snap.course) noteTry(this.snap.course.id); // a guest answered a card
       return true;
     }
     const prev = this.snap[kind].get(id) as Doc<K> | undefined;
@@ -350,6 +389,7 @@ class Store {
   /** Settings change instantly and save after a short pause, so tapping + five times sends one request. */
   setPrefs(patch: Partial<Prefs>, immediate = false) {
     this.emit({ prefs: { ...this.snap.prefs, ...patch } });
+    if (patch.uiLang) rememberLang(patch.uiLang); // so the login page speaks it too
     if (this.snap.guest) {
       writeGuest(GUEST_PREFS, this.snap.prefs);
       return;
@@ -365,6 +405,23 @@ class Store {
         this.prefsDirty = false;
       }
     }, immediate ? 0 : 450);
+  }
+
+  /**
+   * Study another course. Signed in, you join it (your progress elsewhere stays); a guest's
+   * browser remembers it. Its words, your progress on them and its class are loaded.
+   */
+  async switchCourse(id: string): Promise<boolean> {
+    if (id === this.snap.course?.id) return true;
+    try {
+      await send('/api/course', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ id }) });
+      this.emit({ classData: null, classStatus: 'idle' });
+      await this.fetchState();
+      return true;
+    } catch (e) {
+      this.report(saveError(e, 'Could not switch the course. Try again.'));
+      return false;
+    }
   }
 
   /* ---------- class (social) ---------- */

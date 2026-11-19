@@ -1,9 +1,10 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
 /**
- * Runs before the admin pages: visitors without a session cookie go to /login.
- * The study page (/) is open to guests, so it is not matched here.
- * This is only a fast first check; every API route and the admin page verify the session for real.
+ * Runs before the private pages (/admin, /account): visitors without a session cookie go to
+ * /login, and come back here after logging in. The study page (/) is open to guests, so it is
+ * not matched. This is only a fast first check: each private page, and every API route,
+ * verifies the session for real.
  */
 export function proxy(req: NextRequest) {
   if (req.cookies.has('kk_session')) return NextResponse.next();
@@ -13,5 +14,5 @@ export function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/admin/:path*'],
+  matcher: ['/admin/:path*', '/account'],
 };

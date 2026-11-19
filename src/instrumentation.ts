@@ -1,6 +1,6 @@
 /**
  * Runs once when the server starts: create the tables, load the Lektion 3 words and,
- * while nobody has signed up yet, print the join code in the terminal so the teacher can
+ * until a teacher has signed up, print the join code in the terminal so the teacher can
  * create the first (admin) profile.
  */
 export async function register() {
@@ -9,6 +9,8 @@ export async function register() {
     const { getDb } = await import('./lib/server/db');
     await getDb();
   } catch (e) {
-    console.error('Karteikasten: could not open the database.', e);
+    const { describeDbError } = await import('./lib/server/db-health');
+    const { problem, message } = describeDbError(e);
+    console.error(`Karteikasten: could not open the database (${problem}). ${message}`);
   }
 }

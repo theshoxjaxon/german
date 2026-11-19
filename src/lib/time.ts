@@ -14,15 +14,28 @@ export function dayDate(idx: number): Date {
   return new Date(idx * DAY + (ROLLOVER_HOUR + 12) * HOUR);
 }
 
-const fmtWeekday = new Intl.DateTimeFormat('de-DE', { weekday: 'short', timeZone: 'UTC' });
-const fmtDayLong = new Intl.DateTimeFormat('de-DE', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
-const fmtToday = new Intl.DateTimeFormat('de-DE', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
+/*
+ * Study-page dates are in the language studied ('de-DE' by default: "Mo", "Donnerstag, 29. Oktober";
+ * 'en-GB': "Mon", "Thursday 29 October"). One formatter per locale and style, made on first use.
+ */
+const formats = new Map<string, Intl.DateTimeFormat>();
+const STYLES = {
+  weekday: { weekday: 'short' },
+  long: { weekday: 'short', day: 'numeric', month: 'short' },
+  today: { weekday: 'long', day: 'numeric', month: 'long' },
+} satisfies Record<string, Intl.DateTimeFormatOptions>;
+function fmt(locale: string, style: keyof typeof STYLES): Intl.DateTimeFormat {
+  const key = `${locale} ${style}`;
+  let f = formats.get(key);
+  if (!f) formats.set(key, (f = new Intl.DateTimeFormat(locale, { ...STYLES[style], timeZone: 'UTC' })));
+  return f;
+}
 const fmtShort = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' });
 
-/** German two-letter weekday: Mo, Di, Mi … */
-export const weekday = (idx: number) => fmtWeekday.format(dayDate(idx)).replace(/\.$/, '');
-export const dayLong = (idx: number) => fmtDayLong.format(dayDate(idx));
-export const studyDayTitle = (now: number) => fmtToday.format(dayDate(dayIndex(now)));
+/** Short weekday: Mo, Di, Mi … (German) or Mon, Tue … (English) */
+export const weekday = (idx: number, locale = 'de-DE') => fmt(locale, 'weekday').format(dayDate(idx)).replace(/\.$/, '');
+export const dayLong = (idx: number, locale = 'de-DE') => fmt(locale, 'long').format(dayDate(idx));
+export const studyDayTitle = (now: number, locale = 'de-DE') => fmt(locale, 'today').format(dayDate(dayIndex(now)));
 export const shortDate = (t: number) => fmtShort.format(new Date(t));
 
 const trim1 = (n: number) => n.toFixed(1).replace(/\.0$/, '');
