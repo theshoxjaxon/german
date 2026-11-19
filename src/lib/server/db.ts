@@ -13,6 +13,7 @@
 import pg from 'pg';
 import { packWords, SEED_COURSES, SEED_PACKS } from '../seed';
 import { safeTimeZone } from '../stats';
+import { hashPassword } from './password';
 
 export type Row = Record<string, unknown>;
 
@@ -566,8 +567,46 @@ function open(db: Db) {
   });
 }
 
+/**
+ * Temporary stand-in for Supabase: USE_LOCAL_DB=1 runs the app on an in-memory Postgres (PGlite)
+ * with the built-in words and two fixed users. Nothing is saved; everything resets on restart.
+ * ponytail: dev only (PGlite is a devDependency); remove the env var to use DATABASE_URL again.
+ */
+const LOCAL_USERS = [
+  { id: 'local-admin', username: 'admin', displayName: 'Admin', role: 'admin' },
+  { id: 'local-student', username: 'student', displayName: 'Student', role: 'student' },
+];
+
+async function localDb(): Promise<Db> {
+  const { PGlite, types } = await import('@electric-sql/pglite');
+  const pglite = await PGlite.create({ parsers: { [types.INT8]: Number, [types.NUMERIC]: Number } });
+  const db: Db = {
+    async query<R extends Row>(text: string, params?: unknown[]) {
+      const r = params?.length ? await pglite.query<R>(text, params) : ((await pglite.exec(text)).at(-1) as { rows: R[]; affectedRows?: number } | undefined);
+      const rows = (r?.rows ?? []) as R[];
+      return { rows, rowCount: Math.max(r?.affectedRows ?? 0, rows.length) };
+    },
+  };
+  await migrate(db);
+  const hash = await hashPassword('german123');
+  for (const u of LOCAL_USERS) {
+    await db.query(
+      `INSERT INTO users (id, username, display_name, password_hash, role, created_at) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING`,
+      [u.id, u.username, u.displayName, hash, u.role, Date.now()],
+    );
+  }
+  console.log('\n  Karteikasten: USE_LOCAL_DB is on, so nothing is saved. Log in as admin or student, password german123.\n');
+  return db;
+}
+
 export async function getDb(): Promise<Db> {
-  if (!g.__kkDb) open(pgDb());
+  if (!g.__kkDb) {
+    if (process.env.USE_LOCAL_DB === '1') {
+      const db = localDb();
+      g.__kkDb = { db: undefined as unknown as Db, ready: db.then((d) => void (g.__kkDb!.db = d)) };
+      g.__kkDb.ready.catch(() => (g.__kkDb = undefined));
+    } else open(pgDb());
+  }
   await g.__kkDb!.ready;
   return g.__kkDb!.db;
 }
