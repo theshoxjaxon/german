@@ -6,6 +6,7 @@ import { useT } from '@/lib/client/i18n';
 import { rememberLang } from '@/lib/client/lang-device';
 import type { UiLang } from '@/lib/types';
 import { Icon } from '../ui';
+import { WfTheme } from '../wf/WfTheme';
 
 /** Each language is named in itself, so you can find yours whatever the page shows now. */
 const LANGS: [UiLang, string][] = [['uz', 'Oʻzbekcha'], ['en', 'English']];
@@ -18,6 +19,7 @@ export function AuthShell({ title, lede, children, guest = true }: { title: stri
   }, [lang]);
   return (
     <main className="auth wf wf-auth">
+      <WfTheme />
       <div className="auth-top">
         <Link className="auth-back" href="/app"><Icon name="back" />{t('Back to the flashcards')}</Link>
         <span className="lang-switch" role="group" aria-label="Language · Til">

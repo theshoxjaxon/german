@@ -11,6 +11,7 @@ import { LANGS as COURSE_LANGS } from '@/lib/courses';
 import { buildQueue, srsConfig, type QueueItem } from '@/lib/queue';
 import { answer, preview } from '@/lib/srs';
 import { DAY, dayIndex, fmtSpan, HOUR, MIN, ROLLOVER_HOUR } from '@/lib/time';
+import { WfTheme } from './WfTheme';
 import { splitTerm } from '@/lib/text';
 import { CHEERS, POS_LABEL, type CardDoc, type CheerKind, type Rating, type StudyData } from '@/lib/types';
 
@@ -87,6 +88,7 @@ export function WordfieldHome() {
 
   return (
     <div className="wf">
+      <WfTheme />
       <div className="in">
         <nav className="nav">
           <a href="#" className="brand"><i />Wordfield</a>
@@ -184,6 +186,7 @@ export function WordfieldCourse({ urlCourse }: { urlCourse: string }) {
 
   return (
     <div className="wf">
+      <WfTheme />
       <Dash snap={snap} now={now} lang={lang} ready={ready} menu={menu} setMenu={setMenu} pick={pick}
         goHome={() => router.push('/')} setStage={(s) => setStage({ ...s, speech, articles: COURSE_LANGS[snap.course?.targetLang ?? 'de'].articles })} setSheet={setSheet} />
       {stage && <Stage spec={stage} onClose={() => { setStage(null); tick(); }} setSheet={setSheet} />}
@@ -347,6 +350,7 @@ function Stage({ spec, onClose, setSheet }: { spec: StageSpec; onClose: () => vo
   const [combo, setCombo] = useState(0);
   const [tally, setTally] = useState({ n: 0, again: 0, best: 0, xp: 0 });
   const [pop, setPop] = useState(0);
+  const [hook, setHook] = useState(false); // the memory hook shown on the front, without turning the card
   const start = useRef(0);
   const moved = useRef(false);
   const requeued = useRef(new Set<string>());
@@ -373,7 +377,7 @@ function Stage({ spec, onClose, setSheet }: { spec: StageSpec; onClose: () => vo
     setPop((p) => p + 1);
     if (!good && !requeued.current.has(item.key)) { requeued.current.add(item.key); setQueue((q) => [...q, item]); }
     setLeaving(good ? 1 : -1);
-    setTimeout(() => { setLeaving(0); setDx(0); setFlipped(false); setI((n) => n + 1); }, 220);
+    setTimeout(() => { setLeaving(0); setDx(0); setFlipped(false); setHook(false); setI((n) => n + 1); }, 220);
   }, [item, leaving, combo]);
 
   useEffect(() => {
@@ -417,6 +421,7 @@ function Stage({ spec, onClose, setSheet }: { spec: StageSpec; onClose: () => vo
               onPointerDown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); start.current = e.clientX; moved.current = false; setDragging(true); }}
               onPointerMove={(e) => { if (!dragging) return; const d = e.clientX - start.current; if (Math.abs(d) > 6) moved.current = true; setDx(d); }}
               onPointerUp={() => {
+                if (!dragging) return; // the press began on a button (Listen, Hook…), not on the card: don't flip
                 setDragging(false);
                 if (dx > 100) rate('good'); else if (dx < -100) rate('again');
                 else { setDx(0); if (!moved.current) setFlipped((f) => !f); }
@@ -443,7 +448,12 @@ function Stage({ spec, onClose, setSheet }: { spec: StageSpec; onClose: () => vo
                       </>
                     )}
                   </div>
-                  <span className="cap">TAP TO FLIP · SWIPE TO RATE</span>
+                  <div className="front-foot">
+                    {item.word.mnemonic && (hook
+                      ? <div className="hook-box" onPointerDown={(e) => e.stopPropagation()}><span className="sec-l">💡 MEMORY HOOK</span><span>{item.word.mnemonic}</span></div>
+                      : <button className="say hook-btn" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setHook(true); }}>💡 Memory hook</button>)}
+                    <span className="cap">TAP TO FLIP · SWIPE TO RATE</span>
+                  </div>
                 </div>
                 <div className="face rear">
                   <span className="sec-l">{item.dir === 'f' ? 'MEANING' : 'THE WORD'}</span>
@@ -455,6 +465,7 @@ function Stage({ spec, onClose, setSheet }: { spec: StageSpec; onClose: () => vo
                     {item.word.pronunciation && <span className="ipa">{item.word.pronunciation}</span>}
                     {canSpeak && <Say text={item.word.term} speech={spec.speech} />}
                   </div>
+                  {item.word.mnemonic && <div className="hook-box"><span className="sec-l">💡 MEMORY HOOK</span><span>{item.word.mnemonic}</span></div>}
                   {item.word.forms && <div className="box"><span className="sec-l">FORMS</span><span dir="auto">{item.word.forms}</span></div>}
                   {item.word.example && (
                     <div className="box">
@@ -464,7 +475,6 @@ function Stage({ spec, onClose, setSheet }: { spec: StageSpec; onClose: () => vo
                       {canSpeak && <Say text={item.word.example} speech={spec.speech} />}
                     </div>
                   )}
-                  {item.word.mnemonic && <div className="box"><span className="sec-l">MEMORY HOOK</span><span>{item.word.mnemonic}</span></div>}
                   {item.word.notes && <div className="box"><span className="sec-l">NOTE</span><small>{item.word.notes}</small></div>}
                   {item.word.tags.length > 0 && <div className="tags">{item.word.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>}
                   <div className="rear-foot">

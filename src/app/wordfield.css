@@ -1,6 +1,8 @@
 /* Wordfield: dark, lime-accented language app. Everything is scoped under .wf */
-html:has(.wf), html:has(.wf) body { background: #0B0E14; }
-html:has(.wf) body { height: auto; overflow-x: hidden; overscroll-behavior: auto; }
+/* the dark page background, only while a Wordfield screen is mounted (see WfTheme). Never use :has(.wf):
+   on navigation the app keeps hidden copies of earlier pages in the DOM, and they would match too. */
+html.wf-on, html.wf-on body { background: #0B0E14; }
+html.wf-on body { overflow-x: hidden; overscroll-behavior: auto; }
 .wf { --bg:#0B0E14; --card:#11151D; --card2:#151A24; --chip:#1A2030; --ink:#F2F4F8; --ink2:#A3ABBA; --ink3:#7A8396; --lime:#9BE15D; --lime2:#B8EC86; --gold:#FFE45C; --line:rgba(255,255,255,.08);
   --mono: var(--font-jetbrains), ui-monospace, monospace;
   min-height: 100vh; background: var(--bg); color: var(--ink); font-family: var(--font-outfit), system-ui, sans-serif; font-size: 16px; line-height: 1.4; -webkit-font-smoothing: antialiased; }
@@ -268,3 +270,9 @@ html:has(.wf) body { height: auto; overflow-x: hidden; overscroll-behavior: auto
 /* the back scrolls by touch; its bottom row stays in view */
 .wf .face.rear { touch-action: pan-y; }
 .wf .rear-foot { position: sticky; bottom: -24px; margin-bottom: -24px; padding: 10px 0 24px; background: linear-gradient(180deg, rgba(21,26,36,0), #151A24 28%); }
+
+/* memory hook: a button on the front, an accent box on the back */
+.wf .front-foot { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.wf .hook-btn { color: var(--gold); border-color: rgba(255,228,92,.3); }
+.wf .hook-box { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 16px; background: rgba(255,228,92,.08); border: 1px solid rgba(255,228,92,.22); font-size: 15px; line-height: 1.4; }
+.wf .hook-box .sec-l { color: var(--gold); }
