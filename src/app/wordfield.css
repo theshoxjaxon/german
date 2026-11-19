@@ -235,3 +235,12 @@ html:has(.wf) body { height: auto; overflow-x: hidden; overscroll-behavior: auto
 .wf-auth .resend { display: grid; gap: 8px; }
 .wf-auth .field .hint, .wf-auth .auth-card .hint { text-align: left; font-family: inherit; }
 .wf-auth .sent .hint { text-align: center; }
+
+/* the classmates list on the dashboard */
+.wf .class-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%,300px),1fr)); gap: 8px; }
+.wf .li .mine { color: var(--lime); font-size: 12px; }
+.wf .li .cheer { width: 34px; height: 34px; flex: none; border-radius: 50%; border: 0; background: rgba(255,228,92,.12); color: var(--gold); font-size: 15px; }
+.wf .li .cheer:hover:not(:disabled) { background: rgba(255,228,92,.24); }
+.wf .li .cheer:disabled { background: transparent; color: var(--lime); cursor: default; }
+.wf .li.sk { min-height: 56px; background: linear-gradient(90deg, var(--chip), #212838, var(--chip)); background-size: 200% 100%; animation: wf-shimmer 1.2s linear infinite; }
+@keyframes wf-shimmer { to { background-position: -200% 0; } }

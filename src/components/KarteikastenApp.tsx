@@ -110,7 +110,12 @@ export default function KarteikastenApp({ urlCourse }: { urlCourse?: string }) {
   useEffect(() => {
     store.setErrorHandler(toast);
     let live = true;
-    void store.load(urlCourse).then(() => live && setOpened(true));
+    // The class is fetched right behind the data, so Class opens already filled in.
+    void store.load(urlCourse).then(() => {
+      if (!live) return;
+      setOpened(true);
+      if (store.getSnapshot().me) void store.loadClass();
+    });
     const refresh = () => {
       if (document.hidden) return;
       tick();

@@ -205,7 +205,8 @@ function Dash({ snap, now, lang, ready, menu, setMenu, pick, goHome, setStage, s
   const dueItems = [...q.learning.filter((x) => x.s!.due <= t), ...q.review.slice(0, q.reviewLeft)].slice(0, 30);
   const cd = now ? untilRollover(now).long : '';
   const friends = classData?.members.filter((m) => !m.isMe) ?? [];
-  const league = [...(classData?.members ?? [])].sort((a, b) => b.answersWeek - a.answersWeek).slice(0, 6);
+  const classmates = [...(classData?.members ?? [])].sort((a, b) => b.answersWeek - a.answersWeek || b.streak - a.streak || a.displayName.localeCompare(b.displayName));
+  const studiedToday = classmates.filter((m) => m.studiedToday).length;
   const heroWord = newItems[0]?.word;
   const parts = [
     { name: 'learning', n: q.counts.learning, c: '#FFE45C' },
@@ -286,36 +287,48 @@ function Dash({ snap, now, lang, ready, menu, setMenu, pick, goHome, setStage, s
           </div>
         )}
 
-        <div className="row2b">
-          <section className="panel">
-            <div className="sec-head"><h2>Card pings</h2><span className="note">Cheers from classmates</span></div>
-            {guest && <p className="note">Create a free profile to join your class: friends, cheers and the league.</p>}
-            {!guest && !cheers.length && <p className="note">No new cheers. Tap a friend above to send one.</p>}
-            <div className="list">
-              {cheers.slice(0, 4).map((c) => (
-                <div key={c.id} className="li">
-                  <span className="av">{initial(c.from.displayName)}</span>
-                  <span className="tx"><span>{c.from.displayName} says <b>{CHEERS[c.kind]}</b></span><small>+ keep your streak alive</small></span>
-                </div>
-              ))}
-            </div>
-            {cheers.length > 0 && <button className="mini" style={{ alignSelf: 'flex-start' }} onClick={() => store.dismissCheers()}>Thanks!</button>}
-            {guest && <Link href="/signup" className="btn-lime" style={{ alignSelf: 'flex-start' }}>Get started</Link>}
-          </section>
-          <section className="panel">
-            <div className="sec-head"><h2>Class league</h2><span className="tiny">this week</span></div>
-            {!league.length && <p className="note">{guest ? 'Sign in to see how your class is doing.' : 'Loading your class…'}</p>}
-            <div className="list">
-              {league.map((m, i) => (
-                <div key={m.id} className={`li${m.isMe ? ' me-row' : ''}`}>
-                  <span className="rk">{i + 1}</span><span className="av">{initial(m.displayName)}</span>
-                  <span className="tx">{m.displayName}</span><span className="xp">{m.answersWeek * 10} XP</span>
-                </div>
-              ))}
-            </div>
-            <span className="note">Top 3 are the class stars of the week.</span>
-          </section>
-        </div>
+        <section className="panel" aria-labelledby="class-h">
+          <div className="sec-head">
+            <h2 id="class-h">Your class</h2>
+            {classmates.length > 0 && <span className="tiny">{classmates.length} {classmates.length === 1 ? 'classmate' : 'classmates'} · {studiedToday} studied today</span>}
+          </div>
+          {guest && <p className="note">Create a free profile to see your classmates, their streaks and the weekly league.</p>}
+          {guest && <Link href="/signup" className="btn-lime" style={{ alignSelf: 'flex-start' }}>Get started</Link>}
+          {!guest && !classmates.length && (
+            <div className="class-list" aria-busy="true" aria-label="Loading your class">{[0, 1, 2, 3].map((k) => <div key={k} className="li sk" />)}</div>
+          )}
+          <div className="class-list">
+            {classmates.map((m, i) => (
+              <div key={m.id} className={`li${m.isMe ? ' me-row' : ''}`}>
+                <span className="rk">{i + 1}</span><span className="av">{initial(m.displayName)}</span>
+                <span className="tx">
+                  <span>{m.displayName}{m.isMe && <span className="mine"> · you</span>}</span>
+                  <small>🔥 {m.streak}{m.studiedToday ? ' · studied today' : ''}</small>
+                </span>
+                <span className="xp">{m.answersWeek * 10} XP</span>
+                {!m.isMe && (
+                  <button className="cheer" disabled={m.cheeredToday} onClick={() => setSheet({ kind: 'ping', id: m.id, name: m.displayName })}
+                    aria-label={m.cheeredToday ? `You cheered ${m.displayName} today` : `Cheer ${m.displayName}`}>{m.cheeredToday ? '✓' : '★'}</button>
+                )}
+              </div>
+            ))}
+          </div>
+          {classmates.length > 0 && <span className="note">The week’s XP is 10 per answer. Tap ★ to cheer a classmate once a day.</span>}
+        </section>
+
+        <section className="panel">
+          <div className="sec-head"><h2>Card pings</h2><span className="note">Cheers from classmates</span></div>
+          {!guest && !cheers.length && <p className="note">No new cheers. Tap ★ next to a classmate to send one.</p>}
+          <div className="list">
+            {cheers.slice(0, 4).map((c) => (
+              <div key={c.id} className="li">
+                <span className="av">{initial(c.from.displayName)}</span>
+                <span className="tx"><span>{c.from.displayName} says <b>{CHEERS[c.kind]}</b></span><small>+ keep your streak alive</small></span>
+              </div>
+            ))}
+          </div>
+          {cheers.length > 0 && <button className="mini" style={{ alignSelf: 'flex-start' }} onClick={() => store.dismissCheers()}>Thanks!</button>}
+        </section>
       </main>
     </div>
   );

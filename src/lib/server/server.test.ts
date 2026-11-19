@@ -7,6 +7,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { answer } from '../srs';
+import { shiftDay } from '../stats';
 import type { CardDoc, WordData } from '../types';
 import type { GoogleProfile } from './repo';
 import { hashPassword, temporaryPassword, verifyPassword } from './password';
@@ -139,6 +140,12 @@ describe('database', () => {
     const cls = await repo.classOverview(teacher.id, G);
     const m = cls.members.find((x) => x.id === malika.id)!;
     expect(m).toMatchObject({ activeWords: 2, answersToday: 3, studiedToday: true, streak: 1, isMe: false });
+    // a streak that reaches back past the class page's 45-day window is still counted whole
+    const conn = await (await import('./db')).getDb();
+    const today = repo.todayKey();
+    for (let i = 1; i <= 70; i++) await conn.query('INSERT INTO activity (user_id, day, answers) VALUES ($1, $2, 1) ON CONFLICT DO NOTHING', [malika.id, shiftDay(today, -i)]);
+    expect((await repo.classOverview(teacher.id, G)).members.find((x) => x.id === malika.id)?.streak).toBe(71);
+    await conn.query('DELETE FROM activity WHERE user_id = $1 AND day < $2', [malika.id, today]);
     expect(await repo.myStreak(malika.id)).toEqual({ days: 1, studiedToday: true });
     expect(await repo.myStreak(teacher.id)).toEqual({ days: 0, studiedToday: false });
 

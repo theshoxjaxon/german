@@ -854,6 +854,54 @@ async function loadEveryone(now: number, courseId: string) {
 const sumDays = (a: PersonActivity, days: string[]) => days.reduce((n, d) => n + (a.answersByDay.get(d) ?? 0), 0);
 
 /**
+ * One classmate's numbers, as the Class tab and the dashboard need them. Much lighter than
+ * loadEveryone() (which the teachers' dashboard uses): only the people on the leaderboard, only
+ * their study days, and only the last 45 days unless a streak reaches back further.
+ */
+interface ClassRow { id: string; displayName: string; teacher: boolean; active: number; mature: number; days: Set<string>; answers: Map<string, number> }
+const CLASS_WINDOW = 45;
+
+async function loadClassRows(courseId: string, today: string): Promise<ClassRow[]> {
+  const db = await getDb();
+  const since = shiftDay(today, -(CLASS_WINDOW - 1));
+  const [people, cards, acts] = await Promise.all([
+    db.query(
+      `SELECT u.id, u.display_name, (u.role = 'admin' OR m.role = 'teacher') AS teacher
+       FROM course_members m JOIN users u ON u.id = m.user_id
+       WHERE m.course_id = $1 AND (m.on_board IS NOT FALSE OR m.role = 'teacher' OR u.role = 'admin') ORDER BY m.joined_at`,
+      [courseId],
+    ),
+    db.query(
+      `SELECT c.user_id, sum(c.started)::int AS active, sum(c.mature)::int AS mature
+       FROM cards c JOIN words w ON w.id = c.word_id WHERE w.course_id = $1 GROUP BY c.user_id`,
+      [courseId],
+    ),
+    db.query(
+      `SELECT a.user_id, a.day, a.answers FROM activity a
+       JOIN course_members m ON m.user_id = a.user_id AND m.course_id = $2 WHERE a.day >= $1 AND a.answers > 0`,
+      [since, courseId],
+    ),
+  ]);
+  const rows = new Map<string, ClassRow>();
+  for (const r of people.rows) rows.set(str(r.id), { id: str(r.id), displayName: str(r.display_name), teacher: r.teacher === true, active: 0, mature: 0, days: new Set(), answers: new Map() });
+  for (const r of cards.rows) {
+    const row = rows.get(str(r.user_id));
+    if (row) { row.active = num(r.active); row.mature = num(r.mature); }
+  }
+  for (const r of acts.rows) {
+    const row = rows.get(str(r.user_id));
+    if (row) { row.days.add(str(r.day)); row.answers.set(str(r.day), num(r.answers)); }
+  }
+  // A streak that reaches the start of the window may go on: look further back for those people only.
+  const long = [...rows.values()].filter((r) => r.days.has(since)).map((r) => r.id);
+  if (long.length) {
+    const older = await db.query('SELECT user_id, day FROM activity WHERE user_id = ANY($1) AND day < $2 AND day >= $3 AND answers > 0', [long, since, shiftDay(today, -400)]);
+    for (const r of older.rows) rows.get(str(r.user_id))?.days.add(str(r.day));
+  }
+  return [...rows.values()];
+}
+
+/**
  * Everyone on a course's leaderboard, with the numbers the Class tab shows. No email addresses:
  * classmates never see them.
  */
@@ -861,21 +909,18 @@ export async function classOverview(viewerId: string, courseId: string, now = Da
   const today = todayKey(now);
   const week = lastDays(today, 7);
   const db = await getDb();
-  const [{ users }, cheers] = await Promise.all([
-    loadEveryone(now, courseId),
-    db.query('SELECT to_user FROM cheers WHERE from_user = $1 AND day = $2', [viewerId, today]),
-  ]);
+  const [rows, cheers] = await Promise.all([loadClassRows(courseId, today), db.query('SELECT to_user FROM cheers WHERE from_user = $1 AND day = $2', [viewerId, today])]);
   const cheered = new Set(cheers.rows.map((r) => str(r.to_user)));
-  const members: ClassMember[] = users.filter((u) => u.teacher || u.inClass).map((u) => ({
+  const members: ClassMember[] = rows.map((u) => ({
     id: u.id,
     displayName: u.displayName,
     role: u.teacher ? 'admin' : 'student',
     activeWords: u.active,
     matureWords: u.mature,
-    streak: streakFrom(u.act.studyDays, today),
-    studiedToday: u.act.studyDays.has(today),
-    answersToday: u.act.answersByDay.get(today) ?? 0,
-    answersWeek: sumDays(u.act, week),
+    streak: streakFrom(u.days, today),
+    studiedToday: u.days.has(today),
+    answersToday: u.answers.get(today) ?? 0,
+    answersWeek: week.reduce((n, d) => n + (u.answers.get(d) ?? 0), 0),
     cheeredToday: cheered.has(u.id),
     isMe: u.id === viewerId,
   }));

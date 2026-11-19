@@ -100,7 +100,6 @@ export function ClassView({ active }: { active: boolean }) {
     <div className="page">
       {head}
       <CheersBanner />
-      {data.me && <StudyCard active={active} teacher={data.me.teacher} />}
       {data.me && !member && (
         <p className="notice" role="status">{t('Your teacher has taken you off the leaderboard. Your study works as usual.')}</p>
       )}
@@ -131,17 +130,6 @@ export function ClassView({ active }: { active: boolean }) {
           )}
         </section>
       )}
-
-      <section className="panel today-strip" aria-label={t('Studied today')}>
-        <div className="stack" aria-hidden="true">
-          {studied.slice(0, 6).map((x) => <Avatar key={x.id} id={x.id} name={x.displayName} size="sm" />)}
-        </div>
-        <p>
-          {others === 0
-            ? t('You’re the first one here. Share the app with your classmates.')
-            : <><b>{t('{a} of {b}', { a: studied.length, b: cls.members.length })}</b> {t('studied today')}</>}
-        </p>
-      </section>
 
       <section className="panel" aria-labelledby="board-h">
         <div className="panel-h">
@@ -192,6 +180,19 @@ export function ClassView({ active }: { active: boolean }) {
           {t('Active words are words you have started learning. A streak counts the days in a row with at least one answer. Only these numbers are shared; your cards stay private.')}
         </p>
       </section>
+
+      <section className="panel today-strip" aria-label={t('Studied today')}>
+        <div className="stack" aria-hidden="true">
+          {studied.slice(0, 6).map((x) => <Avatar key={x.id} id={x.id} name={x.displayName} size="sm" />)}
+        </div>
+        <p>
+          {others === 0
+            ? t('You’re the first one here. Share the app with your classmates.')
+            : <><b>{t('{a} of {b}', { a: studied.length, b: cls.members.length })}</b> {t('studied today')}</>}
+        </p>
+      </section>
+
+      {data.me && <StudyCard active={active} teacher={data.me.teacher} />}
     </div>
   );
 }
