@@ -3,15 +3,16 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { tick, useNow } from '@/lib/client/hooks';
-import { speak } from '@/lib/client/speech';
+import { tick, useLocalState, useNow } from '@/lib/client/hooks';
+import { speak, stopSpeech, useSpeechSupported } from '@/lib/client/speech';
 import { store, useStore, type Snapshot } from '@/lib/client/store';
 import { LANGS, type Lang } from '@/lib/langs';
 import { LANGS as COURSE_LANGS } from '@/lib/courses';
 import { buildQueue, srsConfig, type QueueItem } from '@/lib/queue';
 import { answer, preview } from '@/lib/srs';
 import { DAY, dayIndex, fmtSpan, HOUR, MIN, ROLLOVER_HOUR } from '@/lib/time';
-import { CHEERS, type CardDoc, type CheerKind, type Rating, type StudyData } from '@/lib/types';
+import { splitTerm } from '@/lib/text';
+import { CHEERS, POS_LABEL, type CardDoc, type CheerKind, type Rating, type StudyData } from '@/lib/types';
 
 const initial = (name: string) => (name.trim()[0] || '?').toUpperCase();
 
@@ -42,7 +43,7 @@ function untilRollover(now: number) {
 }
 
 type Sheet = { kind: 'ping'; id: string; name: string } | { kind: 'me' } | null;
-interface StageSpec { heading: string; items: QueueItem[]; lang: Lang; speech: string }
+interface StageSpec { heading: string; items: QueueItem[]; lang: Lang; speech: string; articles: boolean }
 
 const studyData = (snap: Snapshot): StudyData => ({ words: snap.words, cards: snap.cards, prefs: { ...snap.prefs, studyDeck: 'all' } });
 const SAMPLE: Record<string, string> = { de: 'der Hund', en: 'hello' };
@@ -172,7 +173,8 @@ export function WordfieldCourse({ urlCourse }: { urlCourse: string }) {
   }, []);
 
   const lang = LANGS.find((l) => l.targetLang === snap.course?.targetLang) ?? LANGS[0];
-  const speech = COURSE_LANGS[snap.course?.targetLang ?? 'de'].voices[0][0];
+  const voices = COURSE_LANGS[snap.course?.targetLang ?? 'de'].voices;
+  const speech = voices.some(([code]) => code === snap.prefs.ttsLang) ? snap.prefs.ttsLang : voices[0][0]; // the voice picked in Settings, if it fits this course
   const pick = (l: Lang) => {
     if (!l.course) return toast(`${l.name} is coming soon.`);
     setMenu(false);
@@ -183,7 +185,7 @@ export function WordfieldCourse({ urlCourse }: { urlCourse: string }) {
   return (
     <div className="wf">
       <Dash snap={snap} now={now} lang={lang} ready={ready} menu={menu} setMenu={setMenu} pick={pick}
-        goHome={() => router.push('/')} setStage={(s) => setStage({ ...s, speech })} setSheet={setSheet} />
+        goHome={() => router.push('/')} setStage={(s) => setStage({ ...s, speech, articles: COURSE_LANGS[snap.course?.targetLang ?? 'de'].articles })} setSheet={setSheet} />
       {stage && <Stage spec={stage} onClose={() => { setStage(null); tick(); }} setSheet={setSheet} />}
       {sheet && <SheetView sheet={sheet} snap={snap} close={() => setSheet(null)} toast={toast} />}
       {toastMsg && <div className="toast" role="status">{toastMsg}</div>}
@@ -194,7 +196,7 @@ export function WordfieldCourse({ urlCourse }: { urlCourse: string }) {
 /* ---------- dashboard ---------- */
 function Dash({ snap, now, lang, ready, menu, setMenu, pick, goHome, setStage, setSheet }: {
   snap: Snapshot; now: number; lang: Lang; ready: boolean; menu: boolean; setMenu: (b: boolean) => void;
-  pick: (l: Lang) => void; goHome: () => void; setStage: (s: Omit<StageSpec, 'speech'>) => void; setSheet: (s: Sheet) => void;
+  pick: (l: Lang) => void; goHome: () => void; setStage: (s: Omit<StageSpec, 'speech' | 'articles'>) => void; setSheet: (s: Sheet) => void;
 }) {
   const t = now; // 0 until the browser clock starts
   const { me, guest, classData, cheers } = snap;
@@ -351,9 +353,9 @@ function Stage({ spec, onClose, setSheet }: { spec: StageSpec; onClose: () => vo
 
   const clock = useNow();
   const item = queue[i];
+  const canSpeak = useSpeechSupported();
+  const [auto, setAuto] = useLocalState<boolean>('wf.autoplay', true, (v) => typeof v === 'boolean');
   const done = !item;
-  const front = item ? (item.dir === 'f' ? item.word.term : item.word.meaning) : '';
-  const back = item ? (item.dir === 'f' ? item.word.meaning : item.word.term) : '';
 
   const rate = useCallback((rating: Rating) => {
     if (!item || leaving) return;
@@ -385,8 +387,13 @@ function Stage({ spec, onClose, setSheet }: { spec: StageSpec; onClose: () => vo
     return () => window.removeEventListener('keydown', onKey);
   }, [rate, onClose]);
 
+  // Say each new word out loud when it appears (recognition cards: the word is the question).
+  useEffect(() => {
+    if (auto && canSpeak && item && item.dir === 'f') speak(item.word.term, spec.speech);
+    return () => stopSpeech();
+  }, [auto, canSpeak, item, spec.speech]);
+
   const pv = item ? preview(item.s, clock, srsConfig(store.getSnapshot().prefs), item.key) : null;
-  const speakIt = () => item && speak(item.word.term, spec.speech);
   const x = leaving ? leaving * 700 : dx;
 
   return (
@@ -400,6 +407,7 @@ function Stage({ spec, onClose, setSheet }: { spec: StageSpec; onClose: () => vo
             <div className="prog" role="progressbar" aria-valuemin={0} aria-valuemax={queue.length} aria-valuenow={i}>
               {queue.map((_, k) => <i key={k} className={k < i ? 'ok' : k === i ? 'cur' : ''} />)}
             </div>
+            {canSpeak && <button className={`auto${auto ? ' on' : ''}`} onClick={() => setAuto(!auto)} aria-pressed={auto} title="Say each word when it appears">Auto voice {auto ? 'on' : 'off'}</button>}
             <span className="combo">COMBO {combo}</span>
             {pop > 0 && <span key={pop} className="pop">+10 XP</span>}
           </div>
@@ -419,25 +427,47 @@ function Stage({ spec, onClose, setSheet }: { spec: StageSpec; onClose: () => vo
               <div className={`flip${flipped ? ' back' : ''}`}>
                 <div className="face front">
                   <div className="face-top">
-                    <span>{item.word.pos.toUpperCase()} · {item.word.deck}</span>
-                    <button className="speak" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); speakIt(); }} aria-label="Play pronunciation">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z" /><path d="M15.5 9a4 4 0 0 1 0 6" /></svg>
-                    </button>
+                    <span>{POS_LABEL[item.word.pos].toUpperCase()} · {item.word.deck}</span>
                   </div>
-                  <div>
-                    <div className="big" dir="auto">{front}</div>
-                    {item.dir === 'f' && item.word.pronunciation && <div className="cap" style={{ marginTop: 8 }}>{item.word.pronunciation}</div>}
+                  <div className="front-main">
+                    {item.dir === 'f' ? (
+                      <>
+                        <div className="big" dir="auto"><Term term={item.word.term} articles={spec.articles} /></div>
+                        {item.word.pronunciation && <div className="ipa">{item.word.pronunciation}</div>}
+                        {canSpeak && <Say text={item.word.term} speech={spec.speech} />}
+                      </>
+                    ) : (
+                      <>
+                        <span className="cap">HOW DO YOU SAY…</span>
+                        <div className="big" dir="auto">{item.word.meaning}</div>
+                      </>
+                    )}
                   </div>
                   <span className="cap">TAP TO FLIP · SWIPE TO RATE</span>
                 </div>
                 <div className="face rear">
-                  <span className="sec-l">{item.dir === 'f' ? 'TRANSLATION' : 'WORD'}</span>
-                  <div className="tr" dir="auto">{back}</div>
-                  {item.word.example && <div className="box"><span dir="auto">{item.word.example}</span><small>{item.word.exampleTr}</small></div>}
-                  {(item.word.forms || item.word.mnemonic) && (
-                    <div className="box"><span className="sec-l">GRAMMAR</span>{item.word.forms && <span>{item.word.forms}</span>}{item.word.mnemonic && <small>{item.word.mnemonic}</small>}</div>
+                  <span className="sec-l">{item.dir === 'f' ? 'MEANING' : 'THE WORD'}</span>
+                  {item.dir === 'f'
+                    ? <div className="tr" dir="auto">{item.word.meaning}</div>
+                    : <div className="tr" dir="auto"><Term term={item.word.term} articles={spec.articles} /></div>}
+                  <div className="box word-box">
+                    {item.dir === 'f' && <span className="w" dir="auto"><Term term={item.word.term} articles={spec.articles} /></span>}
+                    {item.word.pronunciation && <span className="ipa">{item.word.pronunciation}</span>}
+                    {canSpeak && <Say text={item.word.term} speech={spec.speech} />}
+                  </div>
+                  {item.word.forms && <div className="box"><span className="sec-l">FORMS</span><span dir="auto">{item.word.forms}</span></div>}
+                  {item.word.example && (
+                    <div className="box">
+                      <span className="sec-l">EXAMPLE</span>
+                      <span dir="auto" className="ex">{item.word.example}</span>
+                      {item.word.exampleTr && <small>{item.word.exampleTr}</small>}
+                      {canSpeak && <Say text={item.word.example} speech={spec.speech} />}
+                    </div>
                   )}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto' }}>
+                  {item.word.mnemonic && <div className="box"><span className="sec-l">MEMORY HOOK</span><span>{item.word.mnemonic}</span></div>}
+                  {item.word.notes && <div className="box"><span className="sec-l">NOTE</span><small>{item.word.notes}</small></div>}
+                  {item.word.tags.length > 0 && <div className="tags">{item.word.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>}
+                  <div className="rear-foot">
                     <span className="cap mono" style={{ fontSize: 12, color: 'var(--ink2)' }}>← {pv && fmtSpan(pv.again)} &nbsp; → {pv && fmtSpan(pv.good)}</span>
                     <button className="mini" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setSheet({ kind: 'ping', id: '', name: '' }); }}>Cheer a friend</button>
                   </div>
@@ -468,6 +498,27 @@ function Stage({ spec, onClose, setSheet }: { spec: StageSpec; onClose: () => vo
     </div>
   );
 }
+/** "der Hund" with the article in its gender colour (German only). */
+function Term({ term, articles }: { term: string; articles: boolean }) {
+  const { art, rest } = splitTerm(term, articles);
+  return <>{art && <span className={`art art-${art}`}>{art} </span>}{rest}</>;
+}
+
+/** Listen buttons: normal pace and slow. The browser's own voice reads it (Settings picks which). */
+function Say({ text, speech }: { text: string; speech: string }) {
+  const play = (slow: boolean) => (e: React.MouseEvent) => { e.stopPropagation(); speak(text, speech, slow); };
+  const stop = (e: React.PointerEvent) => e.stopPropagation();
+  return (
+    <span className="say-row">
+      <button className="say" onPointerDown={stop} onClick={play(false)} aria-label={`Listen: ${text}`}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z" /><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" /></svg>
+        Listen
+      </button>
+      <button className="say slow" onPointerDown={stop} onClick={play(true)} aria-label={`Listen slowly: ${text}`}>🐢 Slow</button>
+    </span>
+  );
+}
+
 const Stat = ({ label, value }: { label: string; value: ReactNode }) => <div><b>{value}</b><span>{label}</span></div>;
 
 /* ---------- bottom sheets: cheer a friend / profile ---------- */
