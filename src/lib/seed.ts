@@ -104,6 +104,33 @@ const LEKTION_5: SeedRow[] = [
   ["l5-aet", "ät (@)", "kuchukcha (@)", "other", "[ɛt]", "das At-Zeichen", "anna ät web Punkt de = anna@web.de", "anna kuchukcha web nuqta de = anna@web.de", "English “at”, said with a German ä.", "The sign is called das At-Zeichen, or jokingly der Klammeraffe (bracket monkey).", ["online"]],
 ];
 
+// English starter list (English → Uzbek). Decks whose name starts with "English" are the English course.
+const ENGLISH_1: SeedRow[] = [
+  ["en1-hello", "hello", "salom", "other", "[həˈloʊ]", "", "Hello, my name is Aziz.", "Salom, mening ismim Aziz.", "The first word of every conversation.", "", ["basics"]],
+  ["en1-thank-you", "thank you", "rahmat", "phrase", "[ˈθæŋk juː]", "", "Thank you for your help.", "Yordamingiz uchun rahmat.", "Say “th” with your tongue between your teeth.", "Reply: you’re welcome.", ["basics"]],
+  ["en1-please", "please", "iltimos", "other", "[pliːz]", "", "Water, please.", "Iltimos, suv bering.", "Add it to any request to sound polite.", "", ["basics"]],
+  ["en1-friend", "friend", "do’st", "noun", "[frɛnd]", "friends", "She is my best friend.", "U mening eng yaqin do’stim.", "The “ie” is silent-ish: FREND.", "", ["people"]],
+  ["en1-family", "family", "oila", "noun", "[ˈfæm(ə)li]", "families", "My family lives in Tashkent.", "Mening oilam Toshkentda yashaydi.", "Three syllables is common, but FAM-lee is also fine.", "", ["people"]],
+  ["en1-water", "water", "suv", "noun", "[ˈwɔːtər]", "", "I drink water every day.", "Men har kuni suv ichaman.", "Uncountable: no plural, no “a water”.", "", ["food"]],
+  ["en1-food", "food", "ovqat", "noun", "[fuːd]", "", "The food here is delicious.", "Bu yerdagi ovqat juda mazali.", "Long “oo”, like in “cool”.", "", ["food"]],
+  ["en1-house", "house", "uy", "noun", "[haʊs]", "houses", "Their house is near the park.", "Ularning uyi bog’ yonida.", "The noun ends in “s”; the verb (to house) ends in “z”.", "", ["places"]],
+  ["en1-city", "city", "shahar", "noun", "[ˈsɪti]", "cities", "Samarkand is an old city.", "Samarqand qadimiy shahar.", "city → cities: y becomes ies.", "", ["places"]],
+  ["en1-book", "book", "kitob", "noun", "[bʊk]", "books", "This book is very interesting.", "Bu kitob juda qiziqarli.", "Short “oo”, like in “look”.", "", ["things"]],
+  ["en1-teacher", "teacher", "o’qituvchi", "noun", "[ˈtiːtʃər]", "teachers", "My teacher is very kind.", "Mening o’qituvchim juda mehribon.", "teach + -er = the person who teaches.", "", ["people"]],
+  ["en1-work", "work", "ish; ishlamoq", "verb", "[wɜːrk]", "works · worked · worked", "I work in a bank.", "Men bankda ishlayman.", "Both a noun (ish) and a verb (ishlamoq).", "", ["verb"]],
+  ["en1-learn", "to learn", "o’rganmoq", "verb", "[lɜːrn]", "learns · learned · learned", "I want to learn English.", "Men ingliz tilini o’rganmoqchiman.", "Rhymes with “turn”.", "", ["verb"]],
+  ["en1-speak", "to speak", "gapirmoq", "verb", "[spiːk]", "speaks · spoke · spoken", "Do you speak English?", "Siz inglizcha gapirasizmi?", "Irregular: speak → spoke → spoken.", "", ["verb"]],
+  ["en1-understand", "to understand", "tushunmoq", "verb", "[ˌʌndərˈstænd]", "understands · understood · understood", "I don’t understand this word.", "Men bu so’zni tushunmayapman.", "under + stand: you “stand under” the idea.", "", ["verb"]],
+  ["en1-beautiful", "beautiful", "chiroyli", "adjective", "[ˈbjuːtɪf(ə)l]", "more beautiful · most beautiful", "What a beautiful day!", "Qanday chiroyli kun!", "beauty + -ful: full of beauty.", "", ["describing"]],
+  ["en1-difficult", "difficult", "qiyin", "adjective", "[ˈdɪfɪkəlt]", "more difficult · most difficult", "This exercise is difficult.", "Bu mashq qiyin.", "Three syllables: DIF-i-cult.", "", ["describing"]],
+  ["en1-easy", "easy", "oson", "adjective", "[ˈiːzi]", "easier · easiest", "The test was easy.", "Test oson edi.", "The opposite of difficult.", "", ["describing"]],
+  ["en1-always", "always", "doim", "adverb", "[ˈɔːlweɪz]", "", "She is always on time.", "U doim o’z vaqtida keladi.", "Goes before the main verb: I always drink tea.", "", ["little-words"]],
+  ["en1-sometimes", "sometimes", "ba’zan", "adverb", "[ˈsʌmtaɪmz]", "", "Sometimes I walk to work.", "Ba’zan men ishga piyoda boraman.", "some + times: on some occasions.", "", ["little-words"]],
+  ["en1-how-are-you", "How are you?", "Ishlaringiz qalay?", "phrase", "[haʊ ɑːr juː]", "", "Hi! How are you? – I’m fine, thanks.", "Salom! Ishlaringiz qalay? – Yaxshi, rahmat.", "The most common greeting question.", "Usual answer: I’m fine, thanks. And you?", ["phrase"]],
+  ["en1-i-dont-know", "I don’t know", "Men bilmayman", "phrase", "[aɪ doʊnt noʊ]", "", "Sorry, I don’t know.", "Kechirasiz, men bilmayman.", "Spoken fast it sounds like “I dunno”.", "", ["phrase"]],
+  ["en1-see-you-later", "See you later", "Ko’rishguncha", "phrase", "[siː juː ˈleɪtər]", "", "Bye! See you later.", "Xayr! Ko’rishguncha.", "A friendly way to say goodbye.", "", ["phrase"]],
+];
+
 /** One built-in list. `flag` is the settings key that records it was added, so it is added only once. */
 export interface SeedPack {
   flag: string;
@@ -114,6 +141,7 @@ export interface SeedPack {
 export const SEED_PACKS: SeedPack[] = [
   { flag: 'seeded', deck: 'Lektion 3', rows: LEKTION_3 }, // the original first-start list
   { flag: 'seeded:lektion-5', deck: 'Lektion 5', rows: LEKTION_5 },
+  { flag: 'seeded:english-1', deck: 'English 1', rows: ENGLISH_1 },
 ];
 
 export function packWords(pack: SeedPack, now = Date.now()): Record<string, WordData & { id: string }> {

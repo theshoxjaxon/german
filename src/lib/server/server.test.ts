@@ -56,7 +56,8 @@ describe('database', () => {
     const words = Object.values(await repo.listWords(null));
     expect(words.filter((w) => w.deck === 'Lektion 3')).toHaveLength(34);
     expect(words.filter((w) => w.deck === 'Lektion 5')).toHaveLength(59);
-    expect(words).toHaveLength(93);
+    expect(words.filter((w) => w.deck === 'English 1')).toHaveLength(23);
+    expect(words).toHaveLength(116);
     expect(await repo.getJoinCode()).toBe('TEST42');
   });
 
@@ -151,7 +152,7 @@ describe('database', () => {
     const mine = await repo.listWords(malika.id);
     expect(mine['m-bahnhof']).toMatchObject({ term: 'der Bahnhof', personal: true });
     expect(mine['l3-familie'].personal).toBeUndefined(); // shared words stay shared
-    expect(Object.keys(mine)).toHaveLength(94);
+    expect(Object.keys(mine)).toHaveLength(117);
     expect((await repo.listWords(aziz.id))['m-bahnhof']).toBeUndefined(); // others don't see it
     expect((await repo.listWords(teacher.id))['m-bahnhof']).toBeUndefined(); // not even the admin
     expect((await repo.listWords(null))['m-bahnhof']).toBeUndefined(); // nor guests
@@ -179,7 +180,7 @@ describe('database', () => {
     expect(await repo.findUserById(malika.id)).toBeNull();
     expect(await repo.listCards(malika.id)).toEqual({});
     expect(await repo.countOwnWords(malika.id)).toBe(0); // her own words went too
-    expect(Object.keys(await repo.listWords(null))).toHaveLength(93); // the shared ones stay
+    expect(Object.keys(await repo.listWords(null))).toHaveLength(116); // the shared ones stay
     expect((await repo.adminStats()).totals.profiles).toBe(1);
   });
 

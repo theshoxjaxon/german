@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
-import { Atkinson_Hyperlegible_Mono, Atkinson_Hyperlegible_Next, Gentium_Book_Plus, Literata } from 'next/font/google';
+import { Atkinson_Hyperlegible_Mono, Atkinson_Hyperlegible_Next, Gentium_Book_Plus, JetBrains_Mono, Literata, Outfit } from 'next/font/google';
 import './globals.css';
+import './wordfield.css';
 
 // Display face for German words on the cards
 const literata = Literata({ subsets: ['latin', 'latin-ext'], axes: ['opsz'], variable: '--font-literata', display: 'swap' });
@@ -11,10 +12,14 @@ const atkinsonMono = Atkinson_Hyperlegible_Mono({ subsets: ['latin', 'latin-ext'
 // IPA pronunciation symbols
 const gentium = Gentium_Book_Plus({ subsets: ['latin', 'latin-ext'], weight: '400', variable: '--font-gentium', display: 'swap' });
 
+// Wordfield look: Outfit for text, JetBrains Mono for codes and numbers
+const outfit = Outfit({ subsets: ['latin', 'latin-ext'], variable: '--font-outfit', display: 'swap' });
+const jetbrains = JetBrains_Mono({ subsets: ['latin', 'latin-ext'], variable: '--font-jetbrains', display: 'swap' });
+
 export const metadata: Metadata = {
-  title: 'Karteikasten',
-  description: 'Spaced-repetition flashcards (SM-2) and a word database for German vocabulary.',
-  appleWebApp: { capable: true, title: 'Karteikasten', statusBarStyle: 'default' },
+  title: 'Wordfield',
+  description: 'Pick a language and start swiping: spaced-repetition flashcards, daily decks and friend streaks.',
+  appleWebApp: { capable: true, title: 'Wordfield', statusBarStyle: 'default' },
 };
 
 export const viewport: Viewport = {
@@ -29,7 +34,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
-    <html lang="en" className={`${literata.variable} ${atkinson.variable} ${atkinsonMono.variable} ${gentium.variable}`}>
+    <html lang="en" className={`${literata.variable} ${atkinson.variable} ${atkinsonMono.variable} ${gentium.variable} ${outfit.variable} ${jetbrains.variable}`}>
       <body>{children}</body>
     </html>
   );
