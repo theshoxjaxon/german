@@ -176,3 +176,8 @@ html:has(.wf) body { height: auto; overflow-x: hidden; overscroll-behavior: auto
 .wf-about { --bg:#0B0E14; --surface:#11151D; --line:rgba(255,255,255,.08); --ink:#F2F4F8; --ink-2:#A3ABBA; --rule-red:rgba(255,255,255,.1); --mark:#9BE15D; min-height: 0; font-size: 15px; }
 .wf-about .about { background: var(--bg); }
 .wf-about a { color: var(--ink); }
+
+/* keep the app's global link and heading styles out of the Wordfield screens */
+.wf a { text-decoration: none; }
+.wf a.lang, .wf a.snap, .wf a.brand { color: inherit; }
+.wf h1, .wf h2, .wf h3 { font-family: inherit; }
