@@ -8,6 +8,7 @@ import { headers } from 'next/headers';
 import type { UiLang } from '../types';
 
 export const RESET_MINUTES = 45;
+export const CONFIRM_HOURS = 24;
 
 /**
  * The site's address for links in emails: APP_URL, else Vercel's production domain, else
@@ -23,29 +24,31 @@ export async function appUrl(): Promise<string> {
   return `${/^(localhost|127\.0\.0\.1)(:|$)/.test(host) ? 'http' : 'https'}://${host}`;
 }
 
-type Purpose = 'reset' | 'set';
-const COPY: Record<UiLang, { subject: Record<Purpose, string>; hi: string; intro: Record<Purpose, string>; button: Record<Purpose, string>; expires: string; ignore: string }> = {
+type Purpose = 'reset' | 'set' | 'confirm';
+const COPY: Record<UiLang, { subject: Record<Purpose, string>; hi: string; intro: Record<Purpose, string>; button: Record<Purpose, string>; expires: Record<Purpose, string>; ignore: Record<Purpose, string> }> = {
   en: {
-    subject: { reset: 'Reset your Karteikasten password', set: 'Set a password for Karteikasten' },
+    subject: { reset: 'Reset your Karteikasten password', set: 'Set a password for Karteikasten', confirm: 'Confirm your email to open Karteikasten' },
     hi: 'Hi {name},',
     intro: {
       reset: 'Someone (hopefully you) asked to reset the password of your Karteikasten profile.',
       set: 'You can set a password for your Karteikasten profile, so you can also log in with your email address.',
+      confirm: 'Thanks for signing up! Confirm your email address and your profile opens right away.',
     },
-    button: { reset: 'Choose a new password', set: 'Set a password' },
-    expires: 'The link works once, for {m} minutes.',
-    ignore: 'If you didn’t ask for this, ignore this email: your password stays as it is.',
+    button: { reset: 'Choose a new password', set: 'Set a password', confirm: 'Confirm email and open the app' },
+    expires: { reset: 'The link works once, for {m} minutes.', set: 'The link works once, for {m} minutes.', confirm: 'The link works once, for 24 hours.' },
+    ignore: { reset: 'If you didn’t ask for this, ignore this email: your password stays as it is.', set: 'If you didn’t ask for this, ignore this email: your password stays as it is.', confirm: 'If you didn’t sign up, ignore this email: nothing happens without your confirmation.' },
   },
   uz: {
-    subject: { reset: 'Karteikasten parolingizni tiklang', set: 'Karteikasten uchun parol oʻrnating' },
+    subject: { reset: 'Karteikasten parolingizni tiklang', set: 'Karteikasten uchun parol oʻrnating', confirm: 'Karteikastenni ochish uchun pochtangizni tasdiqlang' },
     hi: 'Salom, {name}!',
     intro: {
       reset: 'Kimdir (umid qilamizki, siz) Karteikasten profilingiz parolini tiklashni soʻradi.',
       set: 'Karteikasten profilingiz uchun parol oʻrnatishingiz mumkin. Shunda elektron pochtangiz bilan ham kira olasiz.',
+      confirm: 'Roʻyxatdan oʻtganingiz uchun rahmat! Elektron pochtangizni tasdiqlang, profilingiz darhol ochiladi.',
     },
-    button: { reset: 'Yangi parol tanlash', set: 'Parol oʻrnatish' },
-    expires: 'Havola faqat bir marta va {m} daqiqa davomida ishlaydi.',
-    ignore: 'Agar buni siz soʻramagan boʻlsangiz, bu xatni eʼtiborsiz qoldiring: parolingiz oʻzgarmaydi.',
+    button: { reset: 'Yangi parol tanlash', set: 'Parol oʻrnatish', confirm: 'Pochtani tasdiqlash va ilovani ochish' },
+    expires: { reset: 'Havola faqat bir marta va {m} daqiqa davomida ishlaydi.', set: 'Havola faqat bir marta va {m} daqiqa davomida ishlaydi.', confirm: 'Havola faqat bir marta va 24 soat davomida ishlaydi.' },
+    ignore: { reset: 'Agar buni siz soʻramagan boʻlsangiz, bu xatni eʼtiborsiz qoldiring: parolingiz oʻzgarmaydi.', set: 'Agar buni siz soʻramagan boʻlsangiz, bu xatni eʼtiborsiz qoldiring: parolingiz oʻzgarmaydi.', confirm: 'Agar roʻyxatdan oʻtmagan boʻlsangiz, bu xatni eʼtiborsiz qoldiring: tasdiqlamasangiz hech narsa boʻlmaydi.' },
   },
 };
 
@@ -54,8 +57,8 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 export function passwordEmail(name: string, link: string, lang: UiLang, purpose: Purpose) {
   const c = COPY[lang];
   const hi = c.hi.replace('{name}', name);
-  const expires = c.expires.replace('{m}', String(RESET_MINUTES));
-  const text = [hi, '', c.intro[purpose], '', `${c.button[purpose]}: ${link}`, '', expires, c.ignore, '', 'Karteikasten'].join('\n');
+  const expires = c.expires[purpose].replace('{m}', String(RESET_MINUTES));
+  const text = [hi, '', c.intro[purpose], '', `${c.button[purpose]}: ${link}`, '', expires, c.ignore[purpose], '', 'Karteikasten'].join('\n');
   const html = `<!doctype html><html lang="${lang}"><body style="margin:0;padding:24px;background:#e8ecf1;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:#131a23">
 <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:16px;padding:24px">
 <p style="margin:0 0 16px;font-weight:700;font-size:18px">Karteikasten</p>
@@ -63,7 +66,7 @@ export function passwordEmail(name: string, link: string, lang: UiLang, purpose:
 <p style="margin:0 0 20px">${esc(c.intro[purpose])}</p>
 <p style="margin:0 0 20px"><a href="${esc(link)}" style="display:inline-block;background:#131a23;color:#fff;text-decoration:none;font-weight:700;padding:12px 20px;border-radius:12px">${esc(c.button[purpose])}</a></p>
 <p style="margin:0 0 8px;font-size:14px;color:#465163">${esc(expires)}</p>
-<p style="margin:0 0 16px;font-size:14px;color:#465163">${esc(c.ignore)}</p>
+<p style="margin:0 0 16px;font-size:14px;color:#465163">${esc(c.ignore[purpose])}</p>
 <p style="margin:0;font-size:12px;color:#657184;word-break:break-all">${esc(link)}</p>
 </div></body></html>`;
   return { subject: c.subject[purpose], text, html };
@@ -73,9 +76,9 @@ export async function sendPasswordEmail(input: { to: string; name: string; link:
   const key = process.env.RESEND_API_KEY?.trim();
   if (!key) {
     if (process.env.NODE_ENV !== 'production') {
-      console.log(`\n  Karteikasten (development, no RESEND_API_KEY): password link for ${input.to}\n  ${input.link}\n`);
+      console.log(`\n  Karteikasten (development, no RESEND_API_KEY): ${input.purpose} link for ${input.to}\n  ${input.link}\n`);
     } else {
-      console.error('Karteikasten: RESEND_API_KEY is not set, so a password email could not be sent.');
+      console.error(`Karteikasten: RESEND_API_KEY is not set, so a ${input.purpose} email could not be sent.`);
     }
     return false;
   }
@@ -88,9 +91,9 @@ export async function sendPasswordEmail(input: { to: string; name: string; link:
       signal: AbortSignal.timeout(10_000),
     });
     if (res.ok) return true;
-    console.error(`Karteikasten: Resend refused a password email (${res.status}).`, (await res.text()).slice(0, 300));
+    console.error(`Karteikasten: Resend refused a ${input.purpose} email (${res.status}).`, (await res.text()).slice(0, 300));
   } catch (e) {
-    console.error('Karteikasten: could not reach Resend to send a password email.', (e as Error).message);
+    console.error(`Karteikasten: could not reach Resend to send a ${input.purpose} email.`, (e as Error).message);
   }
   return false;
 }

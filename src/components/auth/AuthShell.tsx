@@ -17,7 +17,7 @@ export function AuthShell({ title, lede, children, guest = true }: { title: stri
     document.documentElement.lang = lang;
   }, [lang]);
   return (
-    <main className="auth">
+    <main className="auth wf wf-auth">
       <div className="auth-top">
         <Link className="auth-back" href="/app"><Icon name="back" />{t('Back to the flashcards')}</Link>
         <span className="lang-switch" role="group" aria-label="Language · Til">
@@ -28,8 +28,8 @@ export function AuthShell({ title, lede, children, guest = true }: { title: stri
       </div>
       <div className="auth-card">
         <div className="auth-brand">
-          <BrandMark />
-          <span>Karteikasten</span>
+          <i aria-hidden="true" />
+          <span>Wordfield</span>
         </div>
         <h1>{t(title)}</h1>
         <p className="lede">{t(lede)}</p>

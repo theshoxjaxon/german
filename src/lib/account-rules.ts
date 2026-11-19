@@ -26,3 +26,13 @@ export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   return ((parts[0]?.[0] ?? '?') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
 }
+
+/**
+ * Sign-up takes real Gmail addresses only, which also keeps out temporary-mail services. A Gmail
+ * name is 6–30 letters, digits and dots, starting and ending with a letter or digit, no "..".
+ * "+tag" aliases are refused too (one mailbox, many profiles). googlemail.com is the same
+ * mailbox as gmail.com and is stored as gmail.com.
+ */
+const GMAIL = /^(?=.{6,30}@)[a-z0-9](?:[a-z0-9]|\.(?!\.))*[a-z0-9]@(?:gmail|googlemail)\.com$/;
+export const isRealGmail = (email: string) => GMAIL.test(email);
+export const canonicalGmail = (email: string) => email.replace(/@googlemail\.com$/, '@gmail.com');

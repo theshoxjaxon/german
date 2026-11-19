@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useActionState, useEffect, useRef, useState, type FormEvent } from 'react';
 import type { z } from 'zod';
-import { forgotPassword, login, resetPassword, signup, type FormState } from '@/app/actions/auth';
+import { forgotPassword, login, resendConfirmation, resetPassword, signup, type FormState } from '@/app/actions/auth';
 import { forgotSchema, formValues, loginSchema, parseForm, resetSchema, signupSchema, type FieldErrors } from '@/lib/auth-schemas';
 import { useClientValue } from '@/lib/client/hooks';
 import { useT } from '@/lib/client/i18n';
@@ -13,6 +13,7 @@ import { Icon } from '../ui';
 const param = (name: string) => () => new URLSearchParams(window.location.search).get(name);
 const readNext = () => param('next')() ?? '/';
 const readReset = () => param('reset')() === '1';
+const readConfirm = () => param('confirm')(); // 'expired' | 'error': a confirmation link that didn’t work
 const readToken = () => param('token')() ?? '';
 
 export function PasswordField({ id, name = id, label, autoComplete, error, hint, autoFocus }: {
@@ -97,19 +98,54 @@ export function LoginForm() {
   const { ref, onSubmit, errors: e, formError } = useCheckedForm(loginSchema, ['email', 'password'], state);
   const next = useClientValue(readNext, '/');
   const reset = useClientValue(readReset, false); // just chose a new password
+  const confirm = useClientValue<string | null>(readConfirm, null);
   const { t } = useT();
   return (
     <form ref={ref} action={action} onSubmit={onSubmit} className="form auth-form ym-disable-keys" noValidate>
-      <Toast message={reset ? 'Password changed. Log in with your new password.' : ''} />
+      <Toast message={reset ? 'Password changed. Log in with your new password.' : confirm === 'expired' ? CONFIRM_DEAD : confirm === 'error' ? 'Something went wrong. Open the link again.' : ''} />
       <input type="hidden" name="next" value={next} />
       <TextField id="email" type="email" label={t('Email')} defaultValue={state.fields?.email} error={e.email}
         autoComplete="email" inputMode="email" autoCapitalize="off" autoCorrect="off" spellCheck={false} required maxLength={254} />
       <PasswordField id="password" label={t('Password')} autoComplete="current-password" error={e.password} />
       <p className="auth-forgot"><Link href="/forgot-password">{t('Forgot password?')}</Link></p>
       <FormError message={formError} />
+      {state.unconfirmed && !state.fieldErrors && <ResendForm email={state.unconfirmed} />}
       <button className="btn btn-primary btn-xl" disabled={pending} aria-busy={pending}>{t(pending ? 'Logging in…' : 'Log in')}</button>
       <p className="auth-switch">{t('New here?')} <Link href="/signup">{t('Create a profile')}</Link></p>
     </form>
+  );
+}
+
+const CONFIRM_DEAD = 'This confirmation link has expired or was already used. If you already confirmed, just log in.';
+
+/** "Send it again" for the confirmation email (on the check-your-inbox screen and under a refused log-in). */
+function ResendForm({ email }: { email: string }) {
+  const [state, action, pending] = useActionState<FormState, FormData>(resendConfirmation, {});
+  const { t, lang } = useT();
+  return (
+    <form action={action} className="resend">
+      <input type="hidden" name="email" value={email} />
+      <input type="hidden" name="lang" value={lang} />
+      <button className="btn btn-xl" disabled={pending} aria-busy={pending}>{t(pending ? 'Sending…' : 'Send it again')}</button>
+      {state.success && <p className="ok-msg center" role="status">{t(state.success)}</p>}
+      <FormError message={state.error} />
+    </form>
+  );
+}
+
+/** After signing up: the link is on its way. Clicking it confirms the address and opens the app. */
+function CheckInbox({ email, onBack }: { email: string; onBack: () => void }) {
+  const { t } = useT();
+  return (
+    <div className="auth-done sent">
+      <span className="auth-done-ic"><Icon name="mail" /></span>
+      <h2>{t('Check your inbox')}</h2>
+      <p role="status">{t('We sent a confirmation link to {email}. Open it and your profile opens right away.', { email })}</p>
+      <a className="btn btn-primary btn-xl" href={`https://mail.google.com/mail/u/${encodeURIComponent(email)}/#inbox`} target="_blank" rel="noopener noreferrer">{t('Open Gmail')}</a>
+      <p className="hint">{t('Nothing yet? Check your spam folder, or send it again.')}</p>
+      <ResendForm email={email} />
+      <button type="button" className="btn btn-quiet" onClick={onBack}>{t('Use a different email')}</button>
+    </div>
   );
 }
 
@@ -117,16 +153,19 @@ export function SignupForm() {
   const [state, action, pending] = useActionState<FormState, FormData>(signup, {});
   const { ref, onSubmit, errors: e, formError } = useCheckedForm(signupSchema, ['name', 'email', 'password', 'confirm'], state);
   const visitor = useClientValue(visitorId, null); // links this browser's guest visits to the new profile
+  const [back, setBack] = useState<FormState | null>(null); // "use a different email" for this answer
   useEffect(() => noteVisit(), []);
-  const { t } = useT();
+  const { t, lang } = useT();
+  if (state.sent && back !== state) return <CheckInbox email={state.sent} onBack={() => setBack(state)} />;
   return (
     <form ref={ref} action={action} onSubmit={onSubmit} className="form auth-form ym-disable-keys" noValidate>
       <input type="hidden" name="visitor" value={visitor ?? ''} />
+      <input type="hidden" name="lang" value={lang} />
       <TextField id="name" label={t('Your name')} defaultValue={state.fields?.name} error={e.name}
         autoComplete="name" hint={t('Shown to your classmates, e.g. Sardor Aliyev')} required maxLength={40} />
-      <TextField id="email" type="email" label={t('Email')} defaultValue={state.fields?.email} error={e.email}
+      <TextField id="email" type="email" label={t('Gmail address')} defaultValue={state.fields?.email} error={e.email}
         autoComplete="email" inputMode="email" autoCapitalize="off" autoCorrect="off" spellCheck={false} required maxLength={254}
-        hint={t('For logging in. Your classmates never see it.')} />
+        placeholder="name@gmail.com" hint={t('Real Gmail only. We send you a link to confirm it. Your classmates never see it.')} />
       <PasswordField id="password" label={t('Password')} autoComplete="new-password" error={e.password} hint={t('At least 8 characters')} />
       <PasswordField id="confirm" label={t('Confirm password')} autoComplete="new-password" error={e.confirm} />
       <FormError message={formError} />

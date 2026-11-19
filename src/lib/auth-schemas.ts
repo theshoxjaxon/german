@@ -4,7 +4,7 @@
  * browser). Messages are English and shown through t(), so each one has an Uzbek entry.
  */
 import { z } from 'zod';
-import { cleanDisplayName, PASSWORD_MAX_BYTES, passwordBytes } from './account-rules';
+import { canonicalGmail, cleanDisplayName, isRealGmail, PASSWORD_MAX_BYTES, passwordBytes } from './account-rules';
 
 const email = z
   .string()
@@ -12,6 +12,9 @@ const email = z
   .toLowerCase()
   .min(1, 'Enter your email address.')
   .pipe(z.email({ error: 'Enter a valid email address.' }).max(254, 'Enter a valid email address.'));
+
+/** Sign-up: a real Gmail address, nothing else (no other providers, no temporary mail). */
+const gmail = email.refine(isRealGmail, 'Use your real Gmail address, like name@gmail.com. Other and temporary emails aren’t accepted.').transform(canonicalGmail);
 
 /** A new password: 8+ characters, and short enough for bcrypt to read all of it. */
 const newPassword = z
@@ -37,7 +40,7 @@ const matching = <T extends z.ZodObject<{ password: z.ZodType<string>; confirm: 
 
 const confirm = z.string().min(1, 'Type the password again.');
 
-export const signupSchema = matching(z.object({ name, email, password: newPassword, confirm }));
+export const signupSchema = matching(z.object({ name, email: gmail, password: newPassword, confirm }));
 
 /** Logging in checks only that something was typed: the old rules may differ from today's. */
 export const loginSchema = z.object({ email, password: z.string().min(1, 'Enter your password.').max(1000) });

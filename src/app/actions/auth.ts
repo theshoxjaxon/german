@@ -12,7 +12,7 @@ import { cleanDisplayName, normalizeEmail, safeNext } from '@/lib/account-rules'
 import { changePasswordSchema, forgotSchema, formValues, loginSchema, parseForm, resetSchema, signupSchema } from '@/lib/auth-schemas';
 import { adoptChosenCourse, chosenCourse } from '@/lib/server/course';
 import { describeDbError } from '@/lib/server/db-health';
-import { appUrl, RESET_MINUTES, sendPasswordEmail } from '@/lib/server/mail';
+import { appUrl, CONFIRM_HOURS, RESET_MINUTES, sendPasswordEmail } from '@/lib/server/mail';
 import { burnPasswordCheck, hashPassword, verifyPassword } from '@/lib/server/password';
 import { clientIp, hit } from '@/lib/server/rate-limit';
 import * as repo from '@/lib/server/repo';
@@ -23,6 +23,10 @@ import type { UiLang } from '@/lib/types';
 
 export interface FormState {
   error?: string;
+  /** Sign-up done: the address a confirmation link was sent to. */
+  sent?: string;
+  /** Log-in refused because this address still has to be confirmed. */
+  unconfirmed?: string;
   success?: string;
   fields?: Record<string, string>;
   fieldErrors?: Record<string, string>;
@@ -30,6 +34,7 @@ export interface FormState {
 
 /** The same answer whether the email is unknown, has no password (Google only) or the password is wrong. */
 const WRONG = 'Wrong email or password.';
+const NOT_CONFIRMED = 'Confirm your email first: open the link we sent you.';
 const TOO_MANY = 'Too many attempts. Wait 15 minutes, then try again.';
 /** The same answer whether or not the email has a profile. */
 const LINK_SENT = 'If that email exists, we’ve sent a link. It works for 45 minutes; check your spam folder too.';
@@ -62,6 +67,7 @@ export async function login(_prev: FormState, form: FormData): Promise<FormState
       return { error: WRONG, fields };
     }
     if (!(await verifyPassword(parsed.data.password, user.passwordHash))) return { error: WRONG, fields };
+    if (await repo.mustConfirm(user)) return { error: NOT_CONFIRMED, unconfirmed: user.email, fields };
     await repo.ensureAdminRole(user);
     await adoptChosenCourse(user.id);
     await startSession(user.id);
@@ -71,6 +77,17 @@ export async function login(_prev: FormState, form: FormData): Promise<FormState
   redirect(safeNext(form.get('next'))); // outside try: redirect() works by throwing
 }
 
+/** Email the "confirm your address" link (after the answer has gone out). */
+async function mailConfirmLink(user: repo.UserRow, lang: UiLang): Promise<void> {
+  const token = await repo.createResetToken(user.id, CONFIRM_HOURS * HOUR);
+  const link = `${await appUrl()}/confirm-email?token=${token}`;
+  after(() => sendPasswordEmail({ to: user.email, name: user.displayName, link, lang, purpose: 'confirm' }).then(() => undefined));
+}
+
+/**
+ * Sign up: nobody is logged in yet. The profile is made, a link is emailed, and clicking it
+ * (GET /confirm-email) confirms the address, logs in and opens the app. Only real Gmail addresses.
+ */
 export async function signup(_prev: FormState, form: FormData): Promise<FormState> {
   const input = formValues(form, ['name', 'email', 'password', 'confirm']);
   const visitor = String(form.get('visitor') ?? '');
@@ -80,20 +97,43 @@ export async function signup(_prev: FormState, form: FormData): Promise<FormStat
     const parsed = parseForm(signupSchema, input);
     if (!parsed.ok) return { fieldErrors: parsed.fieldErrors, fields };
     const { name, email, password } = parsed.data;
-    const user = await repo.createUser({
+    if (!(await hit(`confirm:email:${email}`, 5, HOUR))) return { error: 'We’ve already sent a few emails to this address. Check your inbox, or try again in an hour.', fields };
+    await repo.confirmSince(); // the cutoff is written before the first account that needs confirming exists
+    const passwordHash = await hashPassword(password);
+    let user = await repo.createUser({
       email,
       displayName: name,
-      passwordHash: await hashPassword(password),
+      passwordHash,
       visitorId: VISITOR_RE.test(visitor) ? visitor : null,
       courseId: await chosenCourse(),
     });
-    if (user === 'taken') return { fieldErrors: { email: 'Email already registered.' }, fields };
-    await adoptChosenCourse(user.id);
-    await startSession(user.id);
+    if (user === 'taken') {
+      // An address someone typed but never confirmed can be claimed again; a confirmed one can't.
+      const old = await repo.findUserByEmail(email);
+      if (!old || !(await repo.mustConfirm(old))) return { fieldErrors: { email: 'Email already registered.' }, fields };
+      await repo.replaceUnconfirmed(old.id, { displayName: name, passwordHash });
+      user = old;
+    }
+    await mailConfirmLink(user, langOf(form));
   } catch (e) {
     return unavailable(e, fields);
   }
-  redirect('/app?joined=email'); // into the course they signed up for (joined: counted once by Metrica)
+  return { sent: fields.email, fields };
+}
+
+/** "Send it again" on the check-your-inbox screen and on a refused log-in. Same answer for any address. */
+export async function resendConfirmation(_prev: FormState, form: FormData): Promise<FormState> {
+  const email = normalizeEmail(formValues(form, ['email']).email);
+  try {
+    if (!(await hit(`confirm:ip:${await clientIp()}`, 10, HOUR))) return { error: 'Too many requests from this network. Try again in an hour.', sent: email };
+    if (await hit(`confirm:email:${email}`, 5, HOUR)) {
+      const user = await repo.findUserByEmail(email);
+      if (user && (await repo.mustConfirm(user))) await mailConfirmLink(user, langOf(form));
+    }
+  } catch (e) {
+    return { ...unavailable(e), sent: email };
+  }
+  return { sent: email, success: 'Sent again. It can take a minute; check your spam folder too.' };
 }
 
 export async function changePassword(_prev: FormState, form: FormData): Promise<FormState> {

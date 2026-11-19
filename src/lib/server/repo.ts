@@ -457,6 +457,55 @@ export async function useResetToken(token: string, passwordHash: string, now = D
   return id ? findUserById(str(id)) : null;
 }
 
+/* ============================== email confirmation ============================== */
+
+/**
+ * When confirming the email began. Profiles made before it log in as they always did; later ones
+ * must click the link in their email first. Written the first time it is asked, once.
+ */
+export async function confirmSince(): Promise<number> {
+  const db = await getDb();
+  const r = await db.query(
+    `WITH ins AS (INSERT INTO settings (key, value) VALUES ('email_confirm_since', $1) ON CONFLICT (key) DO NOTHING RETURNING value)
+     SELECT value FROM ins UNION ALL SELECT value FROM settings WHERE key = 'email_confirm_since'`,
+    [String(Date.now())],
+  );
+  return Number(r.rows[0]?.value) || 0;
+}
+
+/** Signed up with email and password, and hasn't clicked the link in the email yet. */
+export async function mustConfirm(u: UserRow): Promise<boolean> {
+  return !u.emailVerified && !u.googleId && u.createdAt >= (await confirmSince());
+}
+
+/** Someone typed this address before and never confirmed it: let the new sign-up take its place. */
+export async function replaceUnconfirmed(id: string, input: { displayName: string; passwordHash: string }, now = Date.now()): Promise<void> {
+  const db = await getDb();
+  await db.query(
+    'UPDATE users SET display_name = $2, password_hash = $3, updated_at = $4 WHERE id = $1 AND email_verified = false AND google_id IS NULL',
+    [id, input.displayName, input.passwordHash, now],
+  );
+}
+
+/**
+ * Use the link from the confirmation email: once, before it expires. The address counts as
+ * verified from here on. Null when the link is unknown, used or expired.
+ */
+export async function useConfirmToken(token: string, now = Date.now()): Promise<UserRow | null> {
+  const db = await getDb();
+  const r = await db.query(
+    `WITH t AS (
+       UPDATE password_reset_tokens SET used_at = $2
+       WHERE token_hash = $1 AND used_at IS NULL AND expires_at > $2
+       RETURNING user_id
+     )
+     UPDATE users SET email_verified = true, updated_at = $2 FROM t WHERE users.id = t.user_id RETURNING users.id`,
+    [hashToken(token), now],
+  );
+  const id = r.rows[0]?.id;
+  return id ? findUserById(str(id)) : null;
+}
+
 /* ============================== words ============================== */
 /*
  * Every word belongs to a course, and two kinds of words live in one table:

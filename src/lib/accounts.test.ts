@@ -26,9 +26,9 @@ describe('account rules', () => {
 });
 
 describe('form validation (zod, the same in the browser and on the server)', () => {
-  const ok = { name: ' Sardor  Aliyev ', email: ' Sardor@Mail.UZ ', password: 'guten-tag', confirm: 'guten-tag' };
+  const ok = { name: ' Sardor  Aliyev ', email: ' Sardor.Aliyev@Gmail.COM ', password: 'guten-tag', confirm: 'guten-tag' };
   it('accepts a good sign-up and cleans it', () => {
-    expect(parseForm(signupSchema, ok)).toEqual({ ok: true, data: { name: 'Sardor Aliyev', email: 'sardor@mail.uz', password: 'guten-tag', confirm: 'guten-tag' } });
+    expect(parseForm(signupSchema, ok)).toEqual({ ok: true, data: { name: 'Sardor Aliyev', email: 'sardor.aliyev@gmail.com', password: 'guten-tag', confirm: 'guten-tag' } });
   });
   it('reports every problem at once, one message per field', () => {
     expect(parseForm(signupSchema, { name: '', email: 'not-an-email', password: 'short', confirm: 'other' })).toEqual({
@@ -38,6 +38,12 @@ describe('form validation (zod, the same in the browser and on the server)', () 
     expect(parseForm(signupSchema, { ...ok, confirm: '' })).toMatchObject({ fieldErrors: { confirm: 'Type the password again.' } });
     expect(parseForm(signupSchema, { ...ok, email: '' })).toMatchObject({ fieldErrors: { email: 'Enter your email address.' } });
     expect(parseForm(signupSchema, { ...ok, name: 'x'.repeat(41) })).toMatchObject({ fieldErrors: { name: 'Use at most 40 characters.' } });
+  });
+  it('takes real Gmail addresses only: no other provider, no temporary mail, no aliases', () => {
+    const bad = (email: string) => parseForm(signupSchema, { ...ok, email }).ok === false;
+    for (const e of ['sardor@mail.uz', 'someone@yopmail.com', 'abc123@10minutemail.com', 'sardor.aliyev@gmail.co', 'sardor+test@gmail.com', 'sardor..a@gmail.com', 'sardor.@gmail.com', 'short@gmail.com', 'a'.repeat(31) + '@gmail.com']) expect(bad(e), e).toBe(true);
+    expect(parseForm(signupSchema, { ...ok, email: 'sardor@mail.uz' })).toMatchObject({ fieldErrors: { email: expect.stringContaining('Gmail') } });
+    expect(parseForm(signupSchema, { ...ok, email: 'Sardor.Aliyev@GoogleMail.com' })).toMatchObject({ ok: true, data: { email: 'sardor.aliyev@gmail.com' } });
   });
   it('refuses passwords bcrypt would cut short (over 72 bytes)', () => {
     const long = 'ä'.repeat(37); // 74 bytes in UTF-8

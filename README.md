@@ -278,7 +278,9 @@ The server checks every Google ID token with `google-auth-library` (signature, a
 2. **Domains** → add your domain and set the DNS records it shows, then use an address on it as `EMAIL_FROM` (e.g. `Karteikasten <noreply@your-domain.uz>`). Until then, Resend's test sender `onboarding@resend.dev` only delivers to your own Resend account's email.
 3. Set `APP_URL` if the app runs on your own domain (on Vercel it defaults to the production domain).
 
-Without `RESEND_API_KEY`, `npm run dev` prints the reset link in the terminal so you can test the whole flow. Links work once, for 45 minutes; a new request replaces older links, and using one signs the profile out on every device.
+**Sign-up needs this too.** Only real Gmail addresses can sign up (other providers and temporary mail are refused), and the new profile opens only after its owner clicks the link in the confirmation email (`/confirm-email`, works once, for 24 hours). Profiles made before this check, and Google sign-ins, are not asked to confirm. Use a Resend domain you've verified for `EMAIL_FROM`, otherwise Resend only delivers to your own address.
+
+Without `RESEND_API_KEY`, `npm run dev` prints the reset and confirmation links in the terminal so you can test the whole flow. Links work once, for 45 minutes; a new request replaces older links, and using one signs the profile out on every device.
 
 ## Settings (environment variables)
 
@@ -294,7 +296,7 @@ Copy `.env.example` to `.env.local`. Only `DATABASE_URL` is required.
 | `AI_ENABLED` | auto | `false` hides the AI helper even with a key; `true` turns it on with other Anthropic credentials (e.g. `ant auth login`). |
 | `ADMIN_EMAILS` | – | Your email (comma-separated for several). It becomes admin once proven: via Google, or a password reset link. |
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | – | Google OAuth Web client ID. Turns on **Continue with Google**. Public; needs a rebuild to change. |
-| `RESEND_API_KEY` | – | Sends the password emails. Secret. Without it, development prints the link in the terminal. |
+| `RESEND_API_KEY` | – | Sends the sign-up confirmation and password emails. Secret. Without it, development prints the link in the terminal. |
 | `EMAIL_FROM` | `Karteikasten <onboarding@resend.dev>` | The sender of password emails; its domain must be verified in Resend. |
 | `APP_URL` | Vercel's production domain | The site's address for links in emails. |
 | `APP_TIMEZONE` | `Asia/Tashkent` | When a "day" starts for streaks and daily active users, and the hours of *Let's study together*. |

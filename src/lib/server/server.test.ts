@@ -433,6 +433,21 @@ describe('password links (forgot / reset)', () => {
     expect((await byEmail('lola@example.com')).passwordHash).toBe('$2b$new-2');
   });
 
+  it('confirm a sign-up once: new password profiles must confirm, Google and older ones need not', async () => {
+    await repo.confirmSince(); // the sign-up action does this before it creates a profile
+    const nora = await profile('nora.test@gmail.com', 'Nora');
+    expect(nora.emailVerified).toBe(false);
+    expect(await repo.mustConfirm(nora)).toBe(true); // made after the cutoff
+    expect(await repo.mustConfirm({ ...nora, createdAt: 1 })).toBe(false); // made before email confirmation began
+    expect(await repo.mustConfirm({ ...nora, googleId: 'g-1' })).toBe(false);
+    const link = await repo.createResetToken(nora.id, MIN45);
+    expect(await repo.useConfirmToken(link)).toMatchObject({ id: nora.id, emailVerified: true });
+    expect(await repo.useConfirmToken(link)).toBeNull(); // once
+    expect(await repo.useConfirmToken('made-up-token-that-was-never-sent')).toBeNull();
+    expect((await byEmail('nora.test@gmail.com')).passwordHash).toBe(nora.passwordHash); // the password is untouched
+    expect(await repo.mustConfirm((await byEmail('nora.test@gmail.com')))).toBe(false);
+  });
+
   it('store only a hash of the token', async () => {
     const lola = await byEmail('lola@example.com');
     const link = await repo.createResetToken(lola.id, MIN45);

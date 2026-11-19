@@ -181,3 +181,57 @@ html:has(.wf) body { height: auto; overflow-x: hidden; overscroll-behavior: auto
 .wf a { text-decoration: none; }
 .wf a.lang, .wf a.snap, .wf a.brand { color: inherit; }
 .wf h1, .wf h2, .wf h3 { font-family: inherit; }
+
+/* ---------- sign-up, log-in and account pages in the Wordfield look ---------- */
+.wf-auth {
+  /* the app's light palette, swapped for the dark one, so every existing form control follows */
+  --bg:#0B0E14; --card:#11151D; --surface:#151A24; --surface-2:#1A2030; --surface-3:#212838;
+  --line:rgba(255,255,255,.09); --line-strong:rgba(255,255,255,.16);
+  --ink:#F2F4F8; --ink-2:#A3ABBA; --ink-3:#7A8396; --ink-inv:#0B0E14;
+  --mark:#9BE15D; --mark-soft:rgba(155,225,93,.22); --focus:#9BE15D; --rule-red:rgba(255,255,255,.08);
+  --good:#9BE15D; --good-soft:rgba(155,225,93,.14); --again:#ff7a7a; --shadow-card:0 30px 80px rgba(0,0,0,.45);
+  --font-display: var(--font-outfit), system-ui, sans-serif;
+  min-height: 100vh; align-content: center; gap: 20px; padding-top: 24px;
+}
+.wf-auth .auth-card { max-width: 440px; border: 1px solid var(--line); border-radius: 28px; padding: 28px 26px 30px; gap: 12px; background: var(--card); }
+.wf-auth .auth-brand { border: 0; padding: 0 0 6px; margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -.02em; }
+.wf-auth .auth-brand i { width: 22px; height: 22px; border-radius: 7px; background: var(--lime); display: block; }
+.wf-auth .auth-card h1 { font-size: 32px; font-weight: 700; letter-spacing: -.035em; line-height: 1.1; }
+.wf-auth .lede { color: var(--ink-2); font-size: 15.5px; line-height: 1.5; text-wrap: pretty; }
+.wf-auth .auth-form { gap: 16px; margin-top: 10px; }
+.wf-auth .field label { font-size: 13px; font-weight: 600; letter-spacing: .01em; }
+.wf-auth .field input { min-height: 50px; border-radius: 14px; background: var(--bg); border-color: var(--line); color: var(--ink); font-size: 16px; }
+.wf-auth .field input::placeholder { color: var(--ink-3); }
+.wf-auth .field input:focus { border-color: rgba(155,225,93,.6); box-shadow: 0 0 0 4px rgba(155,225,93,.14); }
+.wf-auth .field input[aria-invalid="true"] { border-color: rgba(255,122,122,.7); }
+.wf-auth .hint, .wf-auth .field .hint { font-size: 13px; color: var(--ink-3); }
+.wf-auth .err { color: #ff8f8f; font-size: 13.5px; font-weight: 500; }
+.wf-auth .btn { border-radius: 999px; border: 1px solid var(--line-strong); background: transparent; color: var(--ink); }
+.wf-auth .btn:hover { background: rgba(255,255,255,.06); }
+.wf-auth .btn-primary { background: var(--lime); border-color: var(--lime); color: var(--bg); font-weight: 600; }
+.wf-auth .btn-primary:hover { background: var(--lime2); opacity: 1; }
+.wf-auth .btn-quiet { border-color: transparent; color: var(--ink-2); }
+.wf-auth .btn-xl { min-height: 54px; }
+.wf-auth .reveal:hover { background: rgba(255,255,255,.08); }
+.wf-auth a { color: var(--ink); font-weight: 600; }
+.wf-auth .auth-switch a, .wf-auth .auth-forgot a, .wf-auth .auth-guest a { color: var(--lime); text-decoration: none; }
+.wf-auth .auth-switch a:hover, .wf-auth .auth-forgot a:hover { text-decoration: underline; }
+.wf-auth a.btn-primary { color: var(--bg); }
+.wf-auth .auth-back { color: var(--ink-2); font-weight: 500; }
+.wf-auth .auth-back:hover { color: var(--ink); }
+.wf-auth .lang-switch { background: var(--chip); }
+.wf-auth .lang-switch button[aria-pressed="true"] { background: var(--lime); color: var(--bg); box-shadow: none; }
+.wf-auth .auth-or { color: var(--ink-3); font-weight: 500; }
+.wf-auth .gsi-box { border-radius: 999px; overflow: hidden; }
+.wf-auth .auth-done { gap: 14px; margin-top: 4px; }
+.wf-auth .auth-done h2 { font-size: 24px; letter-spacing: -.02em; }
+.wf-auth .auth-done-ic { width: 60px; height: 60px; background: rgba(155,225,93,.14); color: var(--lime); }
+.wf-auth .auth-done-ic .ic { width: 28px; height: 28px; }
+.wf-auth .sent .resend { width: 100%; display: grid; gap: 8px; }
+.wf-auth .sent .hint { text-align: center; }
+.wf-auth .center { text-align: center; }
+.wf-auth .ok-msg { color: var(--lime); }
+.wf-auth .toast { background: #212838; color: var(--ink); border: 1px solid var(--line); }
+.wf-auth .resend { display: grid; gap: 8px; }
+.wf-auth .field .hint, .wf-auth .auth-card .hint { text-align: left; font-family: inherit; }
+.wf-auth .sent .hint { text-align: center; }
