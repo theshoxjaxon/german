@@ -18,7 +18,7 @@ A mobile-first vocabulary app for learning centers. Students study German or Eng
 - **Share a result**: after a mock test (or from the streak in Progress) **Share** makes a link to a card with your first name and the score. In Telegram it shows as a picture; whoever opens it gets **Try it too**, straight into the same course.
 - **Admin dashboard** at `/admin`, per course: members, new sign-ups, daily / weekly / monthly active students, 30-day charts, a member table, the course's invite link, its name and note, and **which lesson the class is on**. Admins also see emails, reset passwords, make teachers and start new courses.
 
-**German · Momente** comes with all twelve Momente lessons, German → Uzbek, 653 words in all, each with IPA, an example sentence, plural or verb forms and a memory hook:
+**German · Momente** comes with Momente A1.1 (Lektion 1–12) and Lektion 13 of A1.2, German → Uzbek, 710 words in all, each with IPA, an example sentence, plural or verb forms and a memory hook:
 
 | Lektion | Words | Topics |
 | --- | --- | --- |
@@ -34,6 +34,7 @@ A mobile-first vocabulary app for learning centers. Students study German or Eng
 | 10 | 62 | travel: airport, station, phoning |
 | 11 | 38 | the weekend, errands, opening times, the doctor |
 | 12 | 78 | trips, seasons and months, festivals, invitations at work |
+| 13 | 57 | *Berlin gefällt mir.* (A1.2, Lektion 1): the city, renting, free time, dative *ihm / ihr*, *helfen*, *danken* |
 
 Lektion 1, 2, 4, 6 and 8–12 follow the class's own word lists, with their Uzbek meanings checked and corrected. Words tagged `extra` aren't in those lists: useful words for the topic (the weekdays and months, furniture, bread and tea, the bus stop …). Austrian and Swiss variants (*Hendl*, *Schlagobers*, *Perron* …) are in the notes of the standard word rather than cards of their own. A word is never in two lessons.
 

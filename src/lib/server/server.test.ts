@@ -67,11 +67,11 @@ describe('passwords', () => {
 describe('database', () => {
   const doc = (f: CardDoc['f']): CardDoc => ({ f, r: null, suspended: false, updatedAt: Date.now() });
 
-  it('seeds the built-in lists (Lektion 1 to 12)', async () => {
+  it('seeds the built-in lists (Lektion 1 to 13)', async () => {
     const words = Object.values(await repo.listWords(null, G));
     const count = (deck: string) => words.filter((w) => w.deck === deck).length;
-    expect(Array.from({ length: 12 }, (_, i) => count(`Lektion ${i + 1}`))).toEqual([43, 61, 34, 48, 59, 52, 46, 47, 85, 62, 38, 78]);
-    expect(words).toHaveLength(653);
+    expect(Array.from({ length: 13 }, (_, i) => count(`Lektion ${i + 1}`))).toEqual([43, 61, 34, 48, 59, 52, 46, 47, 85, 62, 38, 78, 57]);
+    expect(words).toHaveLength(710);
     // No word appears in two lessons
     expect(new Set(words.map((w) => w.term.toLowerCase())).size).toBe(words.length);
   });
@@ -83,7 +83,7 @@ describe('database', () => {
     expect(english.every((w) => w.id.startsWith('en-') && /^\/.+\/$/.test(w.pronunciation) && w.meaning && w.example && w.exampleTr)).toBe(true);
     expect(new Set(english.map((w) => w.term.toLowerCase())).size).toBe(english.length);
     expect((await repo.listCourses()).map((c) => [c.id, c.targetLang, c.note, c.words])).toEqual([
-      [G, 'de', '', 653],
+      [G, 'de', '', 710],
       ['english', 'en', 'More words coming soon', english.length],
     ]);
   });
@@ -218,7 +218,7 @@ describe('database', () => {
     const mine = await repo.listWords(malika.id, G);
     expect(mine['m-bahnhof']).toMatchObject({ term: 'der Bahnhof', personal: true });
     expect(mine['l3-familie'].personal).toBeUndefined(); // shared words stay shared
-    expect(Object.keys(mine)).toHaveLength(654);
+    expect(Object.keys(mine)).toHaveLength(711);
     expect((await repo.listWords(aziz.id, G))['m-bahnhof']).toBeUndefined(); // others don't see it
     expect((await repo.listWords(teacher.id, G))['m-bahnhof']).toBeUndefined(); // not even the admin
     expect((await repo.listWords(null, G))['m-bahnhof']).toBeUndefined(); // nor guests
@@ -246,7 +246,7 @@ describe('database', () => {
     expect(await repo.findUserById(malika.id)).toBeNull();
     expect(await repo.listCards(malika.id, G)).toEqual({});
     expect(await repo.countOwnWords(malika.id)).toBe(0); // her own words went too
-    expect(Object.keys(await repo.listWords(null, G))).toHaveLength(653); // the shared ones stay
+    expect(Object.keys(await repo.listWords(null, G))).toHaveLength(710); // the shared ones stay
     expect((await repo.adminStats(G)).totals.profiles).toBe(1);
   });
 
