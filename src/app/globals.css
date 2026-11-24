@@ -145,6 +145,8 @@ h1, h2, h3, p { margin: 0; }
 .tc-l { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); font-weight: 600; }
 .tc-l i, .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
 .k-new { background: var(--easy); } .k-learn { background: var(--again); } .k-due { background: var(--good); }
+.today-deck { font-size: 15px; color: var(--ink-2); text-align: center; display: flex; flex-wrap: wrap; gap: 6px 8px; justify-content: center; align-items: center; }
+.today-deck b { color: var(--ink); }
 .today-note { font-size: 14px; color: var(--ink-2); text-align: center; text-wrap: balance; }
 .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
 .wk { display: grid; justify-items: center; gap: 4px; }

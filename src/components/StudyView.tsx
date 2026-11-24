@@ -153,6 +153,16 @@ export function StudyView() {
           <div className="tc"><span className="tc-n">{c.learning}</span><span className="tc-l"><i className="k-learn" />{t('Learning')}</span></div>
           <div className="tc"><span className="tc-n">{c.review}</span><span className="tc-l"><i className="k-due" />{t('To review')}</span></div>
         </div>
+        {decks.some(([d]) => d) && (
+          <p className="today-deck">
+            {t('Studying')}: <b>{deck === 'all' ? t('All lessons') : deck}</b> · {tn(inScope, '{n} word', '{n} words')}
+            {deck === 'all' && data.classLesson && (
+              <button className="btn btn-sm" onClick={() => store.setPrefs({ studyDeck: data.classLesson! })}>
+                {t('Only {lesson}', { lesson: data.classLesson })}
+              </button>
+            )}
+          </p>
+        )}
         <button className="btn btn-primary btn-xl" onClick={ui.startReview} disabled={!total}>
           {t(total ? 'Study now' : 'All caught up')}
         </button>
