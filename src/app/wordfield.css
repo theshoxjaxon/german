@@ -281,3 +281,39 @@ html.wf-on body { overflow-x: hidden; overscroll-behavior: auto; }
 .wf .lesson .lbar i { display: block; height: 100%; background: var(--lime); }
 .wf .lesson .mini[disabled] { opacity: .45; }
 .wf .lesson .mine { display: inline-block; align-self: flex-start; margin-top: 3px; padding: 1px 8px; border-radius: 99px; background: rgba(155,225,93,.15); }
+
+/* ---------- crossword ---------- */
+.wf .cw-group { display: flex; flex-direction: column; gap: 8px; }
+.wf .cw-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.wf .cw-chip { height: 38px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--chip); color: var(--ink); font-size: 14px; display: inline-flex; align-items: center; gap: 8px; }
+.wf .cw-chip small { color: var(--ink3); font-family: var(--mono); font-size: 11px; }
+.wf .cw-chip[aria-pressed="true"] { background: var(--lime); border-color: var(--lime); color: var(--bg); font-weight: 600; }
+.wf .cw-chip[aria-pressed="true"] small { color: var(--bg); }
+.wf .cw .cw-title { flex: 1; font-size: 18px; }
+.wf .cw .cw-count { font-family: var(--mono); font-size: 13px; color: var(--ink2); }
+.wf .cw-scroll { width: min(520px,100%); flex: 1; overflow-y: auto; display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 14px 0 24px; position: relative; }
+.wf .cw-input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+.wf .cw-now, .wf .cw-done { width: 100%; border-radius: 20px; background: var(--card); padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+.wf .cw-now > b { font-size: 20px; letter-spacing: -.02em; }
+.wf .cw-done { align-items: center; text-align: center; gap: 10px; border: 1px solid var(--lime); }
+.wf .cw-done > b { font-size: 22px; }
+.wf .cw-tools { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.wf .mini.ghost { background: var(--chip); color: var(--ink); }
+.wf .mini[disabled] { opacity: .45; }
+.wf .cw-grid { display: grid; gap: 3px; justify-content: center; }
+.wf .cw-blank { width: var(--cs); height: var(--cs); }
+.wf .cw-cell { position: relative; width: var(--cs); height: var(--cs); border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: calc(var(--cs) * .5); font-weight: 600; display: grid; place-items: center; padding: 0; }
+.wf .cw-cell small { position: absolute; top: 2px; left: 4px; font-size: 9px; font-weight: 500; color: var(--ink2); font-family: var(--mono); line-height: 1; }
+.wf .cw-cell.word { background: #232B3A; }
+.wf .cw-cell.sel { background: var(--lime); border-color: var(--lime); color: var(--bg); }
+.wf .cw-cell.sel small { color: var(--bg); }
+.wf .cw-cell.ok:not(.sel) { color: var(--lime); }
+.wf .cw-cell.bad { background: #5a2430; border-color: #ff6b81; color: #fff; }
+.wf .cw-lists { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+@media (max-width: 480px) { .wf .cw-lists { grid-template-columns: 1fr; } }
+.wf .cw-lists > div { display: flex; flex-direction: column; gap: 6px; }
+.wf .cw-clue { display: flex; align-items: baseline; gap: 8px; text-align: left; padding: 8px 10px; border-radius: 12px; border: 0; background: var(--chip); color: var(--ink); font-size: 14px; }
+.wf .cw-clue b { font-family: var(--mono); font-size: 12px; color: var(--ink2); }
+.wf .cw-clue span { flex: 1; }
+.wf .cw-clue small { color: var(--ink3); font-family: var(--mono); }
+.wf .cw-clue.on { outline: 1px solid var(--lime); }

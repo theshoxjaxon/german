@@ -12,6 +12,8 @@ import { buildQueue, lessonNumber, srsConfig, stateInfo, lapsesOf, type QueueIte
 import { answer, preview } from '@/lib/srs';
 import { DAY, dayIndex, fmtSpan, HOUR, MIN, ROLLOVER_HOUR } from '@/lib/time';
 import { WfTheme } from './WfTheme';
+import { CrosswordCard } from './Crossword';
+import { BOOKS } from '@/lib/books';
 import { splitTerm } from '@/lib/text';
 import { CHEERS, POS_LABEL, type CardDoc, type CheerKind, type Rating, type StudyData } from '@/lib/types';
 
@@ -292,6 +294,8 @@ function Dash({ snap, now, lang, ready, menu, setMenu, pick, goHome, setStage, s
           </div>
         )}
 
+        {ready && <CrosswordCard words={snap.words} />}
+
         {ready && <Lessons snap={snap} now={t} classLesson={snap.classLesson} start={(deck) => {
           const lq = buildQueue({ ...studyData(snap), prefs: { ...snap.prefs, studyDeck: deck } }, t);
           const items = [...lq.learning.filter((x) => x.s!.due <= t), ...lq.review.slice(0, lq.reviewLeft), ...lq.fresh.slice(0, 10)];
@@ -346,8 +350,6 @@ function Dash({ snap, now, lang, ready, menu, setMenu, pick, goHome, setStage, s
 }
 
 /* ---------- lessons: every lesson of the book, what you learned and what is left ---------- */
-// ponytail: Momente A1.1 = Lektion 1-12, A1.2 starts at 13 (Lektion 13 = A1.2 Lektion 1); a third book needs one more row here.
-const BOOKS = [{ name: 'Momente A1.1', from: 1, to: 12 }, { name: 'Momente A1.2', from: 13, to: 24 }];
 
 function Lessons({ snap, now, classLesson, start }: { snap: Snapshot; now: number; classLesson: string | null; start: (deck: string) => void }) {
   const rows = useMemo(() => {
