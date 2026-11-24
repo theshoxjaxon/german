@@ -8,7 +8,7 @@ import { speak, stopSpeech, useSpeechSupported } from '@/lib/client/speech';
 import { store, useStore, type Snapshot } from '@/lib/client/store';
 import { LANGS, type Lang } from '@/lib/langs';
 import { LANGS as COURSE_LANGS } from '@/lib/courses';
-import { buildQueue, srsConfig, type QueueItem } from '@/lib/queue';
+import { buildQueue, lessonNumber, srsConfig, stateInfo, lapsesOf, type QueueItem } from '@/lib/queue';
 import { answer, preview } from '@/lib/srs';
 import { DAY, dayIndex, fmtSpan, HOUR, MIN, ROLLOVER_HOUR } from '@/lib/time';
 import { WfTheme } from './WfTheme';
@@ -292,6 +292,12 @@ function Dash({ snap, now, lang, ready, menu, setMenu, pick, goHome, setStage, s
           </div>
         )}
 
+        {ready && <Lessons snap={snap} now={t} classLesson={snap.classLesson} start={(deck) => {
+          const lq = buildQueue({ ...studyData(snap), prefs: { ...snap.prefs, studyDeck: deck } }, t);
+          const items = [...lq.learning.filter((x) => x.s!.due <= t), ...lq.review.slice(0, lq.reviewLeft), ...lq.fresh.slice(0, 10)];
+          setStage({ heading: deck.toUpperCase(), items, lang });
+        }} />}
+
         <section className="panel" aria-labelledby="class-h">
           <div className="sec-head">
             <h2 id="class-h">Your class</h2>
@@ -336,6 +342,64 @@ function Dash({ snap, now, lang, ready, menu, setMenu, pick, goHome, setStage, s
         </section>
       </main>
     </div>
+  );
+}
+
+/* ---------- lessons: every lesson of the book, what you learned and what is left ---------- */
+// ponytail: Momente A1.1 = Lektion 1-12, A1.2 starts at 13 (Lektion 13 = A1.2 Lektion 1); a third book needs one more row here.
+const BOOKS = [{ name: 'Momente A1.1', from: 1, to: 12 }, { name: 'Momente A1.2', from: 13, to: 24 }];
+
+function Lessons({ snap, now, classLesson, start }: { snap: Snapshot; now: number; classLesson: string | null; start: (deck: string) => void }) {
+  const rows = useMemo(() => {
+    const today = dayIndex(now);
+    const m = new Map<string, { total: number; learned: number; due: number }>();
+    snap.words.forEach((w) => {
+      const r = m.get(w.deck || '') ?? { total: 0, learned: 0, due: 0 };
+      const doc = snap.cards.get(w.id);
+      const i = stateInfo(doc?.f, !!doc?.suspended, today, lapsesOf(doc));
+      r.total++;
+      if (i.status === 'review' || i.status === 'learning') r.learned++;
+      if (i.dueToday) r.due++;
+      m.set(w.deck || '', r);
+    });
+    return [...m.entries()].filter(([d]) => d).map(([deck, r]) => ({ deck, n: lessonNumber(deck), ...r }))
+      .sort((a, b) => (a.n ?? 99) - (b.n ?? 99) || a.deck.localeCompare(b.deck, 'de', { numeric: true }));
+  }, [snap.words, snap.cards, now]);
+  if (!rows.length) return null;
+
+  const isLektion = (d: string) => /^lektion\s+\d+$/i.test(d);
+  const groups = [
+    ...BOOKS.map((b) => ({ label: b.name, rows: rows.filter((r) => isLektion(r.deck) && r.n! >= b.from && r.n! <= b.to), book: b })),
+    { label: 'Your own words', rows: rows.filter((r) => !isLektion(r.deck)), book: null },
+  ].filter((g) => g.rows.length);
+
+  return (
+    <section className="panel" aria-labelledby="lessons-h">
+      <div className="sec-head"><h2 id="lessons-h">Your lessons</h2><span className="note">Pick a lesson to study it</span></div>
+      {groups.map((g) => {
+        const total = g.rows.reduce((n, r) => n + r.total, 0), learned = g.rows.reduce((n, r) => n + r.learned, 0);
+        return (
+          <details key={g.label} className="book" open>
+            <summary><b>{g.label}</b><span className="note">{learned} / {total} words learned</span></summary>
+            <div className="class-list lessons">
+              {g.rows.map((r) => {
+                const left = r.total - r.learned;
+                return (
+                  <div key={r.deck} className={`li lesson${r.deck === classLesson ? ' me-row' : ''}`}>
+                    <span className="tx">
+                      <span>{r.deck}{r.deck === classLesson && <span className="mine"> your class is here</span>}</span>
+                      <small>{g.book && g.book.from > 1 ? `${g.label.replace('Momente ', '')} · Lektion ${r.n! - g.book.from + 1} · ` : ''}{r.learned} learned · {left} to learn{r.due ? ` · ${r.due} to review` : ''}</small>
+                      <span className="lbar" aria-hidden="true"><i style={{ width: `${(r.learned / r.total) * 100}%` }} /></span>
+                    </span>
+                    <button className="mini" disabled={!left && !r.due} onClick={() => start(r.deck)}>{r.learned ? (left ? 'Continue' : r.due ? 'Review' : 'Done') : 'Start'}</button>
+                  </div>
+                );
+              })}
+            </div>
+          </details>
+        );
+      })}
+    </section>
   );
 }
 

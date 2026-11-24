@@ -60,6 +60,7 @@ export const UZ: Record<string, string> = {
   "All caught up": "Hammasi bajarildi",
   "All decks": "Barcha toʻplamlar",
   "Studying": "Oʻrganilmoqda",
+  "Your own words": "Oʻz soʻzlaringiz",
   "All lessons": "Barcha darslar",
   "Only {lesson}": "Faqat {lesson}",
   "All progress reset": "Barcha natijalar oʻchirildi",

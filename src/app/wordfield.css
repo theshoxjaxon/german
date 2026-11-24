@@ -276,3 +276,8 @@ html.wf-on body { overflow-x: hidden; overscroll-behavior: auto; }
 .wf .hook-btn { color: var(--gold); border-color: rgba(255,228,92,.3); }
 .wf .hook-box { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 16px; background: rgba(255,228,92,.08); border: 1px solid rgba(255,228,92,.22); font-size: 15px; line-height: 1.4; }
 .wf .hook-box .sec-l { color: var(--gold); }
+.wf .book > summary { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; cursor: pointer; padding: 6px 2px 10px; font-size: 16px; }
+.wf .lesson .lbar { height: 5px; border-radius: 99px; background: var(--bg); margin-top: 6px; overflow: hidden; }
+.wf .lesson .lbar i { display: block; height: 100%; background: var(--lime); }
+.wf .lesson .mini[disabled] { opacity: .45; }
+.wf .lesson .mine { display: inline-block; align-self: flex-start; margin-top: 3px; padding: 1px 8px; border-radius: 99px; background: rgba(155,225,93,.15); }
