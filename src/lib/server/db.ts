@@ -23,7 +23,7 @@ export interface Db {
 }
 
 /** Bump when the schema or the built-in word lists change: every database then runs migrate() once more. */
-const SCHEMA_VERSION = '20'; // 20: Lektion 13 (Momente A1.2, Lektion 1)
+const SCHEMA_VERSION = '21'; // 21: Lektion 14–16 (Momente A1.2, Lektion 2–4)
 
 /*
  * Times are milliseconds since 1970 (JavaScript's Date.now()) in BIGINT columns; days are
