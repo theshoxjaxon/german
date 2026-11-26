@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TESTS } from '../server/tests';
+import { GERMAN_A1_TESTS as TESTS } from './german-a1';
 import { allItems, cleanAnswers, emptyOpen, normalize, publicTest, scoreAttempt, shortParts } from './score';
 import { isOpen, itemMax, type Answers, type OpenFeedback, type Test } from './types';
 

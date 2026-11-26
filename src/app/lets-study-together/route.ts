@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
-import { currentCourse } from '@/lib/server/course';
+import { api } from '@/lib/api';
 
-/** /lets-study-together: a link to share. Opens your course on its study-together page (Class tab). */
+/** A short link for sharing: opens your course's "Study together" section. */
 export async function GET(req: Request) {
-  const course = await currentCourse();
-  // Without a course yet, the German one (where study groups started); the course page asks nothing more
-  return NextResponse.redirect(new URL(`/${course ?? 'german'}#study`, req.url), 303);
+  const r = await api<{ current: string | null }>('/courses').catch(() => null);
+  return NextResponse.redirect(new URL(`/${(r?.ok && r.data.current) || 'german'}#study`, req.url), 303);
 }

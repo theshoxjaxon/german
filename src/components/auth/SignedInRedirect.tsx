@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { connection } from 'next/server';
 import { safeNext } from '@/lib/account-rules';
-import { currentUser } from '@/lib/server/session';
+import { api } from '@/lib/api';
 
 /**
  * For /login, /signup and /forgot-password: already signed in, there is nothing to do here, so
@@ -12,9 +12,9 @@ export async function SignedInRedirect({ searchParams }: { searchParams: Promise
   await connection();
   let signedIn = false;
   try {
-    signedIn = !!(await currentUser());
+    signedIn = (await api('/me')).ok;
   } catch {
-    return null; // the database is down: let the page show (its form explains the problem)
+    return null; // the API or its database is down: let the page show (its form explains the problem)
   }
   if (signedIn) redirect(safeNext((await searchParams).next));
   return null;

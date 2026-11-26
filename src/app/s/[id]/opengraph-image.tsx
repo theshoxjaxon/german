@@ -1,8 +1,14 @@
 import { ImageResponse } from 'next/og';
 import { LANGS } from '@/lib/courses';
 import { translate } from '@/lib/i18n';
+import { api } from '@/lib/api';
 import { imageSafe, type ShareCard } from '@/lib/share';
-import { getShare } from '@/lib/server/shares';
+
+/** The card behind a share link, or null when there is none. */
+async function getShare(id: string): Promise<ShareCard | null> {
+  const r = await api<{ card: ShareCard }>(`/share/${encodeURIComponent(id)}`);
+  return r.ok ? r.data.card : null;
+}
 
 /**
  * The picture under a shared link in Telegram and the like: the score (or the streak) big, the

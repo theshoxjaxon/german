@@ -11,7 +11,7 @@ import { UZ } from './i18n-uz';
 import { LANGS } from './courses';
 import { CHEERS, MAX_OWN_WORDS, POS_OPTIONS, RATING_LABEL } from './types';
 import { FILTER_LABEL, SORTS, STATUS_OPTS } from './words-view';
-import { TESTS } from './server/tests';
+import { GERMAN_A1_TESTS as TESTS } from './tests/german-a1';
 import { SECTIONS } from './tests/types';
 import { REASON_LABEL } from './study/types';
 
@@ -118,15 +118,15 @@ function wanted(): Set<string> {
   for (const m of read('components/ui.tsx').match(/STATUS_LABEL = \{([^}]*)\}/)![1].matchAll(/'([^']+)'/g)) add(m[1]);
   // Messages that come from the server or shared rules and are shown through t()
   const messageFiles = [
-    'app/actions/auth.ts', 'lib/account-rules.ts', 'lib/auth-schemas.ts', 'lib/server/ai.ts', 'lib/client/ai.ts',
-    'app/api/ai/words/route.ts', 'app/api/auth/google/route.ts', 'app/api/class/route.ts', 'app/api/cheers/route.ts',
-    'app/api/words/[id]/route.ts', 'app/api/cards/[id]/route.ts',
-    'app/api/tests/[id]/route.ts', 'app/api/tests/[id]/submit/route.ts', 'app/api/tests/attempts/[id]/route.ts',
-    'app/api/tests/attempts/[id]/feedback/route.ts', 'lib/server/ai-grade.ts',
-    'app/api/study/signup/route.ts', 'app/api/study/groups/[id]/messages/route.ts', 'app/api/study/groups/[id]/report/route.ts',
-    'app/api/study/clubs/[id]/rsvp/route.ts', 'lib/server/study-route.ts', 'lib/study/text.ts',
-    'app/api/telegram/route.ts', 'lib/client/telegram.ts', 'app/api/share/route.ts', 'lib/client/share.ts',
-    'app/api/grammar/perfekt/route.ts', 'app/api/grammar/perfekt/check/route.ts', 'lib/server/ai-perfekt.ts', 'lib/client/grammar.ts',
+    'app/actions/auth.ts', 'lib/account-rules.ts', 'lib/auth-schemas.ts', 'lib/client/ai.ts',
+    // the API's answers (backend/)
+    ...[
+      'ai/ai.ts', 'ai/ai.controller.ts', 'ai/ai-grade.ts', 'ai/ai-perfekt.ts',
+      'auth/auth.service.ts', 'auth/auth.controller.ts', 'cheers/cheers.controller.ts', 'words/words.controller.ts', 'cards/cards.controller.ts',
+      'tests/tests.controller.ts', 'study/study.controller.ts', 'telegram/telegram.controller.ts', 'shares/shares.controller.ts',
+      'grammar/grammar.controller.ts',
+    ].map((f) => `../backend/src/${f}`),
+    'lib/study/text.ts', 'lib/client/telegram.ts', 'lib/client/share.ts', 'lib/client/grammar.ts',
   ];
   for (const f of messageFiles) {
     for (const s of literals(withoutComments(read(f)))) if (/^[A-Z][^{}]*[a-z][^{}]*[.!?]$/.test(s) && s.includes(' ')) add(s);

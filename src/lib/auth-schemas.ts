@@ -4,7 +4,7 @@
  * browser). Messages are English and shown through t(), so each one has an Uzbek entry.
  */
 import { z } from 'zod';
-import { canonicalGmail, cleanDisplayName, isRealGmail, PASSWORD_MAX_BYTES, passwordBytes } from './account-rules';
+import { canonicalGmail, cleanDisplayName, isRealGmail, isWeakPassword, PASSWORD_MAX_BYTES, passwordBytes } from './account-rules';
 
 const email = z
   .string()
@@ -20,7 +20,8 @@ const gmail = email.refine(isRealGmail, 'Use your real Gmail address, like name@
 const newPassword = z
   .string()
   .min(8, 'Use at least 8 characters.')
-  .refine((p) => passwordBytes(p) <= PASSWORD_MAX_BYTES, 'That password is too long.');
+  .refine((p) => passwordBytes(p) <= PASSWORD_MAX_BYTES, 'That password is too long.')
+  .refine((p) => !isWeakPassword(p), 'That password is too easy to guess. Pick another.');
 
 const name = z
   .string()
@@ -40,7 +41,10 @@ const matching = <T extends z.ZodObject<{ password: z.ZodType<string>; confirm: 
 
 const confirm = z.string().min(1, 'Type the password again.');
 
-export const signupSchema = matching(z.object({ name, email: gmail, password: newPassword, confirm }));
+export const signupSchema = matching(z.object({ name, email: gmail, password: newPassword, confirm })).refine((v) => !isWeakPassword(v.password, v.email), {
+  path: ['password'],
+  error: 'That password is too easy to guess. Pick another.',
+});
 
 /** Logging in checks only that something was typed: the old rules may differ from today's. */
 export const loginSchema = z.object({ email, password: z.string().min(1, 'Enter your password.').max(1000) });

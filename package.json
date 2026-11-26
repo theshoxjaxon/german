@@ -8,26 +8,23 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "dev:api": "npm run dev --prefix backend",
+    "test:api": "npm test --prefix backend",
+    "typecheck:api": "npm run typecheck --prefix backend"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.133.0",
-    "bcryptjs": "3.0.3",
-    "google-auth-library": "11.3.0",
-    "next": "16.4.3",
-    "pg": "^8.23.1",
+    "next": "16.4.6",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "zod": "4.6.7"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.5.9",
     "@types/node": "^20",
-    "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.4.3",
+    "eslint-config-next": "16.4.6",
     "typescript": "^5",
     "vitest": "^3.2.7"
   }

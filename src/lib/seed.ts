@@ -1,5 +1,5 @@
 // Built-in word lists (shared lesson words). Each list is added to the database once:
-// see SEED_PACKS and src/lib/server/db.ts.
+// see SEED_PACKS and backend/src/database/db.ts.
 import type { TargetLang } from './courses';
 import type { Pos, WordData } from './types';
 
