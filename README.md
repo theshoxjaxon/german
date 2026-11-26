@@ -58,15 +58,19 @@ Built with Next.js 16 (App Router), React 19, TypeScript and PostgreSQL (Supabas
 
 You need **Node.js 20.9 or newer** (`node -v` to check) and a Postgres database. A free Supabase project is the easiest (2 minutes, see [Supabase](#supabase) below).
 
+The project is two apps: the **web app** (Next.js, this folder) and the **API** (NestJS, `backend/`). Start both:
+
 ```bash
-npm install
-cp .env.example .env.local   # then paste your Supabase connection string into DATABASE_URL
-npm run dev
+npm install && npm install --prefix backend
+cp .env.example .env.local                 # the web app: API_URL, Google client id
+cp backend/.env.example backend/.env       # the API: paste your Supabase connection string into DATABASE_URL
+npm run dev:api                            # API on http://localhost:4000  (second terminal: npm run dev)
+npm run dev                                # web app on http://localhost:3000
 ```
 
-The tables are created on the first start.
+The tables are created when the API starts.
 
-**Become the admin (teacher).** Put your email in `ADMIN_EMAILS` in `.env.local`, then either:
+**Become the admin (teacher).** Put your email in `ADMIN_EMAILS` in `backend/.env`, then either:
 
 - **Continue with Google** on http://localhost:3000/login with that address (needs `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, see [Sign in with Google](#sign-in-with-google)), or
 - sign up at http://localhost:3000/signup with that email and a password, then prove the address once: **Forgot password?** → your email → open the link (without `RESEND_API_KEY` it is printed in the terminal) → choose a password → log in.
@@ -379,7 +383,9 @@ Only counts are shared on the Class tab. Nobody, the admin included, sees anothe
 | --- | --- |
 | `npm run dev` | Development server with hot reload |
 | `npm run build` / `npm start` | Production build and server |
-| `npm test` | Unit + database integration tests (Vitest). The database tests run on PGlite, an in-memory Postgres, so they need no setup. `TEST_DATABASE_URL=postgres://… npm test` runs them on a real Postgres instead (use an empty database you can throw away). |
+| `npm run dev:api` | The NestJS API with hot reload (`backend/`, port 4000) |
+| `npm run test:api` / `npm run typecheck:api` | The API's tests and type check |
+| `npm test` | The web app's unit tests (Vitest). The API's tests (database integration, HTTP) are `npm run test:api`. The database tests run on PGlite, an in-memory Postgres, so they need no setup. `TEST_DATABASE_URL=postgres://… npm test` runs them on a real Postgres instead (use an empty database you can throw away). |
 | `npm run typecheck` | Generate route types, then `tsc --noEmit` |
 | `npm run lint` | ESLint (Next.js + React Compiler rules) |
 
@@ -405,17 +411,18 @@ Pressing Good every time gives intervals of 1 → 4 → 10 → 24 → 60 → 144
 ```
 Browser
   /login, /signup, /forgot-password, /reset-password, /account
-                  ── Server Actions (src/app/actions/auth.ts): zod, bcrypt, session cookie, Resend
-                  ── Google button → POST /api/auth/google (google-auth-library checks the ID token)
+                  ── Server Actions (src/app/actions/auth.ts) ── call the API (src/lib/api.ts) and relay its session cookie
+                  ── Google button → POST /api/auth/google
   /               ── client app ── useStore() ── fetch /api/*  (guests: localStorage for progress)
-  /admin          ── Server Component behind <Suspense> ── Server Actions (src/app/admin/actions.ts)
+  /admin          ── Server Component behind <Suspense> ── GET /api/admin/* · Server Actions (src/app/admin/actions.ts)
 
-src/proxy.ts       /admin, /account without a session cookie → /login?next=… (fast first check only)
-src/app/api/*      requireUser() on every route: valid session, role, same-origin
-src/lib/server/    repo.ts (all SQL) · db.ts (pool, schema, seed) · session.ts · password.ts · rate-limit.ts
-                   google.ts · mail.ts · admins.ts · ai.ts · ai-grade.ts (AI examiner) · tests/ (mock tests with their answer keys)
-                   study.ts (study groups: matching, chats, clubs, reports)
-src/lib/           auth-schemas.ts (zod: the same rules in the browser and on the server) · tests/ (test types and scoring)
+Next.js (web, this folder)       next.config.ts proxies /api/* to the API, so the session cookie stays on this site
+  src/lib/                       code shared with the API: SRS, types, seed word lists, mock tests, zod schemas
+
+NestJS (API, backend/)           see backend/README.md
+  SessionGuard                   every route needs a session unless marked @Public / @OptionalUser / @AdminOnly; same-origin check on writes
+  controllers → services → repositories (all SQL) → Database (pool, schema, seed)
+  auth · users · courses · words · cards · cheers · classroom · tests (+ AI examiner) · grammar · study · telegram · shares · admin · cron
 Postgres/Supabase  courses · course_members · users · sessions · password_reset_tokens · rate_limits · words · cards · prefs
                    · activity · cheers · visitors · settings · test_attempts · study_* (sign-ups, groups, members,
                    messages, blocks, reports, clubs, runs)
@@ -491,6 +498,8 @@ Nothing extra is tracked for students: mastery and recall come from the review h
 
 **Free option: Vercel + Supabase**
 
+The web app and the API are **two Vercel projects** from this repository: the web app (root directory `.`) and the API (root directory `backend`, with "Include source files outside of the Root Directory" on). Put `API_URL` (the API's address) on the web project, and everything else below on the **API** project, plus `APP_URL` (the web app's address). The scheduled jobs are in `backend/vercel.json`.
+
 1. Create the Supabase project (see [Supabase](#supabase)) and copy the **Transaction pooler** connection string (port 6543). Not the "Direct connection": that one is IPv6-only and Vercel can't reach it.
 2. Import this GitHub repo on [vercel.com](https://vercel.com). Set the function region to the one closest to your Supabase project (Project Settings → Functions).
 3. In Vercel → Project → **Settings → Environment Variables**, add `DATABASE_URL` (the pooler string with your password, no quotes, for the **Production** environment), `ADMIN_EMAILS`, `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, `RESEND_API_KEY`, `EMAIL_FROM`, `APP_TIMEZONE`, `CRON_SECRET` (for the Sunday study groups) and, for the AI helper, `ANTHROPIC_API_KEY` (and `APP_URL` if you use your own domain). `.env.local` is never uploaded, so this step is required.
@@ -499,7 +508,7 @@ Nothing extra is tracked for students: mastery and recall come from the review h
 
 **"This page couldn’t load … A server error occurred"** when logging in or signing up means the server can't use the database. Open `https://<your-app>/api/health`: it names the problem (missing `DATABASE_URL`, wrong password, host not found, paused Supabase project, …) and what to do, without showing any secrets. Supabase pauses free projects after about a week without activity; restore it from the Supabase dashboard.
 
-**Or any Node.js server** (Render, Railway, a VPS): set the same variables, then `npm run build && npm start`.
+**Or any Node.js server** (Render, Railway, a VPS): run `npm run build && npm start` in both the root and `backend/`, with the same variables.
 
 ## Your data
 

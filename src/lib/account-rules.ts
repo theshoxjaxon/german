@@ -36,3 +36,14 @@ export function initials(name: string): string {
 const GMAIL = /^(?=.{6,30}@)[a-z0-9](?:[a-z0-9]|\.(?!\.))*[a-z0-9]@(?:gmail|googlemail)\.com$/;
 export const isRealGmail = (email: string) => GMAIL.test(email);
 export const canonicalGmail = (email: string) => email.replace(/@googlemail\.com$/, '@gmail.com');
+
+/** Passwords people (and bots) try first. Eight characters long is not enough if it is on this list. */
+const COMMON_PASSWORDS = new Set(
+  '12345678 123456789 1234567890 11111111 00000000 87654321 password password1 password123 passw0rd qwertyui qwerty123 qwertyuiop 1q2w3e4r 1q2w3e4r5t iloveyou admin123 welcome1 letmein1 abc12345 abcd1234 asdfghjk asdf1234 zaq12wsx monkey123 dragon123 football1 sunshine1 uzbekistan deutsch123 karteikasten'.split(' '),
+);
+/** True when a new password is too easy to guess: a famous one, one repeated character, or the email name. */
+export const isWeakPassword = (password: string, email = '') => {
+  const p = password.normalize('NFKC').toLowerCase();
+  const name = email.split('@')[0].toLowerCase();
+  return COMMON_PASSWORDS.has(p) || /^(.)\1+$/.test(p) || (name.length >= 4 && p.includes(name));
+};

@@ -4,9 +4,8 @@ import { connection } from 'next/server';
 import { Suspense } from 'react';
 import { AccountView } from '@/components/auth/AccountView';
 import { AuthShell } from '@/components/auth/AuthShell';
-import { describeDbError } from '@/lib/server/db-health';
-import * as repo from '@/lib/server/repo';
-import { currentUser } from '@/lib/server/session';
+import { api } from '@/lib/api';
+import type { Me } from '@/lib/types';
 
 export const metadata: Metadata = { title: 'Your account · Karteikasten', robots: { index: false } };
 
@@ -22,14 +21,15 @@ export default function AccountPage() {
 /** The real check for /account (the proxy only looks for a cookie): signed out → /login, and back here after. */
 async function Account() {
   await connection();
-  let user: repo.UserRow | null;
+  let me: Me | null;
   try {
-    user = await currentUser();
+    const r = await api<{ me: Me }>('/me');
+    if (r.status !== 401 && !r.ok) throw new Error(`the API answered ${r.status}`);
+    me = r.ok ? r.data.me : null;
   } catch (e) {
-    const { problem, message } = describeDbError(e);
-    console.error(`Karteikasten: database unavailable (${problem}). ${message}`);
+    console.error(`Karteikasten: the API is unavailable (${(e as Error).message}).`);
     return <AuthShell title="Your account" lede="The app can’t reach its database right now. Please try again in a few minutes." guest={false} />;
   }
-  if (!user) redirect('/login?next=/account'); // outside the try: redirect() works by throwing
-  return <AccountView me={repo.publicUser(user)} />;
+  if (!me) redirect('/login?next=/account'); // outside the try: redirect() works by throwing
+  return <AccountView me={me} />;
 }

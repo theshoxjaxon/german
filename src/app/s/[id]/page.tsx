@@ -2,8 +2,14 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 import { ShareView } from '@/components/ShareView';
-import { shareTitle } from '@/lib/share';
-import { getShare } from '@/lib/server/shares';
+import { api } from '@/lib/api';
+import { shareTitle, type ShareCard } from '@/lib/share';
+
+/** The card behind a share link, or null when there is none. */
+async function getShare(id: string): Promise<ShareCard | null> {
+  const r = await api<{ card: ShareCard }>(`/share/${encodeURIComponent(id)}`);
+  return r.ok ? r.data.card : null;
+}
 
 const DESCRIPTION = 'Siz ham sinab koʻring: oʻzbekcha tarjimali kartochkalar, sinov testlari va birga mashq. Bepul.';
 

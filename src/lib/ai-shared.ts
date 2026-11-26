@@ -1,6 +1,6 @@
 /**
  * Shared by the AI word helper's server and client: languages and limits.
- * (The model call itself is server-only: src/lib/server/ai.ts.)
+ * (The model call itself is server-only: backend/src/ai/ai.ts.)
  */
 import type { WordData } from './types';
 

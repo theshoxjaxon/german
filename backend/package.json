@@ -1,0 +1,49 @@
+{
+  "name": "karteikasten-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Karteikasten REST API (NestJS)",
+  "scripts": {
+    "build": "nest build && tsc-alias -p tsconfig.build.json",
+    "start": "node dist/backend/src/main.js",
+    "dev": "nest start --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "loadtest": "vitest run --config loadtest/vitest.config.mts"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.14.0",
+    "@nestjs/common": "^12.6.1",
+    "@nestjs/core": "^12.6.1",
+    "@nestjs/platform-express": "^12.6.1",
+    "@nestjs/schedule": "^12.0.4",
+    "@vercel/functions": "^3.11.3",
+    "bcryptjs": "^3.0.3",
+    "google-auth-library": "^11.3.4",
+    "nestjs-cls": "^7.0.2",
+    "pg": "^8.23.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.6.0",
+    "@nestjs/cli": "^12.0.15",
+    "@nestjs/testing": "^12.6.1",
+    "@swc/core": "^1.16.22",
+    "@types/autocannon": "^7.12.7",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.10",
+    "@types/pg": "^8.23.1",
+    "@types/supertest": "^7.2.1",
+    "autocannon": "^9.0.0",
+    "supertest": "^7.3.2",
+    "tsc-alias": "^1.9.11",
+    "typescript": "^6.0.3",
+    "unplugin-swc": "^2.0.0",
+    "vitest": "^5.1.1"
+  }
+}

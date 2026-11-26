@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { telegramCheckAction, telegramQuizAction, telegramSetupAction, telegramTestAction } from '@/app/admin/actions';
-import type { CheckLine } from '@/lib/server/telegram';
+import type { CheckLine } from '@/lib/admin-types';
 import { Icon } from '../ui';
 
 export interface TelegramAdminStatus {

@@ -1,53 +1,43 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import type { Course } from '@/lib/courses';
-import { describeDbError } from '@/lib/server/db-health';
-import * as repo from '@/lib/server/repo';
-import { currentUser } from '@/lib/server/session';
+import { api, errorOf } from '@/lib/api';
+import type { Me } from '@/lib/types';
 
-/** Who is looking at an admin page, and which course: admins run every course, teachers theirs. */
+/** Who is looking at /admin and which course they see (the API decides: see backend/src/admin). */
 export interface AdminContext {
-  user: repo.UserRow;
+  user: Me;
   admin: boolean; // runs the whole app: sees email addresses, makes teachers and courses
   course: Course; // the course shown
   courses: Course[]; // the ones this person may pick
 }
 
 /**
- * The real check for the admin pages (the proxy only looks for a cookie), plus loading the
- * page's data for one course: `wanted` (the ?course= of the page), else your active course,
- * else the first one you teach. Signed out → login. Signed in without a course to run →
- * `student` (the name), so the page can say why instead of silently sending you back to the
- * app. When the database can't be reached, `down` says why.
+ * One /admin page's data from the API. Not signed in → the login page; a student →
+ * `{ student }` (the page says it is for teachers); the API unreachable → `{ down }`.
  */
 export async function adminData<T>(
   path: string,
+  endpoint: string,
   wanted: string | string[] | undefined,
-  load: (ctx: AdminContext) => Promise<T>,
+  extra: Record<string, string> = {},
 ): Promise<(AdminContext & { data: T }) | { down: string } | { student: string }> {
-  let user: repo.UserRow | null;
-  let ctx: AdminContext | null = null;
-  let data: T | undefined;
+  const query = new URLSearchParams(extra);
+  if (typeof wanted === 'string') query.set('course', wanted);
+  let r;
   try {
-    user = await currentUser();
-    const courses = user ? await repo.taughtCourses(user) : [];
-    const course = courses.find((c) => c.id === wanted) ?? courses.find((c) => c.id === user?.courseId) ?? courses[0];
-    if (user && course) {
-      ctx = { user, admin: user.role === 'admin', course, courses };
-      data = await load(ctx);
-    }
+    r = await api<AdminContext & { data: T }>(`/admin/${endpoint}?${query}`);
   } catch (e) {
-    const { problem, message } = describeDbError(e);
-    console.error(`Karteikasten: database unavailable (${problem}). ${message}`);
-    return { down: message }; // the message never contains the connection string
+    console.error(`Karteikasten: the API is unreachable (${(e as Error).message}).`);
+    return { down: 'The web app could not reach its API server.' };
   }
-  // Outside the try: redirect() works by throwing
-  if (!user) redirect(`/login?next=${encodeURIComponent(path)}`);
-  if (!ctx) return { student: user.displayName };
-  return { ...ctx, data: data as T };
+  if (r.status === 401) redirect(`/login?next=${encodeURIComponent(path)}`);
+  if (r.status === 403) return { student: String((r.data as unknown as { name?: unknown }).name ?? '') };
+  if (r.status === 503) return { down: errorOf(r) };
+  if (!r.ok) return { down: errorOf(r) };
+  return r.data;
 }
 
-/** A signed-in student opened an admin page: say so, and how the person running the app becomes admin. */
 export function NotAdmin({ name }: { name: string }) {
   return (
     <div className="admin-main">

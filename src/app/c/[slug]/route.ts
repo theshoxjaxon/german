@@ -1,20 +1,16 @@
 import { NextResponse } from 'next/server';
 import { isCourseId } from '@/lib/courses';
-import { chooseCourse } from '@/lib/server/course';
-import * as repo from '@/lib/server/repo';
-import { currentUser } from '@/lib/server/session';
+import { api, relayCookies } from '@/lib/api';
 
 /**
- * The old course link: /c/english opens the app in that course (now at /english). Guests' browsers
- * remember it (and signing up puts them in it); signed-in people join it and switch to it. An
- * unknown course opens the welcome page.
+ * /c/<course>: a link to a course. Signed in → you join it; a guest → their browser remembers it
+ * (the API does both). Then on to the course page. An unknown link goes to the home page.
  */
 export async function GET(req: Request, ctx: RouteContext<'/c/[slug]'>) {
   const { slug } = await ctx.params;
-  if (!isCourseId(slug) || !(await repo.getCourse(slug))) return NextResponse.redirect(new URL('/', req.url), 303);
-  const user = await currentUser();
-  if (user) await repo.joinCourse(user.id, slug);
-  else await chooseCourse(slug);
-  // Permanent: old shared links pass their value to the course's own address
+  if (!isCourseId(slug)) return NextResponse.redirect(new URL('/', req.url), 303);
+  const r = await api('/course', { method: 'POST', body: { id: slug } });
+  if (!r.ok) return NextResponse.redirect(new URL('/', req.url), 303);
+  await relayCookies(r.setCookies);
   return NextResponse.redirect(new URL(`/${slug}`, req.url), 308);
 }

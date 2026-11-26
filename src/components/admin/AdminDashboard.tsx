@@ -7,7 +7,7 @@ import {
 } from '@/app/admin/actions';
 import { langOf, type Course } from '@/lib/courses';
 import { useClientValue, useNow } from '@/lib/client/hooks';
-import type { AdminStats } from '@/lib/server/repo';
+import type { AdminStats } from '@/lib/admin-types';
 import { dayLabelLong as dayLong, dayLabelShortDe as dayLabel, dayLabelWithYear } from '@/lib/stats';
 import { DAY, plural } from '@/lib/time';
 import { BottomSheet } from '../BottomSheet';

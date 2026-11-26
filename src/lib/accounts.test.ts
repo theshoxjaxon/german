@@ -48,8 +48,15 @@ describe('form validation (zod, the same in the browser and on the server)', () 
   it('refuses passwords bcrypt would cut short (over 72 bytes)', () => {
     const long = 'ä'.repeat(37); // 74 bytes in UTF-8
     expect(parseForm(signupSchema, { ...ok, password: long, confirm: long })).toMatchObject({ fieldErrors: { password: 'That password is too long.' } });
-    const fine = 'a'.repeat(72);
+    const fine = 'ab1'.repeat(24);
     expect(parseForm(signupSchema, { ...ok, password: fine, confirm: fine }).ok).toBe(true);
+  });
+  it('refuses passwords that are too easy to guess', () => {
+    for (const weak of ['password', 'Password123', 'aaaaaaaa', 'qwertyuiop']) {
+      expect(parseForm(signupSchema, { ...ok, password: weak, confirm: weak }).ok, weak).toBe(false);
+    }
+    const mine = 'sample1234';
+    expect(parseForm(signupSchema, { ...ok, email: 'sample1234@gmail.com', password: mine, confirm: mine }).ok).toBe(false);
   });
   it('checks login, forgot, reset and change-password forms', () => {
     expect(parseForm(loginSchema, { email: 'a@b.uz', password: '' })).toMatchObject({ fieldErrors: { password: 'Enter your password.' } });
