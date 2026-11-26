@@ -19,7 +19,8 @@
     "resolveJsonModule": true,
     "paths": {
       "@/*": ["../src/*"],
-      "@api/*": ["./src/*"]
+      "@api/*": ["./src/*"],
+      "zod": ["./node_modules/zod"]
     }
   },
   "include": ["src"]
